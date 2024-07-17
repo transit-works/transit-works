@@ -1,73 +1,134 @@
-"use client";
-
-import { useEffect, useRef } from 'react';
-import maplibregl from 'maplibre-gl';
+"use client"
+import { useState, useEffect, useRef } from 'react';
+import { Map, NavigationControl, Popup, useControl } from 'react-map-gl/maplibre';
+import { GeoJsonLayer } from 'deck.gl';
+import { MapboxOverlay as DeckOverlay } from '@deck.gl/mapbox';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './Map.css';
 
-function Map() {
-  const mapContainerRef = useRef(null);
+const INITIAL_VIEW_STATE = {
+  latitude: 43.647667,
+  longitude: -79.385611,
+  zoom: 12,
+  bearing: 0,
+};
 
-  useEffect(() => {
-    if (mapContainerRef.current) {
-      const map = new maplibregl.Map({
-        container: mapContainerRef.current,
-        style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-        center: [-79.385611, 43.647667],
-        zoom: 12,
-        maxZoom: 18,
-      });
+const MAP_STYLE = "/styles/dark_matter.json";
 
-      // add data
-      map.on('load', () => {
-        map.addSource('lines', {
-          type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features: [
-              {
-                type: 'Feature',
-                properties: {
-                  color: '#ff536b'
-                },
-                geometry: {
-                  type: 'LineString',
-                  coordinates: [
-                    [-79.365532, 43.645133],
-                    [-79.376856, 43.641191],
-                    [-79.377455, 43.642114],
-                    [-79.380692, 43.640982],
-                    [-79.382308, 43.644929]
-                  ]
-                }
-              }
-            ]
-          }
-        });
-
-        // Add layer
-        map.addLayer({
-          id: 'lines',
-          type: 'line',
-          source: 'lines',
-          layout: {
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
-          paint: {
-            'line-color': ['get', 'color'], // Get color from data
-            'line-width': 2,
-          },
-        });
-      });
-
-      // Clean up on unmount
-      return () => map.remove();
-    }
-    return null;
-  }, []);
-
-  return <div ref={mapContainerRef} style={{ width: '100%', height: '650px' }} />;
+function DeckGLOverlay(props) {
+  const overlay = useControl(() => new DeckOverlay(props));
+  overlay.setProps(props);
+  return null;
 }
 
-export default Map;
+function MapView() {
+  const [popupInfo, setPopupInfo] = useState(null);
+  const [data, setData] = useState(null);
+  const mapRef = useRef(null); // Reference to store the map instance
 
+  useEffect(() => {
+    // Fetch GeoJSON data asynchronously
+    const fetchData = async () => {
+      const response = await fetch('/data.geojson');
+      const json = await response.json();
+      setData(json);
+    };
+    fetchData();
+  }, []);
+
+  // Effect to initialize map after data is loaded
+  useEffect(() => {
+    if (!data) return; // Wait until data is fetched
+
+    const map = mapRef.current.getMap(); // Access the MapLibre GL JS map instance
+
+    // Run initialization code after data is loaded
+    map.once('data', () => {
+      requestAnimationFrame(() => {
+        map.once('idle', () => {
+          document.body.classList.add('ready');
+        });
+        map.easeTo({
+          pitch: 45,
+          bearing: -10,
+          duration: 2000,
+          zoom: map.getZoom() + 0.1,
+        });
+      });
+    });
+  }, [data]); // Trigger when data changes
+
+  const onClick = (info) => {
+    if (info && info.object) {
+      setPopupInfo({
+        coordinates: info.coordinate,
+        properties: info.object.properties,
+        type: info.object.geometry.type,
+      });
+    }
+  };
+
+  const renderPopup = () => (
+      popupInfo && (
+          <Popup
+              tipSize={3}
+              anchor="top"
+              longitude={popupInfo.coordinates[0]}
+              latitude={popupInfo.coordinates[1]}
+              closeOnClick={false}
+              onClose={() => setPopupInfo(null)}
+              style={{ zIndex: 10 }}
+          >
+            <div>
+              <p className="text-background text-wrap">
+                {(popupInfo.type === "Point") ? <div>
+                  <h4 className="text-background text-2xl text-center">Stop Information</h4>
+                  <p><b>ID:</b> {popupInfo.properties.stop_id}</p>
+                  <p><b>Name: </b>{popupInfo.properties.stop_name}</p>
+                </div> : <div>
+                  <h4 className="text-background text-2xl text-center">Route Information</h4>
+                  <p><b>Route ID: </b>{popupInfo.properties.route_id}</p>
+                  <p><b>Name: </b>{popupInfo.properties.route_long_name}</p>
+                </div>}
+              </p>
+            </div>
+          </Popup>
+      )
+  );
+
+  const layers = [
+    new GeoJsonLayer({
+      id: 'data',
+      data,
+      // Styles
+      stroked: true,
+      filled: true,
+      getLineColor: [200, 0, 80, 180],
+      getLineWidth: 2,
+      lineWidthMinPixels: 2,
+      lineWidthScale: 10,
+      getFillColor: [200, 0, 80, 180],
+      pointRadiusMinPixels: 2,
+      getRadius: 10,
+      // Interactive props
+      pickable: true,
+      autoHighlight: true,
+      onClick,
+      beforeId: 'watername_ocean' // In interleaved mode, render the layer under map labels
+    })
+  ];
+
+  return (
+      <Map
+          ref={mapRef} // Assign the map instance to ref
+          initialViewState={INITIAL_VIEW_STATE}
+          mapStyle={MAP_STYLE}
+      >
+        <DeckGLOverlay layers={layers} />
+        <NavigationControl position="top-right" />
+        {renderPopup()}
+      </Map>
+  );
+}
+
+export default MapView;
