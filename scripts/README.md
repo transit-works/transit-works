@@ -19,8 +19,11 @@ brew install libspatialite
 ```
 
 ### Required pip modules
-- osmnx
 - sqlite3
+- osmnx
+- grid2demand
+- osm2gmns
+- pandas
 
 ### Running
 
@@ -30,6 +33,9 @@ Install if you have homebrew:
 ```
 brew install python@3.11
 python3.11 -m pip install osmnx
+python3.11 -m pip install grid2demand
+python3.11 -m pip install osm2gmns
+python3.11 -m pip install pandas
 ```
 
 And run using:
