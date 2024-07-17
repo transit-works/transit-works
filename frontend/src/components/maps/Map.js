@@ -4,6 +4,7 @@ import { Map, NavigationControl, Popup, useControl } from 'react-map-gl/maplibre
 import { GeoJsonLayer } from 'deck.gl';
 import { MapboxOverlay as DeckOverlay } from '@deck.gl/mapbox';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './Map.css';
 
 const INITIAL_VIEW_STATE = {
   latitude: 43.647667,
@@ -61,7 +62,8 @@ function MapView() {
     if (info && info.object) {
       setPopupInfo({
         coordinates: info.coordinate,
-        properties: info.object.properties
+        properties: info.object.properties,
+        type: info.object.geometry.type,
       });
     }
   };
@@ -69,7 +71,7 @@ function MapView() {
   const renderPopup = () => (
       popupInfo && (
           <Popup
-              tipSize={5}
+              tipSize={3}
               anchor="top"
               longitude={popupInfo.coordinates[0]}
               latitude={popupInfo.coordinates[1]}
@@ -78,8 +80,17 @@ function MapView() {
               style={{ zIndex: 10 }}
           >
             <div>
-              <h4>Route Information</h4>
-              <p>{JSON.stringify(popupInfo.properties)}</p>
+              <p className="text-background text-wrap">
+                {(popupInfo.type === "Point") ? <div>
+                  <h4 className="text-background text-2xl text-center">Stop Information</h4>
+                  <p><b>ID:</b> {popupInfo.properties.stop_id}</p>
+                  <p><b>Name: </b>{popupInfo.properties.stop_name}</p>
+                </div> : <div>
+                  <h4 className="text-background text-2xl text-center">Route Information</h4>
+                  <p><b>Route ID: </b>{popupInfo.properties.route_id}</p>
+                  <p><b>Name: </b>{popupInfo.properties.route_long_name}</p>
+                </div>}
+              </p>
             </div>
           </Popup>
       )
