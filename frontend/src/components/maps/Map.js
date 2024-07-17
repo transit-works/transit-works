@@ -11,54 +11,91 @@ function Map() {
     if (mapContainerRef.current) {
       const map = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+        style: '/styles/dark_matter.json',
         center: [-79.385611, 43.647667],
         zoom: 12,
         maxZoom: 18,
       });
 
       // add data
-      map.on('load', () => {
-        map.addSource('lines', {
+      map.on('load', async () => {
+        const response = await fetch('/data.geojson');
+        const geojsonData = await response.json();
+
+        map.addSource('data', {
           type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features: [
-              {
-                type: 'Feature',
-                properties: {
-                  color: '#ff536b'
-                },
-                geometry: {
-                  type: 'LineString',
-                  coordinates: [
-                    [-79.365532, 43.645133],
-                    [-79.376856, 43.641191],
-                    [-79.377455, 43.642114],
-                    [-79.380692, 43.640982],
-                    [-79.382308, 43.644929]
-                  ]
-                }
-              }
-            ]
-          }
+          data: geojsonData,
         });
 
-        // Add layer
         map.addLayer({
-          id: 'lines',
+          id: 'lines-layer',
           type: 'line',
-          source: 'lines',
+          source: 'data',
           layout: {
             'line-cap': 'round',
             'line-join': 'round',
           },
           paint: {
-            'line-color': ['get', 'color'], // Get color from data
-            'line-width': 2,
+            'line-color': '#55ff63', // Line color (red)
+            'line-width': 1, // Line width
+          },
+        });
+
+        // Add layer
+        map.addLayer({
+          id: 'stops-layer',
+          type: 'circle',
+          source: 'data',
+          filter: ['==', '$type', 'Point'], // Filter to show only Point features
+          paint: {
+            'circle-radius': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              7,
+              0.5,
+              12, // Zoom level where the points start becoming visible
+              1, // Circle radius at zoom level 12 (smaller)
+              17, // Zoom level where the points are fully visible
+              5, // Circle radius at zoom level 17 (larger)
+            ],
+            'circle-color': '#55ff63', // Circle color (e.g., green)
+            'circle-stroke-width': 0, // Border width
+            'circle-stroke-color': '#ffffff' // Border color (e.g., white)
           },
         });
       });
+
+      map.on('click', 'stops-layer', (e) => {
+        const {features} = e;
+
+        if (!features.length) {
+          return;
+        }
+
+        const feature = features[0];
+
+        // Create a popup
+        const data_popup = new maplibregl.Popup()
+            .setLngLat(feature.geometry.coordinates)
+            .setHTML(`<strong>Stop Properties:</strong><br>${JSON.stringify(feature.properties, null, 2)}`)
+            .addTo(map);
+      });
+
+      map.once('data', () => {
+        requestAnimationFrame(() => {
+          map.once('idle', () => {
+            document.body.classList.add('ready');
+          });
+          map.easeTo({
+            pitch: 45,
+            bearing: -10,
+            duration: 2000,
+            zoom: map.getZoom() + 0.1,
+          });
+        });
+      });
+
 
       // Clean up on unmount
       return () => map.remove();
@@ -66,7 +103,7 @@ function Map() {
     return null;
   }, []);
 
-  return <div ref={mapContainerRef} style={{ width: '100%', height: '650px' }} />;
+  return <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />;
 }
 
 export default Map;
