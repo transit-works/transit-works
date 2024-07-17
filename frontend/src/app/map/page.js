@@ -1,6 +1,6 @@
 import dynamic from 'next/dynamic';
 
-const Map = dynamic(() => import('../../components/maps/Map'), { ssr: false });
+const MapView = dynamic(() => import('../../components/maps/Map'), { ssr: false });
 
 export default function MapTest() {
   return (
@@ -9,7 +9,7 @@ export default function MapTest() {
             <h2 className="text-amber-50 text-center">Hello World</h2>
         </div>
         <div className="absolute inset-0 h-full w-full z-0">
-            <Map />
+            <MapView />
         </div>
     </div>
   );

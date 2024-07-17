@@ -1,110 +1,123 @@
-"use client";
-
-import { useEffect, useRef } from 'react';
-import maplibregl from 'maplibre-gl';
+"use client"
+import { useState, useEffect, useRef } from 'react';
+import { Map, NavigationControl, Popup, useControl } from 'react-map-gl/maplibre';
+import { GeoJsonLayer } from 'deck.gl';
+import { MapboxOverlay as DeckOverlay } from '@deck.gl/mapbox';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-function Map() {
-  const mapContainerRef = useRef(null);
+const INITIAL_VIEW_STATE = {
+  latitude: 43.647667,
+  longitude: -79.385611,
+  zoom: 12,
+  bearing: 0,
+};
 
-  useEffect(() => {
-    if (mapContainerRef.current) {
-      const map = new maplibregl.Map({
-        container: mapContainerRef.current,
-        style: '/styles/dark_matter.json',
-        center: [-79.385611, 43.647667],
-        zoom: 12,
-        maxZoom: 18,
-      });
+const MAP_STYLE = "/styles/dark_matter.json";
 
-      // add data
-      map.on('load', async () => {
-        const response = await fetch('/data.geojson');
-        const geojsonData = await response.json();
-
-        map.addSource('data', {
-          type: 'geojson',
-          data: geojsonData,
-        });
-
-        map.addLayer({
-          id: 'lines-layer',
-          type: 'line',
-          source: 'data',
-          layout: {
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
-          paint: {
-            'line-color': '#55ff63', // Line color (red)
-            'line-width': 1, // Line width
-          },
-        });
-
-        // Add layer
-        map.addLayer({
-          id: 'stops-layer',
-          type: 'circle',
-          source: 'data',
-          filter: ['==', '$type', 'Point'], // Filter to show only Point features
-          paint: {
-            'circle-radius': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              7,
-              0.5,
-              12, // Zoom level where the points start becoming visible
-              1, // Circle radius at zoom level 12 (smaller)
-              17, // Zoom level where the points are fully visible
-              5, // Circle radius at zoom level 17 (larger)
-            ],
-            'circle-color': '#55ff63', // Circle color (e.g., green)
-            'circle-stroke-width': 0, // Border width
-            'circle-stroke-color': '#ffffff' // Border color (e.g., white)
-          },
-        });
-      });
-
-      map.on('click', 'stops-layer', (e) => {
-        const {features} = e;
-
-        if (!features.length) {
-          return;
-        }
-
-        const feature = features[0];
-
-        // Create a popup
-        const data_popup = new maplibregl.Popup()
-            .setLngLat(feature.geometry.coordinates)
-            .setHTML(`<strong>Stop Properties:</strong><br>${JSON.stringify(feature.properties, null, 2)}`)
-            .addTo(map);
-      });
-
-      map.once('data', () => {
-        requestAnimationFrame(() => {
-          map.once('idle', () => {
-            document.body.classList.add('ready');
-          });
-          map.easeTo({
-            pitch: 45,
-            bearing: -10,
-            duration: 2000,
-            zoom: map.getZoom() + 0.1,
-          });
-        });
-      });
-
-
-      // Clean up on unmount
-      return () => map.remove();
-    }
-    return null;
-  }, []);
-
-  return <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />;
+function DeckGLOverlay(props) {
+  const overlay = useControl(() => new DeckOverlay(props));
+  overlay.setProps(props);
+  return null;
 }
 
-export default Map;
+function MapView() {
+  const [popupInfo, setPopupInfo] = useState(null);
+  const [data, setData] = useState(null);
+  const mapRef = useRef(null); // Reference to store the map instance
 
+  useEffect(() => {
+    // Fetch GeoJSON data asynchronously
+    const fetchData = async () => {
+      const response = await fetch('/data.geojson');
+      const json = await response.json();
+      setData(json);
+    };
+    fetchData();
+  }, []);
+
+  // Effect to initialize map after data is loaded
+  useEffect(() => {
+    if (!data) return; // Wait until data is fetched
+
+    const map = mapRef.current.getMap(); // Access the MapLibre GL JS map instance
+
+    // Run initialization code after data is loaded
+    map.once('data', () => {
+      requestAnimationFrame(() => {
+        map.once('idle', () => {
+          document.body.classList.add('ready');
+        });
+        map.easeTo({
+          pitch: 45,
+          bearing: -10,
+          duration: 2000,
+          zoom: map.getZoom() + 0.1,
+        });
+      });
+    });
+  }, [data]); // Trigger when data changes
+
+  const onClick = (info) => {
+    if (info && info.object) {
+      setPopupInfo({
+        coordinates: info.coordinate,
+        properties: info.object.properties
+      });
+    }
+  };
+
+  const renderPopup = () => (
+      popupInfo && (
+          <Popup
+              tipSize={5}
+              anchor="top"
+              longitude={popupInfo.coordinates[0]}
+              latitude={popupInfo.coordinates[1]}
+              closeOnClick={false}
+              onClose={() => setPopupInfo(null)}
+              style={{ zIndex: 10 }}
+          >
+            <div>
+              <h4>Route Information</h4>
+              <p>{JSON.stringify(popupInfo.properties)}</p>
+            </div>
+          </Popup>
+      )
+  );
+
+  const layers = [
+    new GeoJsonLayer({
+      id: 'data',
+      data,
+      // Styles
+      stroked: true,
+      filled: true,
+      getLineColor: [200, 0, 80, 180],
+      getLineWidth: 2,
+      lineWidthMinPixels: 2,
+      lineWidthScale: 10,
+      getFillColor: [200, 0, 80, 180],
+      pointRadiusMinPixels: 2,
+      getRadius: 10,
+      // Interactive props
+      pickable: true,
+      autoHighlight: true,
+      onClick,
+      beforeId: 'watername_ocean' // In interleaved mode, render the layer under map labels
+    })
+  ];
+
+  return (
+      <Map
+          ref={mapRef} // Assign the map instance to ref
+          initialViewState={INITIAL_VIEW_STATE}
+          mapStyle={MAP_STYLE}
+      >
+        <DeckGLOverlay layers={layers} />
+        <NavigationControl position="top-right" />
+        {renderPopup()}
+      </Map>
+  );
+}
+
+export default MapView;

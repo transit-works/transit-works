@@ -9,10 +9,13 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@deck.gl/mapbox": "^9.0.23",
+    "deck.gl": "^9.0.23",
     "maplibre-gl": "^4.4.1",
     "next": "14.2.4",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "react-map-gl": "^7.1.7"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
