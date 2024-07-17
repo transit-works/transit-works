@@ -65,24 +65,17 @@ def setup_template_db():
     conn.close()
 
 def add_nodes_edges_osmnx(osm_city_name, db_name_prefix):
-    nodes_file = f'{db_name_prefix}-nodes.gpkg'
-    edges_file = f'{db_name_prefix}-edges.gpkg'
+    nodes_file = 'nodes.gpkg'
+    edges_file = 'edges.gpkg'
 
     def download_gpkg():
-        if os.path.exists(nodes_file):
-            return
-
-        G = ox.graph_from_place(osm_city_name, network_type='drive', simplify=False)
-        nodes, edges = ox.graph_to_gdfs(G)
+        graph = ox.graph_from_place(osm_city_name, network_type='drive', simplify=False)
+        nodes, edges = ox.graph_to_gdfs(graph)
         nodes.to_file(nodes_file, driver='GPKG')
         edges.to_file(edges_file, driver='GPKG')
 
     def load_gpkg_to_sqlite():
         city_db = f'{db_name_prefix}.db'
-        if os.path.exists(city_db):
-            return
-
-        shutil.copyfile(template_db, city_db)
 
         print('Obtaining connection to sqlite')
         conn = sqlite3.connect(city_db)
@@ -111,67 +104,77 @@ def add_nodes_edges_osmnx(osm_city_name, db_name_prefix):
         cursor.execute('DETACH DATABASE edges_db')
         conn.close()
     
-    download_gpkg()
-    load_gpkg_to_sqlite()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.chdir(tmpdir)
+        download_gpkg()
+        load_gpkg_to_sqlite()
 
 def add_travel_demand_grid2demand(osm_city_name, db_name_prefix):
-    # with tempfile.TemporaryDirectory() as tmpdir:
-    #     os.chdir(tmpdir)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.chdir(tmpdir)
 
-    # ox.settings.all_oneway=True
-    # ox.settings.log_console = True
+        ox.settings.all_oneway=True
+        ox.settings.log_console = True
 
-    # # download osm file
-    # print('Downloading OSM file')
-    # graph = ox.graph_from_place(osm_city_name, network_type='all', simplify=False)
-    # ox.save_graph_xml(graph, 'map.osm')
+        # download osm file
+        print('Downloading OSM file')
+        graph = ox.graph_from_place(osm_city_name, network_type='drive', simplify=False)
+        ox.save_graph_xml(graph, 'map.osm')
 
-    # # download all POIs
-    # print('Downloading POIs')
-    # gdf = ox.features_from_place(osm_city_name)
-    # gdf.to_csv('poi.csv')
+        # download all POIs
+        print('Downloading POIs')
+        tags = {'amenities': True, 'building': True}
+        gdf = ox.features_from_place(osm_city_name, tags=tags)
+        gdf.to_csv('poi.csv')
 
-    # convert to gmns
-    print('Converting to GMNS')
-    net = og.getNetFromFile('toronto.osm.pbf', POI=True)
-    og.outputNetToCSV(net)
+        # convert to gmns
+        print('Converting to GMNS')
+        net = og.getNetFromFile('map.osm')
+        og.outputNetToCSV(net)
 
-    # grid2demand
-    print('Getting demand matrix')
-    net = gd.GRID2DEMAND()
-    net.load_network() # expects node.csv and poi.csv
-    net.net2zone(cell_width=10, cell_height=10, unit='km')
-    net.run_gravity_model()
-    net.save_results_to_csv() # outputs zone.csv and demand.csv
+        # grid2demand
+        print('Getting demand matrix')
+        net = gd.GRID2DEMAND()
+        net.load_network() # expects node.csv and poi.csv
+        net.net2zone(cell_width=10, cell_height=10, unit='km')
+        net.run_gravity_model()
+        net.save_results_to_csv(output_dir=tmpdir) # outputs zone.csv and demand.csv
 
-    # load dataframe
-    print('Loading dataframe')
-    zone = pd.read_csv('zone.csv')
-    demand = pd.read_csv('demand.csv')
+        # load dataframe
+        print('Loading dataframe')
+        zone = pd.read_csv('zone.csv')
+        demand = pd.read_csv('demand.csv')
 
-    # put dataframe in sqlite
-    print('Connecting to database')
-    city_db = f'{db_name_prefix}.db'
+        # put dataframe in sqlite
+        print('Connecting to database')
+        city_db = f'{db_name_prefix}.db'
 
-    conn = sqlite3.connect(city_db)
-    conn.enable_load_extension(True)
-    conn.execute('SELECT load_extension("mod_spatialite");')
+        conn = sqlite3.connect(city_db)
+        conn.enable_load_extension(True)
+        conn.execute('SELECT load_extension("mod_spatialite");')
 
-    print('Renaming columns')
-    zone.rename(columns={'zone_id': 'zoneid', 'centroid': 'center', 'geometry': 'geom'}, inplace=True)
-    demand.rename(columns={'o_zone_id': 'origid', 'd_zone_id': 'destid'}, inplace=True)
+        print('Renaming columns')
+        zone.rename(columns={'zone_id': 'zoneid', 'centroid': 'center', 'geometry': 'geom'}, inplace=True)
+        demand.rename(columns={'o_zone_id': 'origid', 'd_zone_id': 'destid'}, inplace=True)
 
-    print('Inserting rows')
-    zone[['zoneid', 'center', 'geom']].to_sql('zone', conn, if_exists='append', index=False)
-    demand[['origid', 'destid', 'dist_km', 'volume']].to_sql('demand', conn, if_exists='append', index=False)
+        print('Inserting rows')
+        zone[['zoneid', 'center', 'geom']].to_sql('zone', conn, if_exists='append', index=False)
+        demand[['origid', 'destid', 'dist_km', 'volume']].to_sql('demand', conn, if_exists='append', index=False)
 
-    conn.close()
+        conn.close()
 
 def main():
     setup_template_db()
 
     osm_city_name = 'Toronto, ON, Canada'
     db_name_prefix = 'toronto'
+
+    if not os.path.exists(f'{db_name_prefix}.db'):
+        shutil.copyfile(template_db, f'{db_name_prefix}.db')
+
+    cwd = os.getcwd()
+    db_name_prefix = f'{cwd}/{db_name_prefix}'
+
     add_nodes_edges_osmnx(osm_city_name, db_name_prefix)
     add_travel_demand_grid2demand(osm_city_name, db_name_prefix)
 
