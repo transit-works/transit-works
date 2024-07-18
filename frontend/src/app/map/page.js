@@ -1,16 +1,20 @@
-import dynamic from 'next/dynamic';
+import { Suspense } from 'react';
+import MapView from '../../components/views/MapView';
+import Loading from './loading'; // Import a custom loading component
 
-const MapView = dynamic(() => import('../../components/maps/Map'), { ssr: false });
 
-export default function MapTest() {
-  return (
-    <div className="h-screen flex">
-        <div className="relative h-full w-1/5 bg-background-dk bg-opacity-20 backdrop-blur-lg z-10 rounded-2xl">
-            <h2 className="text-amber-50 text-center">Hello World</h2>
-        </div>
-        <div className="absolute inset-0 h-full w-full z-0">
-            <MapView />
-        </div>
-    </div>
-  );
+async function fetchGeoJsonData() {
+    const response = await fetch('http://localhost:3000/data.geojson');
+    const data = await response.json();
+    return data;
+}
+
+export default async function MapPage() {
+    const data = await fetchGeoJsonData();
+
+    return (
+        <Suspense fallback={<Loading />}>
+            <MapView data={data} />
+        </Suspense>
+    );
 }
