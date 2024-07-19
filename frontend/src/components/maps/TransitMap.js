@@ -1,5 +1,6 @@
 "use client"
-import { useState, useEffect, useRef } from 'react';
+
+import { useState, useRef, useEffect } from 'react';
 import { Map, NavigationControl, Popup, useControl } from 'react-map-gl/maplibre';
 import { GeoJsonLayer } from 'deck.gl';
 import { MapboxOverlay as DeckOverlay } from '@deck.gl/mapbox';
@@ -21,49 +22,39 @@ function DeckGLOverlay(props) {
   return null;
 }
 
-function MapView() {
+function TransitMap({ data, selectedRoute, setSelectedRoute }) {
   const [popupInfo, setPopupInfo] = useState(null);
-  const [data, setData] = useState(null);
   const mapRef = useRef(null); // Reference to store the map instance
 
-  useEffect(() => {
-    // Fetch GeoJSON data asynchronously
-    const fetchData = async () => {
-      const response = await fetch('/data.geojson');
-      const json = await response.json();
-      setData(json);
-    };
-    fetchData();
-  }, []);
-
-  // Effect to initialize map after data is loaded
-  useEffect(() => {
-    if (!data) return; // Wait until data is fetched
-
+  const handleMapLoad = () => {
     const map = mapRef.current.getMap(); // Access the MapLibre GL JS map instance
 
     // Run initialization code after data is loaded
-    map.once('data', () => {
-      requestAnimationFrame(() => {
-        map.once('idle', () => {
-          document.body.classList.add('ready');
-        });
-        map.easeTo({
-          pitch: 45,
-          bearing: -10,
-          duration: 2000,
-          zoom: map.getZoom() + 0.1,
-        });
+    requestAnimationFrame(() => {
+      map.once('idle', () => {
+        document.body.classList.add('ready');
+      });
+      map.easeTo({
+        pitch: 45,
+        bearing: -10,
+        duration: 2000,
+        zoom: map.getZoom() + 0.1,
       });
     });
-  }, [data]); // Trigger when data changes
+  };
 
   const onClick = (info) => {
     if (info && info.object) {
+      const {type} = info.object.geometry;
+
+      if (type !== "Point") {
+        setSelectedRoute(prevSelectedRoute => (prevSelectedRoute === info.object.properties.route_id ? null : info.object.properties.route_id));
+      }
+
       setPopupInfo({
         coordinates: info.coordinate,
         properties: info.object.properties,
-        type: info.object.geometry.type,
+        type,
       });
     }
   };
@@ -96,10 +87,17 @@ function MapView() {
       )
   );
 
+  const filteredData = selectedRoute
+      ? {
+        ...data,
+        features: data.features.filter(feature => feature.properties.route_id === selectedRoute)
+      }
+      : data;
+
   const layers = [
     new GeoJsonLayer({
       id: 'data',
-      data,
+      data: filteredData,
       // Styles
       stroked: true,
       filled: true,
@@ -123,6 +121,7 @@ function MapView() {
           ref={mapRef} // Assign the map instance to ref
           initialViewState={INITIAL_VIEW_STATE}
           mapStyle={MAP_STYLE}
+          onLoad={handleMapLoad}
       >
         <DeckGLOverlay layers={layers} />
         <NavigationControl position="top-right" />
@@ -131,4 +130,4 @@ function MapView() {
   );
 }
 
-export default MapView;
+export default TransitMap;

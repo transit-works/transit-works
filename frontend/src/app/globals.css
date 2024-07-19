@@ -29,3 +29,43 @@ body {
     text-wrap: balance;
   }
 }
+
+/* styles/globals.css */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #444444 #1a1a1a;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #444444;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
+
+.scrollbar-hidden {
+  overflow-y: hidden;
+}
+
+.scrollbar-auto {
+  overflow-y: auto;
+}
+
+.custom-scrollbar-container {
+  overflow-y: hidden;
+}
+
+.custom-scrollbar-container:hover,
+.custom-scrollbar-container:focus-within {
+  overflow-y: auto;
+}
