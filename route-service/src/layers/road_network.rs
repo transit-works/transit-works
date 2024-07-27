@@ -7,8 +7,44 @@ use wkt::Wkt;
 
 // Layer 2 - Graph data strcture to store the nodes and edges of a city street network
 pub struct RoadNetwork {
-    tree: RTree<Node>, // We probably dont need an R-Tree here.
+    rtree: RTree<RTreeNode>,
     graph: Graph<Node, Edge>,
+}
+
+impl RoadNetwork {
+    pub fn load(dbname: &str) -> Result<Arc<RoadNetwork>> {
+        let conn = Connection::open(dbname)?;
+
+        let nodes = read_nodes(&conn)?;
+        let edges = read_edges(&conn)?;
+
+        let mut rtree = RTree::<RTreeNode>::new();
+        let mut graph = Graph::<Node, Edge, Directed>::new();
+        let mut node_map = HashMap::<u32, NodeIndex>::new();
+
+        for node in nodes {
+            let node_index = graph.add_node(node);
+            let envelope = compute_envelope(&graph[node_index].geom);
+            rtree.insert(RTreeNode {
+                envelope: envelope,
+                node_index: node_index,
+            });
+            node_map.insert(graph[node_index].fid, node_index);
+        }
+
+        for edge in edges {
+            if let (Some(&from_node), Some(&to_node)) =
+                (node_map.get(&edge.u), node_map.get(&edge.v))
+            {
+                graph.add_edge(from_node, to_node, edge);
+            }
+        }
+
+        Ok(Arc::new(RoadNetwork {
+            rtree: rtree,
+            graph: graph,
+        }))
+    }
 }
 
 struct Node {
@@ -17,11 +53,20 @@ struct Node {
     osmid: u32,
 }
 
-impl RTreeObject for Node {
+struct RTreeNode {
+    envelope: AABB<[f64; 2]>,
+    node_index: NodeIndex,
+}
+
+impl RTreeObject for RTreeNode {
     type Envelope = AABB<[f64; 2]>;
     fn envelope(&self) -> Self::Envelope {
-        AABB::from_point(self.geom.x_y().into())
+        self.envelope
     }
+}
+
+fn compute_envelope(point: &Point<f64>) -> AABB<[f64; 2]> {
+    return AABB::from_point(point.x_y().into());
 }
 
 struct Edge {
@@ -64,34 +109,4 @@ fn read_nodes(conn: &Connection) -> Result<Vec<Node>> {
         })
     })?;
     Ok(Vec::from_iter(node_iter.map(|x| x.unwrap())))
-}
-
-fn load(dbname: &str) -> Result<Arc<RoadNetwork>> {
-    let conn = Connection::open(dbname)?;
-
-    let nodes = read_nodes(&conn)?;
-    let edges = read_edges(&conn)?;
-
-    let mut rtree= RTree::<Node>::new();
-    let mut graph = Graph::<Node, Edge, Directed>::new();
-    let mut node_map = HashMap::<u32, NodeIndex>::new();
-
-    for node in nodes {
-        rtree.insert(node);
-        let node_index = graph.add_node(node);
-        node_map.insert(node.fid, node_index);
-    }
-
-    for edge in edges {
-        if let (Some(&from_node), Some(&to_node)) =
-            (node_map.get(&edge.u), node_map.get(&edge.v))
-        {
-            graph.add_edge(from_node, to_node, edge);
-        }
-    }
-
-    Ok(Arc::new(RoadNetwork {
-        tree: rtree,
-        graph: graph,
-    }))
 }

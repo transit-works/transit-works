@@ -1,18 +1,50 @@
 use geo_types::Polygon;
-use petgraph::graph::{Graph, NodeIndex};
-use petgraph::Directed;
+use petgraph::{Graph, Directed, graph::NodeIndex};
 use rstar::{RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 use wkt::Wkt;
 
 // Layer 1 - Data structure describing grid network and O-D matrix data
 pub struct GridNetwork {
-    tree: RTree<Node>, // TODO: the R-Tree needs to store the NodeIndex from the graph.
-    graph: Graph<u32, f64>,
-    zones: HashMap<u32, Zone>,
+    rtree: RTree<RTreeNode>,
+    graph: Graph<Zone, Link>,
+}
+
+impl GridNetwork {
+    pub fn load(dbname: &str) -> Result<Arc<GridNetwork>> {
+        let conn = Connection::open(dbname)?;
+
+        let links = read_links(&conn)?;
+        let zones = read_zones(&conn)?;
+
+        let mut rtree = RTree::<RTreeNode>::new();
+        let mut graph = Graph::<Zone, Link, Directed>::new();
+        let mut node_map = HashMap::<u32, NodeIndex>::new();
+
+        for zone in zones {
+            let node_index = graph.add_node(zone);
+            let envelope = compute_envelope(&graph[node_index].polygon);
+            rtree.insert(RTreeNode {
+                envelope: envelope,
+                node_index: node_index,
+            });
+            node_map.insert(graph[node_index].zoneid, node_index);
+        }
+
+        for link in links {
+            if let (Some(&from_node), Some(&to_node)) =
+                (node_map.get(&link.origid), node_map.get(&link.destid))
+            {
+                graph.add_edge(from_node, to_node, link);
+            }
+        }
+
+        Ok(Arc::new(GridNetwork {
+            rtree: rtree,
+            graph: graph,
+        }))
+    }
 }
 
 struct Link {
@@ -26,12 +58,12 @@ struct Zone {
     polygon: Polygon<f64>,
 }
 
-struct Node {
-    zoneid: u32,
+struct RTreeNode {
     envelope: AABB<[f64; 2]>,
+    node_index: NodeIndex,
 }
 
-impl RTreeObject for Node {
+impl RTreeObject for RTreeNode {
     type Envelope = AABB<[f64; 2]>;
 
     fn envelope(&self) -> Self::Envelope {
@@ -96,42 +128,4 @@ fn read_zones(conn: &Connection) -> Result<Vec<Zone>> {
         zones.push(zone?);
     }
     Ok(zones)
-}
-
-pub fn load(dbname: &str) -> Result<Arc<GridNetwork>> {
-    let conn = Connection::open(dbname)?;
-
-    let links = read_links(&conn)?;
-    let zones = read_zones(&conn)?;
-
-    let mut rtree = RTree::<Node>::new();
-    let mut graph = Graph::<u32, f64, Directed>::new();
-    let mut node_map = HashMap::<u32, NodeIndex>::new();
-    let mut zone_map = HashMap::<u32, Zone>::new();
-
-    for zone in zones {
-        let envelope = compute_envelope(&zone.polygon);
-        let node = Node {
-            zoneid: zone.zoneid,
-            envelope: envelope,
-        };
-        let nodeindex = graph.add_node(zone.zoneid);
-        rtree.insert(node);
-        node_map.insert(zone.zoneid, nodeindex);
-        zone_map.insert(zone.zoneid, zone);
-    }
-
-    for link in links {
-        if let (Some(&from_node), Some(&to_node)) =
-            (node_map.get(&link.origid), node_map.get(&link.destid))
-        {
-            graph.add_edge(from_node, to_node, link.weight);
-        }
-    }
-
-    Ok(Arc::new(GridNetwork {
-        tree: rtree,
-        graph: graph,
-        zones: zone_map,
-    }))
 }

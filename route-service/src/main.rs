@@ -1,10 +1,11 @@
 mod layers;
 
-use layers::grid_network;
+use layers::{grid_network::GridNetwork, road_network::RoadNetwork};
 
 fn main() {
     println!("Hello, world!");
 
     let tmp = "toronto.db";
-    let grid = grid_network::load(tmp);
+    let grid = GridNetwork::load(tmp);
+    let road = RoadNetwork::load(tmp);
 }
