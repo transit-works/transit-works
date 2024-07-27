@@ -1,0 +1,11 @@
+[package]
+name = "route-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+geo-types = "0.7.13"
+petgraph = "0.6.5"
+rstar = "0.12.0"
+rusqlite = "0.32.0"
+wkt = "0.11.0"
