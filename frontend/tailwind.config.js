@@ -8,11 +8,21 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'background': '#f5f5f0',
-        'background-dk': '#090909',
         'accent-1': '#ff1643',
+        'accent-2': '#9beb34',
+        // Custom Colors
+        'background': '#f5f5f0',
+        'background-dk': '#060606',
+        'text': '#f2e0e0',
+        'text-2': '#d1b99e',
+        'primary': '#ca2848',
+        'secondary': '#775631',
+        'accent': "#c4a76e",
       },
       fontFamily: {
+        'heading': ["Fjalla One", "sans-serif"],
+        'body': ["Poppins", "sans-serif"],
+        'logo': ["Staatliches", 'sans-serif'],
       }
     },
   },
