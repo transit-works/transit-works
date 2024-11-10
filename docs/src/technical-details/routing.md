@@ -29,6 +29,11 @@ two layers are immutable -- that is, once read from the database the roads or
 grid data is never modified meaning read throuput is the top priority. However, 
 in the case of the bus network, this data is frequently mutated by our 
 optimization algorithms meaning that it is important to consider write 
-throughput and concurrency control. The bus network is described as a set of 
-routes with individual schedules, stops, etc. The routes themselves are composed 
-of nodes and edges similar to the road network layer. 
+throughput and concurrency control. 
+
+The bus network is represented as a list of routes. A given route is described 
+by a list of intersections from the road network, and a schedule describing the 
+location of bus stops and frequency. The representation is designed to be as 
+lightweight as possible for copying and mutations. When the bus network layer 
+is converted back to GTFS, the shape and other more complex attribues can be 
+determined. 

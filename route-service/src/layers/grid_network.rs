@@ -105,11 +105,7 @@ fn read_links(conn: &Connection) -> Result<Vec<Link>> {
             weight: row.get(2)?,
         })
     })?;
-    let mut links = Vec::new();
-    for link in link_iter {
-        links.push(link?);
-    }
-    Ok(links)
+    Ok(Vec::from_iter(link_iter.map(|x| x.unwrap())))
 }
 
 fn read_zones(conn: &Connection) -> Result<Vec<Zone>> {
@@ -123,9 +119,5 @@ fn read_zones(conn: &Connection) -> Result<Vec<Zone>> {
             polygon: polygon,
         })
     })?;
-    let mut zones = Vec::new();
-    for zone in zone_iter {
-        zones.push(zone?);
-    }
-    Ok(zones)
+    Ok(Vec::from_iter(zone_iter.map(|x| x.unwrap())))
 }
