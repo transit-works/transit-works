@@ -1,57 +1,80 @@
 use crate::gtfs::error::{Error, LineError};
 
 use serde::{Deserialize, Serialize};
-use std::{fs::{read_dir, File}, io::Read, path::{Path, PathBuf}};
+use std::{fs::File, io::Read, path::Path};
 
 /// GTFS dataset
 /// https://gtfs.org/documentation/schedule/reference/#dataset-files
 pub struct GtfsDataSet {
-    pub agencies: Vec<Agency>,
-    pub stops: Vec<Stop>,
-    pub routes: Vec<Route>,
-    pub trips: Vec<Trip>,
-    pub stop_times: Vec<StopTime>,
-    pub calendar: Option<Vec<Calendar>>,
-    pub calendar_dates: Option<Vec<CalendarDate>>,
-    pub shapes: Option<Vec<Shape>>,
-    pub fare_attributes: Option<Vec<FareAttribute>>,
-    pub fare_rules: Option<Vec<FareRule>>,
-    pub frequencies: Option<Vec<Frequency>>,
-    pub transfers: Option<Vec<Transfer>>,
-    pub pathways: Option<Vec<Pathway>>,
-    pub feed_info: Option<Vec<FeedInfo>>,
-    pub translations: Option<Vec<Translation>>,
+    pub agencies: Result<Vec<Agency>, Error>,
+    pub stops: Result<Vec<Stop>, Error>,
+    pub routes: Result<Vec<Route>, Error>,
+    pub trips: Result<Vec<Trip>, Error>,
+    pub stop_times: Result<Vec<StopTime>, Error>,
+    pub calendar: Option<Result<Vec<Calendar>, Error>>,
+    pub calendar_dates: Option<Result<Vec<CalendarDate>, Error>>,
+    pub shapes: Option<Result<Vec<Shape>, Error>>,
+    pub fare_attributes: Option<Result<Vec<FareAttribute>, Error>>,
+    pub fare_rules: Option<Result<Vec<FareRule>, Error>>,
+    pub frequencies: Option<Result<Vec<Frequency>, Error>>,
+    pub transfers: Option<Result<Vec<Transfer>, Error>>,
+    pub pathways: Option<Result<Vec<Pathway>, Error>>,
+    pub feed_info: Option<Result<Vec<FeedInfo>, Error>>,
+    pub translations: Option<Result<Vec<Translation>, Error>>,
 }
 
 impl GtfsDataSet {
-    pub fn from_path(path: &Path) -> Result<GtfsDataSet, Error> {
-        if path.is_file() {
-            let reader = File::open(path);
+    pub fn from_path<P>(path: P) -> Result<GtfsDataSet, Error> 
+    where 
+        P: AsRef<Path>
+    {
+        let p = path.as_ref();
+        if p.is_file() {
+            let reader = File::open(p);
             GtfsDataSet::read_from_reader(&reader?)
-        } else if path.is_dir() {
-            GtfsDataSet::read_from_dir(path)
+        } else if p.is_dir() {
+            GtfsDataSet::read_from_dir(p)
         } else {
-            Err(Error::NotFileNorDirectory(format!("{}", path.display())))
+            Err(Error::NotFileNorDirectory(format!("{}", p.display())))
         }
+    }
+
+    pub fn print_stats(&self) {
+        println!("GTFS data:");
+        println!("  Agencies: {}", mandatory_file_summary(&self.agencies));
+        println!("  Stops: {}", mandatory_file_summary(&self.stops));
+        println!("  Routes: {}", mandatory_file_summary(&self.routes));
+        println!("  Trips: {}", mandatory_file_summary(&self.trips));
+        println!("  Stop times: {}", mandatory_file_summary(&self.stop_times));
+        println!("  Calendar: {}", optional_file_summary(&self.calendar));
+        println!("  Calendar Dates: {}", optional_file_summary(&self.calendar_dates));
+        println!("  Shapes: {}", optional_file_summary(&self.shapes));
+        println!("  Fare Attributes: {}", optional_file_summary(&self.fare_attributes));
+        println!("  Fare Rules: {}", optional_file_summary(&self.fare_rules));
+        println!("  Frequencies: {}", optional_file_summary(&self.frequencies));
+        println!("  Transfers: {}", optional_file_summary(&self.transfers));
+        println!("  Pathways: {}", optional_file_summary(&self.pathways));
+        println!("  Feed info: {}", optional_file_summary(&self.feed_info));
+        println!("  Translations: {}", optional_file_summary(&self.translations));
     }
 
     fn read_from_dir(path: &Path) -> Result<GtfsDataSet, Error> {
         Ok(GtfsDataSet {
-            agencies: GtfsDataSet::read_obj_from_path(path.join("agencies.txt"))?, 
-            stops: GtfsDataSet::read_obj_from_path(path.join("stops.txt"))?, 
-            routes: GtfsDataSet::read_obj_from_path(path.join("routes.txt"))?, 
-            trips: GtfsDataSet::read_obj_from_path(path.join("trips.txt"))?, 
-            stop_times: GtfsDataSet::read_obj_from_path(path.join("stop_times.txt"))?, 
-            calendar: GtfsDataSet::optional_read_obj_from_path(path.join("calendar.txt"))?,
-            calendar_dates: GtfsDataSet::optional_read_obj_from_path(path.join("calendar_dates.txt"))?, 
-            shapes: GtfsDataSet::optional_read_obj_from_path(path.join("shapes.txt"))?, 
-            fare_attributes: GtfsDataSet::optional_read_obj_from_path(path.join("fare_attributes.txt"))?, 
-            fare_rules: GtfsDataSet::optional_read_obj_from_path(path.join("fare_rules.txt"))?, 
-            frequencies: GtfsDataSet::optional_read_obj_from_path(path.join("frequencies.txt"))?, 
-            transfers: GtfsDataSet::optional_read_obj_from_path(path.join("transfers.txt"))?, 
-            pathways: GtfsDataSet::optional_read_obj_from_path(path.join("pathways.txt"))?, 
-            feed_info: GtfsDataSet::optional_read_obj_from_path(path.join("feed_info.txt"))?, 
-            translations: GtfsDataSet::optional_read_obj_from_path(path.join("translations.txt"))?,
+            agencies: GtfsDataSet::read_obj_from_path(path, "agency.txt"), 
+            stops: GtfsDataSet::read_obj_from_path(path, "stops.txt"), 
+            routes: GtfsDataSet::read_obj_from_path(path, "routes.txt"), 
+            trips: GtfsDataSet::read_obj_from_path(path, "trips.txt"), 
+            stop_times: GtfsDataSet::read_obj_from_path(path, "stop_times.txt"), 
+            calendar: GtfsDataSet::optional_read_obj_from_path(path, "calendar.txt"),
+            calendar_dates: GtfsDataSet::optional_read_obj_from_path(path, "calendar_dates.txt"), 
+            shapes: GtfsDataSet::optional_read_obj_from_path(path, "shapes.txt"), 
+            fare_attributes: GtfsDataSet::optional_read_obj_from_path(path, "fare_attributes.txt"), 
+            fare_rules: GtfsDataSet::optional_read_obj_from_path(path, "fare_rules.txt"), 
+            frequencies: GtfsDataSet::optional_read_obj_from_path(path, "frequencies.txt"), 
+            transfers: GtfsDataSet::optional_read_obj_from_path(path, "transfers.txt"), 
+            pathways: GtfsDataSet::optional_read_obj_from_path(path, "pathways.txt"), 
+            feed_info: GtfsDataSet::optional_read_obj_from_path(path, "feed_info.txt"), 
+            translations: GtfsDataSet::optional_read_obj_from_path(path, "translations.txt"),
         })
     }
 
@@ -59,42 +82,27 @@ impl GtfsDataSet {
         panic!("Not yet implemented")
     }
 
-    fn read_obj_from_path<O>(path: PathBuf) -> Result<Vec<O>, Error>
+    fn read_obj_from_path<O>(path: &Path, file_name: &str) -> Result<Vec<O>, Error>
     where
         for<'de> O: Deserialize<'de>,
     {
-        let file_name = path
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("invalid_file_name")
-            .to_string();
-
-        if path.exists() {
-            File::open(path)
+        let p = path.join(file_name);
+        if p.exists() {
+            File::open(p)
                 .map_err(|e| Error::NamedFileIO { file_name: file_name.to_owned(), source: Box::new(e) })
                 .and_then(|r| GtfsDataSet::read_obj(r, &file_name))
         } else {
-            Err(Error::MissingFile(file_name))
+            Err(Error::MissingFile(file_name.to_owned()))
         }
     }
 
-    fn optional_read_obj_from_path<O>(path: PathBuf) -> Result<Option<Vec<O>>, Error>
+    fn optional_read_obj_from_path<O>(path: &Path, file_name: &str) -> Option<Result<Vec<O>, Error>>
     where
         for<'de> O: Deserialize<'de>,
     {
-        let file_name = path
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("invalid_file_name")
-            .to_string();
-
-        if path.exists() {
-            File::open(path)
-                .map_err(|e| Error::NamedFileIO { file_name: file_name.to_owned(), source: Box::new(e) })
-                .and_then(|r| Ok(Some(GtfsDataSet::read_obj(r, &file_name)?)))
-        } else {
-            Ok(None)
-        }
+        File::open(path.join(file_name))
+            .ok()
+            .map(|r| GtfsDataSet::read_obj(r, file_name))
     }
 
     fn read_obj<T, O>(mut reader: T, file_name: &str) -> Result<Vec<O>, Error>
@@ -156,6 +164,20 @@ impl GtfsDataSet {
             objs.push(obj);
         }
         Ok(objs)
+    }
+}
+
+fn mandatory_file_summary<T>(objs: &Result<Vec<T>, Error>) -> String {
+    match objs {
+        Ok(vec) => format!("{} objects", vec.len()),
+        Err(e) => format!("{e}"),
+    }
+}
+
+fn optional_file_summary<T>(objs: &Option<Result<Vec<T>, Error>>) -> String {
+    match objs {
+        Some(objs) => mandatory_file_summary(objs),
+        None => "File not present".to_string(),
     }
 }
 
