@@ -13,13 +13,16 @@
     "@react-spring/parallax": "^9.7.4",
     "@splinetool/react-spline": "^4.0.0",
     "@splinetool/runtime": "^1.9.20",
+    "d3": "^7.9.0",
     "deck.gl": "^9.0.23",
     "framer-motion": "^11.3.30",
     "maplibre-gl": "^4.4.1",
-    "next": "14.2.4",
+    "next": "^14.2.18",
     "react": "^18",
     "react-dom": "^18",
-    "react-map-gl": "^7.1.7"
+    "react-globe.gl": "^2.27.5",
+    "react-map-gl": "^7.1.7",
+    "react-simple-maps": "^3.0.0"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

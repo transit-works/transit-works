@@ -7,6 +7,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      boxShadow: {
+        'bubble': '0 5px 10px rgba(0, 0, 0, 0.15), 0 10px 20px rgba(0, 0, 0, 0.1)',
+      },
       colors: {
         'accent-1': '#ff1643',
         'accent-2': '#9beb34',

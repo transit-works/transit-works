@@ -3,9 +3,22 @@
 import Link from 'next/link'
 import {Parallax, ParallaxLayer} from '@react-spring/parallax';
 import Spline from '@splinetool/react-spline';
+import React from 'react';
 import ScrollIndicator from "@/components/common/ScrollIndicator";
+import ProgressDial from '@/components/visualization/ProgressDial';
+import ReactGlobe from '@/components/visualization/Globe';
 
 export default function Home() {
+    const N = 10;
+    const gData = [...Array(N).keys()].map(() => ({
+        lat: (Math.random() - 0.5) * 180,
+        lng: (Math.random() - 0.5) * 360,
+        maxR: Math.random() * 20 + 3,
+        propagationSpeed: (Math.random() - 0.5) * 20 + 1,
+        repeatPeriod: Math.random() * 2000 + 200
+    }));
+
+    const colorInterpolator = t => `rgba(255,100,50,${Math.sqrt(1-t)})`;
 
   return (
       <Parallax pages={3} style={{ top: 0, left: 0 }}>
@@ -81,22 +94,35 @@ export default function Home() {
               <div className="flex justify-center items-center h-screen">
                   <div className="w-5/6 h-5/6 grid grid-cols-4 grid-rows-6 gap-4 p-4">
                       <div className="col-span-2 row-span-2 flex justify-center items-center rounded-xl bg-text-2">
-                          <h1 className="font-logo text-9xl">OVERVIEW</h1>
+                          <h1 className="font-logo text-9xl text-transparent bg-gradient-to-r from-primary to-accent bg-clip-text"> Overview </h1>
                       </div>
 
-                      <div className="col-span-2 row-span-6 flex justify-center items-center rounded-xl bg-accent">
-                          <span>Main Content ( map + text )</span>
+                      <div className="flex flex-col col-span-2 row-span-6 flex justify-center items-center rounded-xl bg-accent">
+                          <img src="/assets/imgs/map.png" />
+                          <p className="p-4 mt-auto mb-4">Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur.</p>
                       </div>
 
-                      <div className="col-span-1 row-span-4 flex justify-center items-center rounded-xl bg-secondary">
-                          <span>Image (map dashboard)</span>
+                      <div
+                        className="globe flex flex-col col-span-1 row-span-4 justify-between items-center relative rounded-xl bg-secondary p-4">
+                          <ReactGlobe />
+                          <div className="mt-auto">
+                              <p className="text-white font-body text-sm">View transit data and optimize routes from all over the world.</p>
+                          </div>
                       </div>
 
-                      <div className="col-span-1 row-span-2 flex justify-center items-center rounded-xl bg-primary">
-                          <span>Box 0 (3d bs) </span>
+
+                      <div className="col-span-1 row-span-2 flex justify-center items-center rounded-xl bg-primary p-4">
+                          <div
+                            className="bg-black bg-opacity-90 backdrop-blur-md rounded-lg p-4">
+                              <ProgressDial percentage={83} name="Transit Score" />
+                          </div>
+                          <div className="w-1/2 my-auto">
+                              <p className="text-white font-body text-sm p-4">View transit scores for real-time route
+                                                                              evaluations.</p>
+                          </div>
                       </div>
-                      <div className="col-span-1 row-span-2 flex justify-center items-center rounded-xl bg-white">
-                          <span>Box 3 (text) </span>
+                      <div className="col-span-1 row-span-2 flex justify-center items-center rounded-xl bg-text-2">
+                          <Spline scene="https://prod.spline.design/9jYOc1cUoGV4nrzj/scene.splinecode" />
                       </div>
                   </div>
               </div>
