@@ -16,7 +16,7 @@ function ReactGlobe() {
     repeatPeriod: Math.random() * 2000 + 200,
   }));
 
-  const colorInterpolator = (t) => `rgba(255,100,50,${Math.sqrt(1 - t)})`;
+  const colorInterpolator = (t) => `rgba(255,22,67,${Math.sqrt(1 - t)})`;
 
   useEffect(() => {
     if (globeRef.current) {
