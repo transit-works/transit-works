@@ -1,0 +1,52 @@
+[
+  {
+    "Name": "Toronto",
+    "Transit Score": 80,
+    "Economic Score": 55
+  },
+  {
+    "Name": "Vancouver",
+    "Transit Score": 40,
+    "Economic Score": 33
+  },
+  {
+    "Name": "NewYork",
+    "Transit Score": 90,
+    "Economic Score": 44
+  },
+  {
+    "Name": "SanFran",
+    "Transit Score": 40,
+    "Economic Score": 66
+  },
+  {
+    "Name": "Austin",
+    "Transit Score": 30,
+    "Economic Score": 35
+  },
+  {
+    "Name": "Singapore",
+    "Transit Score": 95,
+    "Economic Score": 92
+  },
+  {
+    "Name": "London",
+    "Transit Score": 30,
+    "Economic Score": 40
+  },
+  {
+    "Name": "Berlin",
+    "Transit Score": 30,
+    "Economic Score": 50
+  },
+  {
+    "Name": "Amsterdam",
+    "Transit Score": 88,
+    "Economic Score": 77
+  },
+  {
+    "Name": "Madrid",
+    "Transit Score": 92,
+    "Economic Score": 33
+  }
+]

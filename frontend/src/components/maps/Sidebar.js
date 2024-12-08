@@ -1,37 +1,80 @@
-function Sidebar({ data, selectedRoute, setSelectedRoute }) {
-    const handleClick = (id) => {
-        setSelectedRoute(prevSelectedRoute => (prevSelectedRoute === id ? null : id));
-    };
+import React, { useState } from 'react';
+import Link from 'next/link';
+import ProgressDial from '@/components/visualization/ProgressDial';
+import RouteList from '@/components/transit/RouteList';
+import SidebarReport from '@/components/views/ExpandedSidebarView';
+import ImageButton from '@/components/common/ImageButton';
+import MiniTable from '@/components/visualization/MiniTable';
 
-    return (
-        <div className="flex flex-col h-full w-full">
-            <h2 className="text-amber-50 mt-2 text-center">TransitWorks</h2>
-            {/* Routes */}
-            <h2 className="text-amber-50 mt-3 ml-5">Routes:</h2>
-            <div className="m-3 mt-0 p-2 bg-background-dk bg-opacity-20 backdrop-blur-lg rounded-2xl h-full custom-scrollbar custom-scrollbar-container">
-                {data.features
-                    .filter((feature) => feature.geometry.type !== 'Point')
-                    .map((route) => (
-                        <div key={route.properties.route_id} className="flex items-center w-full text-left">
-                            {selectedRoute === route.properties.route_id && (
-                                <div className="w-2 h-2 mt-1 bg-accent-1 rounded-full mr-2" />
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => handleClick(route.properties.route_id)}
-                                className={`text-white text-xs text-left pt-1 hover:text-accent-1 hover:cursor-pointer w-full ${selectedRoute === route.properties.route_id ? 'font-bold' : ''}`}
-                            >
-                                {route.properties.route_short_name} - {route.properties.route_long_name}
-                            </button>
-                            {/* You can add more details as needed */}
-                        </div>
-                    ))}
-                {data.features.length === 0 && (
-                    <p className="text-white p-2">No routes available</p>
-                )}
-            </div>
+function Sidebar({ data, selectedRoute, setSelectedRoute }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const toggleSidebar = () => {
+    setIsExpanded(!isExpanded);
+  };
+
+  const closeExpandedSection = () => {
+    setIsExpanded(false);
+  };
+
+  return (
+    <div className="flex flex-col relative h-screen">
+      {/* Sidebar Section */}
+      <div
+        className={`flex flex-col h-full p-3 transition-all duration-300 bg-background-light`}
+      >
+        {/* Expand Button */}
+        <div className="flex flex-row items-center justify-between pl-2 pb-3 pt-1">
+          <h2 className="text-xl font-heading leading-none text-white">Toronto</h2>
+          <button
+            onClick={toggleSidebar}
+            className="px-2 text-right hover:text-accent text-white font-body text-xs leading-none"
+          >
+            {isExpanded ? '< Close Details' : 'View Details >'}
+          </button>
         </div>
-    );
+
+        {/* Progress Dial Section */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-background-dk border-zinc-800 border rounded-2xl py-2">
+            <ProgressDial percentage={68} name="Transit Score" />
+          </div>
+          <div className="bg-background-dk border-zinc-800 border rounded-2xl py-2">
+            <ProgressDial percentage={77} name="Economic Score" />
+          </div>
+        </div>
+
+        {/* Legend */}
+        <MiniTable />
+
+        {/* Routes Section */}
+        <div
+          className="px-2 pb-2 my-2 bg-background-dk border-zinc-800 border rounded-2xl custom-scrollbar custom-scrollbar-container overflow-y-auto max-h-[calc(100vh-200px)]">
+          <RouteList data={data} selectedRoute={selectedRoute} setSelectedRoute={setSelectedRoute} />
+        </div>
+
+        {/* Buttons at the Bottom */}
+        <ImageButton text="Optimize" imageSrc="/assets/icons/speed.png"
+                     onClick={() => console.log("New button clicked")} />
+        <div className="flex justify-around pt-2">
+          <Link href="/" className="w-full pr-1" passHref>
+            <ImageButton text="Home" imageSrc="/assets/icons/home.png" altText="Home icon" />
+          </Link>
+          <Link href="/" className="w-full pl-1" passHref>
+            <ImageButton
+              text="New"
+              imageSrc="/assets/icons/earth.png"
+              altText="Earth Icon"
+              onClick={() => console.log("New button clicked")}
+            />
+          </Link>
+        </div>
+      </div>
+
+      {/* Expanded Sidebar Section (conditionally rendered when expanded) */}
+      {isExpanded && <SidebarReport onClose={closeExpandedSection} />}
+    </div>
+  );
 }
 
 export default Sidebar;

@@ -69,3 +69,23 @@ body {
 .custom-scrollbar-container:focus-within {
   overflow-y: auto;
 }
+
+@layer utilities {
+  .bubble-shadow {
+    text-shadow: 0 4px 6px rgba(0, 0, 0, 0.1),
+    0 8px 12px rgba(0, 0, 0, 0.11),
+    0 12px 20px rgba(0, 0, 0, 0.12);
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#globe-container {
+  position: absolute;
+  width: 100vw;
+  height: 100vh;
+}
