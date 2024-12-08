@@ -108,7 +108,7 @@ export default function FlatMap({ events = false }) {
             key={city.name}
             onClick={() => handleCityClick(city)}
             className={`px-4 py-2 rounded-full shadow-lg ${
-              selectedCity?.name === city.name ? 'bg-red-600 text-white' : 'bg-gray-800 text-white'
+              selectedCity?.name === city.name ? 'bg-red-600 text-white' : 'bg-zinc-800 text-white'
             } hover:bg-gray-600`}
           >
             {city.name}
@@ -117,7 +117,7 @@ export default function FlatMap({ events = false }) {
       </div>
 
       {/* Map */}
-      <svg width={width} height={height} className="m-36 mt-0">
+      <svg width={width} height={height} className="m-36 mt-0 pointer-events-none">
         <rect x={0} y={0} width={width} height={height} fill={background} rx={14} />
         <Mercator data={world.features} scale={scale} translate={[centerX, centerY + 50]}>
           {(mercator) => (
@@ -147,7 +147,7 @@ export default function FlatMap({ events = false }) {
                     stroke="#000000"
                     strokeWidth={1}
                     onClick={() => handleCityClick(city)}
-                    className="cursor-pointer"
+                    className="cursor-pointer pointer-events-auto"
                   />
                 );
               })}
@@ -160,21 +160,22 @@ export default function FlatMap({ events = false }) {
       <div className="flex justify-center mt-4">
         <button
           onClick={() => alert('Browse functionality coming soon!')}
-          className="bg-primary text-text font-body px-8 py-3 rounded shadow-lg hover:text-black hover:bg-white"
+          className="bg-primary text-text font-body px-8 py-3 rounded shadow-lg hover:text-black hover:bg-white pointer-events-auto"
         >
           Browse All
         </button>
       </div>
 
+
       {/* Popup */}
       {selectedCity && (
         <div
           ref={popupRef}
-          className="fixed top-1/4 left-1/2 transform -translate-x-1/2 bg-white p-5 rounded-lg shadow-lg z-10"
+          className="fixed top-1/2 left-2/3 w-1/6 h-1/3 bg-background-dk bg-opacity-30 backdrop-blur-lg p-5 rounded-lg shadow-lg z-10"
         >
           <button
             onClick={() => setSelectedCity(null)}
-            className="absolute top-2 right-2 text-red-600 text-lg font-bold"
+            className="absolute top-2 right-2 text-white text-lg font-bold"
           >
             &times;
           </button>

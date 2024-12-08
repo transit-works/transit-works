@@ -3,27 +3,14 @@
 import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { Parallax, ParallaxLayer } from '@react-spring/parallax';
+import Spline from '@splinetool/react-spline';
 import ScrollIndicator from '@/components/common/ScrollIndicator';
 import ProgressDial from '@/components/visualization/ProgressDial';
 import MultiBarChart from '@/components/visualization/MultiBarChart';
-import Spline from '@splinetool/react-spline';
 import ReactGlobe from '@/components/visualization/Globe';
 import FlatMap from '@/components/visualization/FlatMap';
 
 export default function Home() {
-    const N = 10;
-
-    // Memoizing generated data to prevent unnecessary recalculations
-    const gData = useMemo(() => (
-      [...Array(N).keys()].map(() => ({
-          lat: (Math.random() - 0.5) * 180,
-          lng: (Math.random() - 0.5) * 360,
-          maxR: Math.random() * 20 + 3,
-          propagationSpeed: (Math.random() - 0.5) * 20 + 1,
-          repeatPeriod: Math.random() * 2000 + 200
-      }))
-    ), [N]);
-
     return (
       <Parallax pages={6} style={{ top: 0, left: 0 }}>
           {/* Background Layer */}
@@ -91,7 +78,7 @@ export default function Home() {
                       Optimize & Visualize<br />Bus Routes
                   </h1>
                   <p className="text-text font-body text-left w-2/3 mx-36 mt-10">
-                      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                    Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
                   </p>
               </div>
           </ParallaxLayer>
@@ -106,7 +93,7 @@ export default function Home() {
                       <div className="flex flex-col col-span-2 row-span-6 flex justify-center items-center rounded-xl bg-accent">
                           <img src="/assets/imgs/map.png" alt="Map Visualization" />
                           <p className="p-4 mt-auto mb-4">
-                              Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.
+                            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
                           </p>
                       </div>
                       <div className="globe flex flex-col col-span-1 row-span-4 justify-between items-center relative rounded-xl bg-secondary p-4">
@@ -141,7 +128,7 @@ export default function Home() {
                           Transit & Economic Score Comparison<br />
                       </h1>
                       <p className="text-text font-body text-left w-2/3 mt-10">
-                          Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                        Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo.
                       </p>
                   </div>
               </div>
@@ -161,6 +148,34 @@ export default function Home() {
             <FlatMap />
           </div>
         </ParallaxLayer>
+
+        <ParallaxLayer offset={5} className="-z-10">
+          <footer className="absolute bottom-0 bg-zinc-900 text-gray-300 py-8 w-full">
+            <div className="container mx-auto flex flex-col items-center space-y-4">
+              <div className="text-center">
+                <p className="font-body text-sm">
+                  &copy; {new Date().getFullYear()} <span className="font-semibold text-white">TransitWorks</span>. All rights reserved.
+                </p>
+                <p className="font-body text-xs">
+                  Icons provided by <a href="https://icons8.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Icons8</a>.
+                </p>
+              </div>
+              <div className="flex space-x-6">
+                <Link href="/privacy" className="text-sm text-gray-300 hover:text-primary transition duration-200">Privacy Policy</Link>
+                <Link href="/docs" className="text-sm text-gray-300 hover:text-primary transition duration-200">Documentation</Link>
+                <Link href="/contact" className="text-sm text-gray-300 hover:text-primary transition duration-200">Contact Us</Link>
+              </div>
+              <div className="flex space-x-4">
+                <a href="https://github.com/yourgithubprofile" target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 hover:opacity-75 transition duration-200">
+                  <img src="/assets/icons/github.png" alt="GitHub" className="w-5 h-5" />
+                  <span className="text-sm text-gray-300">GitHub</span>
+                </a>
+              </div>
+            </div>
+          </footer>
+        </ParallaxLayer>
+
+
       </Parallax>
     );
 }
