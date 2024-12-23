@@ -1,2 +1,2 @@
 pub mod error;
-pub mod gtfs;
+pub mod raw_gtfs;
