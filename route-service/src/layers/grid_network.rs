@@ -7,7 +7,9 @@ use wkt::Wkt;
 
 // Layer 1 - Data structure describing grid network and O-D matrix data
 pub struct GridNetwork {
+    /// Allows for spatial querying of zones (nodes)
     rtree: RTree<RTreeNode>,
+    /// Allows for relations between zones (if needed) e.g. travel demand between 2 zones
     graph: Graph<Zone, Link>,
 }
 
