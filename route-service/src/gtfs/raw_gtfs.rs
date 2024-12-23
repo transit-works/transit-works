@@ -1,7 +1,7 @@
 use crate::gtfs::error::{Error, LineError};
 
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Read, path::Path};
+use std::{fs::File, io::Read, path::Path, sync::Arc};
 
 /// GTFS dataset
 /// https://gtfs.org/documentation/schedule/reference/#dataset-files
@@ -181,6 +181,16 @@ fn optional_file_summary<T>(objs: &Option<Result<Vec<T>, Error>>) -> String {
     }
 }
 
+pub trait Id {
+    fn id(&self) -> &str;
+}
+
+impl<T: Id> Id for Arc<T> {
+    fn id(&self) -> &str {
+        self.as_ref().id()
+    }
+}
+
 /// Agency representing a public transit operator. 
 /// https://gtfs.org/documentation/schedule/reference/#agencytxt
 #[derive(Debug, Serialize, Deserialize)]
@@ -195,9 +205,18 @@ pub struct Agency {
     pub agency_email: Option<String>,
 }
 
+impl Id for Agency {
+    fn id(&self) -> &str {
+        match &self.agency_id {
+            None => "",
+            Some(id) => id,
+        }
+    }
+}
+
 /// A physical stop, station, or area. 
 /// https://gtfs.org/documentation/schedule/reference/#stopstxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Stop {
     pub stop_id: String,
     pub stop_code: Option<String>,
@@ -214,6 +233,16 @@ pub struct Stop {
     pub wheelchair_boarding: Option<WheelchairBoarding>,
     pub level_id: Option<String>,
     pub platform_code: Option<String>,
+    #[serde(skip)]
+    pub transfers: Vec<Transfer>,
+    #[serde(skip)]
+    pub pathways: Vec<Pathway>,
+}
+
+impl Id for Stop {
+    fn id(&self) -> &str {
+        &self.stop_id
+    }
 }
 
 /// Location type for a stop.
@@ -258,6 +287,12 @@ pub struct Route {
     pub route_sort_order: Option<i32>,
 }
 
+impl Id for Route {
+    fn id(&self) -> &str {
+        &self.route_id
+    }
+}
+
 /// Type of transportation used on a route.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum RouteType {
@@ -297,6 +332,16 @@ pub struct Trip {
     pub shape_id: Option<String>,
     pub wheelchair_accessible: Option<WheelchairAccessible>,
     pub bikes_allowed: Option<BikesAllowed>,
+    #[serde(skip)]
+    pub frequencies: Vec<Frequency>,
+    #[serde(skip)]
+    pub stop_times: Vec<StopTime>,
+}
+
+impl Id for Trip {
+    fn id(&self) -> &str {
+        &self.trip_id
+    }
 }
 
 /// Accessibility of a trip for wheelchairs.
@@ -337,6 +382,8 @@ pub struct StopTime {
     pub continuous_drop_off: Option<ContinuousPickupDropoff>,
     pub shape_dist_traveled: Option<f64>,
     pub timepoint: Option<Timepoint>,
+    #[serde(skip)]
+    pub stop: Arc<Stop>,
 }
 
 /// Pickup or drop-off type for a stop.
@@ -390,6 +437,12 @@ pub struct Calendar {
     pub end_date: String,
 }
 
+impl Id for Calendar {
+    fn id(&self) -> &str {
+        &self.service_id
+    }
+}
+
 /// Exceptions for the schedule of a service. 
 /// https://gtfs.org/documentation/schedule/reference/#calendar_datestxt
 #[derive(Debug, Serialize, Deserialize)]
@@ -417,6 +470,11 @@ pub struct Level {
     pub level_name: Option<String>,
 }
 
+impl Id for Level {
+    fn id(&self) -> &str {
+        &self.level_id
+    }
+}
 
 /// Shape points that define the path of a route. 
 /// https://gtfs.org/documentation/schedule/reference/#shapestxt
@@ -427,6 +485,12 @@ pub struct Shape {
     pub shape_pt_lon: f64,
     pub shape_pt_sequence: i32,
     pub shape_dist_traveled: Option<f64>,
+}
+
+impl Id for Shape {
+    fn id(&self) -> &str {
+        &self.shape_id
+    }
 }
 
 /// Fare information for a route. 
@@ -440,6 +504,12 @@ pub struct FareAttribute {
     pub transfers: Option<Transfers>,
     pub agency_id: Option<String>,
     pub transfer_duration: Option<i64>,
+}
+
+impl Id for FareAttribute {
+    fn id(&self) -> &str {
+        &self.fare_id
+    }
 }
 
 /// Payment method for a fare.
@@ -473,6 +543,12 @@ pub struct FareRule {
     pub origin_id: Option<String>,
     pub destination_id: Option<String>,
     pub contains_id: Option<String>,
+}
+
+impl Id for FareRule {
+    fn id(&self) -> &str {
+        &self.fare_id
+    }
 }
 
 /// Defines frequency-based service for a trip. 
@@ -534,6 +610,12 @@ pub struct Pathway {
     pub min_width: Option<f64>,
     pub signposted_as: Option<String>,
     pub reversed_signposted_as: Option<String>,
+}
+
+impl Id for Pathway {
+    fn id(&self) -> &str {
+        &self.pathway_id
+    }
 }
 
 /// Type of pathway within a station.
