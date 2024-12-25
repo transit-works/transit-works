@@ -7,7 +7,9 @@ use wkt::Wkt;
 
 // Layer 2 - Graph data strcture to store the nodes and edges of a city street network
 pub struct RoadNetwork {
+    /// Allows for spatial querying of intersection (nodes)
     rtree: RTree<RTreeNode>,
+    /// Allows for relational querying of intersection connectons (nodes) via roads (edges)
     graph: Graph<Node, Edge>,
 }
 

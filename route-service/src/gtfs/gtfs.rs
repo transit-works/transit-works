@@ -1,5 +1,6 @@
 use crate::gtfs::error::Error;
-use crate::gtfs::raw_gtfs::*;
+use crate::gtfs::raw_gtfs::GtfsDataSet;
+use crate::gtfs::structs::*;
 
 use std::convert::TryFrom;
 use std::collections::HashMap;
