@@ -1,18 +1,23 @@
-import sqlite3
 import os
 import shutil
+import sqlite3
+import zipfile
 import tempfile
-import argparse
+import requests
 import pandas as pd
 import osmnx as ox
 import grid2demand as gd
 import osm2gmns as og
 
+GTFS_DATA_SOURCE = {
+    'Toronto, ON, Canada': 'http://opendata.toronto.ca/toronto.transit.commission/ttc-routes-and-schedules/OpenData_TTC_Schedules.zip'
+}
+
 template_db = 'template.db'
 
 def setup_template_db():
     if os.path.exists(template_db):
-        return
+        os.remove(template_db)
 
     conn = sqlite3.connect(template_db)
     conn.enable_load_extension(True)
@@ -21,6 +26,7 @@ def setup_template_db():
 
     cursor = conn.cursor()
 
+    # Nodes and edges for OSM road network data
     cursor.execute('''
     CREATE TABLE nodes (
         fid INTEGER PRIMARY KEY,
@@ -42,6 +48,7 @@ def setup_template_db():
     );
     ''')
 
+    # Zone and demand for travel demand between city grids
     cursor.execute('''
     CREATE TABLE zone (
         zoneid INTEGER PRIMARY KEY,
@@ -58,6 +65,17 @@ def setup_template_db():
         volume REAL,
         FOREIGN KEY(origid) REFERENCES zone(zoneid),
         FOREIGN KEY(destid) REFERENCES zone(zoneid)
+    );
+    ''')
+
+    # GTFS data for existing transit schedules
+    # Store the GTFS data directly as files in the database
+    # The application will not store user designs, they must manage it locally
+    cursor.execute('''
+    CREATE TABLE files (
+        file_id INTEGER PRIMARY KEY,
+        file_name TEXT NOT NULL,
+        file_content BLOB
     );
     ''')
 
@@ -106,7 +124,9 @@ def add_nodes_edges_osmnx(osm_city_name, db_name_prefix):
     
     with tempfile.TemporaryDirectory() as tmpdir:
         os.chdir(tmpdir)
+        print('Downloading OSM road network data')
         download_gpkg()
+        print('Loading OSM road network data to database')
         load_gpkg_to_sqlite()
 
 def add_travel_demand_grid2demand(osm_city_name, db_name_prefix):
@@ -163,6 +183,39 @@ def add_travel_demand_grid2demand(osm_city_name, db_name_prefix):
 
         conn.close()
 
+def add_gtfs_data(osm_city_name, db_name_prefix):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.chdir(tmpdir)
+
+        src = GTFS_DATA_SOURCE[osm_city_name]
+        print(f'Downloading GTFS data from {src}')
+        response = requests.get(src)
+        response.raise_for_status()
+
+        file_name = src.split('/')[-1]
+        print(f'Extracting GTFS data from {file_name}')
+        with open(file_name, 'wb') as f:
+            f.write(response.content)
+        
+        with zipfile.ZipFile(file_name, 'r') as zip_ref:
+            zip_ref.extractall()
+        
+        print('Connecting to database')
+        city_db = f'{db_name_prefix}.db'
+        conn = sqlite3.connect(city_db)
+    
+        print('Loading GTFS files to database')
+        cursor = conn.cursor()
+        # copy all the .txt files in the extracted folder to the database
+        for file in os.listdir():
+            if file.endswith('.txt'):
+                print(f'Loading {file} to database')
+                with open(file, 'rb') as f:
+                    cursor.execute('INSERT INTO files (file_name, file_content) VALUES (?, ?)', (file, f.read()))
+        
+        conn.commit()
+        conn.close()
+
 def main():
     setup_template_db()
 
@@ -177,6 +230,7 @@ def main():
 
     add_nodes_edges_osmnx(osm_city_name, db_name_prefix)
     add_travel_demand_grid2demand(osm_city_name, db_name_prefix)
+    add_gtfs_data(osm_city_name, db_name_prefix)
 
 if __name__ == '__main__':
     main()
