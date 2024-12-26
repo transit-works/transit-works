@@ -224,8 +224,8 @@ def main():
     cwd = os.getcwd()
     db_name_prefix = f'{cwd}/{db_name_prefix}'
 
-    # add_nodes_edges_osmnx(osm_city_name, db_name_prefix)
-    # add_travel_demand_grid2demand(osm_city_name, db_name_prefix)
+    add_nodes_edges_osmnx(osm_city_name, db_name_prefix)
+    add_travel_demand_grid2demand(osm_city_name, db_name_prefix)
     add_gtfs_data(osm_city_name, db_name_prefix)
 
 if __name__ == '__main__':
