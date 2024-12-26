@@ -12,9 +12,9 @@ fn main() {
     let grid = GridNetwork::load(tmp);
     let road = RoadNetwork::load(tmp);
 
-    let gtfs = GtfsDataSet::from_path("/Users/jeevanopel/Downloads/OpenData_TTC_Schedules").unwrap();
+    let gtfs = GtfsDataSet::from_path("/Users/jeevanopel/workspace/transit-works/scripts/toronto.db").unwrap();
     gtfs.print_stats();
 
-    let gtfs_enriched = Gtfs::from_path("/Users/jeevanopel/Downloads/OpenData_TTC_Schedules").unwrap();
+    let gtfs_enriched = Gtfs::from_path("/Users/jeevanopel/workspace/transit-works/scripts/toronto.db").unwrap();
     gtfs_enriched.print_stats();
 }

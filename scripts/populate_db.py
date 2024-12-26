@@ -1,4 +1,5 @@
 import os
+import csv
 import shutil
 import sqlite3
 import zipfile
@@ -68,31 +69,23 @@ def setup_template_db():
     );
     ''')
 
-    # GTFS data for existing transit schedules
-    # Store the GTFS data directly as files in the database
-    # The application will not store user designs, they must manage it locally
-    cursor.execute('''
-    CREATE TABLE files (
-        file_id INTEGER PRIMARY KEY,
-        file_name TEXT NOT NULL,
-        file_content BLOB
-    );
-    ''')
-
     conn.commit()
     conn.close()
 
 def add_nodes_edges_osmnx(osm_city_name, db_name_prefix):
     nodes_file = 'nodes.gpkg'
     edges_file = 'edges.gpkg'
-
-    def download_gpkg():
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.chdir(tmpdir)
+        print('Downloading OSM road network data')
         graph = ox.graph_from_place(osm_city_name, network_type='drive', simplify=False)
         nodes, edges = ox.graph_to_gdfs(graph)
         nodes.to_file(nodes_file, driver='GPKG')
         edges.to_file(edges_file, driver='GPKG')
 
-    def load_gpkg_to_sqlite():
+        print('Loading OSM road network data to database')
+        
         city_db = f'{db_name_prefix}.db'
 
         print('Obtaining connection to sqlite')
@@ -121,13 +114,6 @@ def add_nodes_edges_osmnx(osm_city_name, db_name_prefix):
         cursor.execute('DETACH DATABASE nodes_db')
         cursor.execute('DETACH DATABASE edges_db')
         conn.close()
-    
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.chdir(tmpdir)
-        print('Downloading OSM road network data')
-        download_gpkg()
-        print('Loading OSM road network data to database')
-        load_gpkg_to_sqlite()
 
 def add_travel_demand_grid2demand(osm_city_name, db_name_prefix):
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -210,9 +196,19 @@ def add_gtfs_data(osm_city_name, db_name_prefix):
         for file in os.listdir():
             if file.endswith('.txt'):
                 print(f'Loading {file} to database')
-                with open(file, 'rb') as f:
-                    cursor.execute('INSERT INTO files (file_name, file_content) VALUES (?, ?)', (file, f.read()))
-        
+                with open(file, 'r') as f:
+                    reader = csv.reader(f)
+                    columns = next(reader)
+                    table_name = f'gtfs_{file.split(".")[0]}'
+                    cursor.execute(f'''
+                    CREATE TABLE IF NOT EXISTS {table_name} (
+                    {", ".join(f"{col} TEXT" for col in columns)}
+                    );
+                    ''')
+
+                    # Insert all the data from the file
+                    cursor.executemany(f"INSERT INTO {table_name} VALUES ({','.join(['?'] * len(columns))})", reader)
+
         conn.commit()
         conn.close()
 

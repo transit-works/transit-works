@@ -4,7 +4,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     /// A mandatory file is not present in the archive
-    #[error("Cound not find file {0}")]
+    #[error("Could not find file {0}")]
     MissingFile(String),
     /// A file references an Id that is not present
     #[error("The id {0} is not known")]
@@ -48,6 +48,9 @@ pub enum Error {
     /// Error when trying to unzip the GTFS archive
     #[error(transparent)]
     Zip(#[from] zip::result::ZipError),
+    /// Error when querying sqlite
+    #[error(transparent)]
+    SqliteError(#[from] rusqlite::Error),
 }
 
 /// Specific line from a CSV file that could not be read
