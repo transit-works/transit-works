@@ -1,6 +1,8 @@
 use crate::gtfs::error::{Error, LineError};
 use crate::gtfs::structs::*;
 
+use csv::StringRecord;
+use rusqlite::{params, Connection};
 use serde::Deserialize;
 use std::{fs::File, io::Read, path::Path};
 
@@ -31,8 +33,7 @@ impl GtfsDataSet {
     {
         let p = path.as_ref();
         if p.is_file() {
-            let reader = File::open(p);
-            GtfsDataSet::read_from_reader(&reader?)
+            GtfsDataSet::read_from_sqlite3(p)
         } else if p.is_dir() {
             GtfsDataSet::read_from_dir(p)
         } else {
@@ -79,8 +80,25 @@ impl GtfsDataSet {
         })
     }
 
-    fn read_from_reader(_file: &File) -> Result<GtfsDataSet, Error> {
-        panic!("Not yet implemented")
+    fn read_from_sqlite3(path: &Path) -> Result<GtfsDataSet, Error> {
+        let conn = Connection::open(path)?;
+        Ok(GtfsDataSet{
+            agencies: GtfsDataSet::read_obj_sqlite3(&conn, "gtfs_agency"),
+            stops: GtfsDataSet::read_obj_sqlite3(&conn, "gtfs_stops"),
+            routes: GtfsDataSet::read_obj_sqlite3(&conn, "gtfs_routes"),
+            trips: GtfsDataSet::read_obj_sqlite3(&conn, "gtfs_trips"),
+            stop_times: GtfsDataSet::read_obj_sqlite3(&conn, "gtfs_stop_times"),
+            calendar: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_calendar"),
+            calendar_dates: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_calendar_dates"),
+            shapes: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_shapes"),
+            fare_attributes: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_fare_attributes"),
+            fare_rules: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_fare_rules"),
+            frequencies: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_frequencies"),
+            transfers: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_transfers"),
+            pathways: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_pathways"),
+            feed_info: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_feed_info"),
+            translations: GtfsDataSet::optional_read_obj_sqlite3(&conn, "gtfs_translations"),
+        })
     }
 
     fn read_obj_from_path<O>(path: &Path, file_name: &str) -> Result<Vec<O>, Error>
@@ -165,6 +183,65 @@ impl GtfsDataSet {
             objs.push(obj);
         }
         Ok(objs)
+    }
+
+    fn optional_read_obj_sqlite3<O>(conn: &Connection, table_name: &str) -> Option<Result<Vec<O>, Error>>
+    where
+        for<'de> O: Deserialize<'de>,
+    {
+        match GtfsDataSet::check_table_exists(conn, table_name) {
+            Ok(_) => Some(GtfsDataSet::read_obj_sqlite3(conn, table_name)),
+            Err(_) => None,
+        }
+    }
+
+    fn read_obj_sqlite3<O>(conn: &Connection, table_name: &str) -> Result<Vec<O>, Error>
+    where
+        for<'de> O: Deserialize<'de>,
+    {
+        let headers = GtfsDataSet::get_column_names(conn, table_name)?
+            .into_iter()
+            .collect::<csv::StringRecord>();
+        let mut stmt = conn.prepare(&format!("SELECT * FROM {}", table_name))?;
+        let row_objs = stmt.query_map([], |row| {
+            // Rusqlite does not natively support deserializing rows so we convert to StringRecord
+            // Will need to implement custom RowDeserializer to speed things up
+            let vals: Vec<String> = (0..headers.len())
+                .map(|i| row.get::<usize, String>(i).unwrap_or_default())
+                .collect();
+            StringRecord::from(vals)
+                .deserialize(Some(&headers))
+                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
+        })?;
+        let mut objs = Vec::new();
+        for obj in row_objs {
+            objs.push(obj?);
+        }
+        Ok(objs)
+    }
+
+    fn get_column_names(conn: &Connection, table_name: &str) -> Result<Vec<String>, Error> {
+        let mut stmt = conn.prepare(&format!("PRAGMA table_info('{}')", table_name))?;
+        let rows = stmt.query_map([], |row| {
+            Ok(row.get(1)?) 
+        })?;
+    
+        let mut column_names: Vec<String> = Vec::new();
+        for row in rows {
+            column_names.push(row?);
+        }
+    
+        Ok(column_names)
+    }
+
+    fn check_table_exists(conn: &Connection, table_name: &str) -> Result<(), Error> {
+        let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")?;
+        let mut rows = stmt.query(params![table_name])?;
+        if rows.next()?.is_none() {
+            Err(Error::MissingFile(table_name.to_owned()))
+        } else {
+            Ok(())
+        }
     }
 }
 
