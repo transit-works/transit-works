@@ -1,6 +1,7 @@
+use crate::gtfs::{gtfs::Gtfs, structs::{Route, Stop, Trip}};
+
 use std::collections::HashMap;
 use std::sync::Arc;
-use gtfs_structures::{Gtfs, Route, Stop, Trip};
 use serde_json::{json, Value};
 
 pub fn convert_to_geojson(features: &Vec<Value>) -> Value {
@@ -32,12 +33,12 @@ pub fn get_route_features(gtfs_data: &Gtfs) -> Vec<Value> {
                     "coordinates": get_route_coords(&route, gtfs_data),
                 },
                 "properties": {
-                    "route_id": &route.id,
-                    "route_short_name": &route.short_name,
-                    "route_long_name": &route.long_name,
-                    "route_desc": &route.desc,
+                    "route_id": &route.route_id,
+                    "route_short_name": &route.route_short_name,
+                    "route_long_name": &route.route_long_name,
+                    "route_desc": &route.route_desc,
                     "route_type": &route.route_type,
-                    "route_url": &route.url,
+                    "route_url": &route.route_url,
                 }
             })
         }).collect::<Vec<Value>>();
@@ -58,10 +59,10 @@ pub fn build_route_shape_mapping(trips: &HashMap<String, Trip>) -> HashMap<Strin
 
 pub fn get_route_coords(route: &Route, gtfs_data: &Gtfs) -> Vec<[f64; 2]> {
     let route_to_shape = build_route_shape_mapping(&gtfs_data.trips);
-    let shape_id = route_to_shape.get(&route.id).unwrap();
+    let shape_id = route_to_shape.get(&route.route_id).unwrap();
 
     let route_shapes = gtfs_data.shapes.get(shape_id).unwrap();
-    route_shapes.iter().map(|shape| [shape.longitude, shape.latitude]).collect()
+    route_shapes.iter().map(|shape| [shape.shape_pt_lon, shape.shape_pt_lat]).collect()
 }
 
 // Build stop features from gtfs data
@@ -75,19 +76,19 @@ pub fn get_stop_features(stops: &HashMap<String, Arc<Stop>>) -> Vec<Value> {
                 "type": "Feature",
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [stop.longitude, stop.latitude]
+                    "coordinates": [stop.stop_lon, stop.stop_lat]
                 },
                 "properties": {
-                    "stop_id": &stop.id,
-                    "stop_name": &stop.name,
-                    "stop_code": &stop.code,
-                    "stop_description": &stop.description,
+                    "stop_id": &stop.stop_id,
+                    "stop_name": &stop.stop_name,
+                    "stop_code": &stop.stop_code,
+                    "stop_description": &stop.stop_desc,
                     "stop_location_type": &stop.location_type,
                     "stop_parent_station": &stop.parent_station,
                     "stop_zone_id": &stop.zone_id,
-                    "stop_url": &stop.url,
-                    "stop_long": &stop.longitude,
-                    "stop_lat": &stop.latitude,
+                    "stop_url": &stop.stop_url,
+                    "stop_long": &stop.stop_lon,
+                    "stop_lat": &stop.stop_lat,
                     "stop_wheel_chair_boarding": &stop.wheelchair_boarding,
                     "stop_transfers": &stop.transfers,
                 }
