@@ -1,0 +1,13 @@
+__pycache__/
+*.venv
+
+cache/
+city_data/
+city_db/
+*.gpkg
+*.gpkg-journal
+*.db
+*.db-journal
+*.csv
+*.osm.pbf
+*.osm
