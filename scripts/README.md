@@ -17,10 +17,6 @@ brew install sqlite
 ```
 brew install libspatialite
 ```
-- Osmium
-```
-brew install osmium-tool
-```
 
 ### Required pip modules
 - osmnx
@@ -38,8 +34,14 @@ Install if you have homebrew:
 brew install python@3.12
 ```
 
+Setup venv
 ```
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+```
+
+Run the script
+```
+python populate_db.py toronto
 ```
