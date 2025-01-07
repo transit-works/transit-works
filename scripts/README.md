@@ -19,26 +19,29 @@ brew install libspatialite
 ```
 
 ### Required pip modules
-- sqlite3
 - osmnx
 - grid2demand
 - osm2gmns
 - pandas
+- pyrosm
 
 ### Running
 
-Python 3.11 is required.
+Python 3.12 is required.
 
 Install if you have homebrew:
 ```
-brew install python@3.11
-python3.11 -m pip install osmnx
-python3.11 -m pip install grid2demand
-python3.11 -m pip install osm2gmns
-python3.11 -m pip install pandas
+brew install python@3.12
 ```
 
-And run using:
+Setup venv
 ```
-python3.11 populate_db.py
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Run the script
+```
+python populate_db.py toronto
 ```

@@ -3,230 +3,203 @@ import csv
 import shutil
 import sqlite3
 import zipfile
-import tempfile
+import argparse
 import requests
-import pandas as pd
-import osmnx as ox
-import grid2demand as gd
-import osm2gmns as og
+import subprocess
 
-GTFS_DATA_SOURCE = {
-    'Toronto, ON, Canada': 'http://opendata.toronto.ca/toronto.transit.commission/ttc-routes-and-schedules/OpenData_TTC_Schedules.zip'
+TEMPLATE_DB = 'template.db'
+SCHEMA_FILE = 'schema.sql'
+
+CACHE_DIR = 'city_data'
+CITY_DIR = 'city_db'
+
+def setup_files():
+    # Setup template database
+    if os.path.exists(TEMPLATE_DB):
+        os.remove(TEMPLATE_DB)
+    with open(SCHEMA_FILE, 'r') as schema:
+        subprocess.run(['sqlite3', TEMPLATE_DB], stdin=schema)
+
+    # Create directories
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    os.makedirs(CITY_DIR, exist_ok=True)
+
+    # Setup city directories and database
+    for city in CITY_MAP.values():
+        if not os.path.exists(city.db_path):
+            shutil.copyfile(TEMPLATE_DB, city.db_path)
+        os.makedirs(city.data_dir, exist_ok=True)
+        os.makedirs(city.gmns_dir, exist_ok=True)
+        os.makedirs(city.gtfs_dir, exist_ok=True)
+        os.makedirs(city.g2d_dir, exist_ok=True)
+
+class City:
+    key_name: str
+    osm_name: str
+    gtfs_src: str
+    data_dir: str
+    gmns_dir: str
+    db_path: str
+
+    def __init__(
+        self,
+        key_name: str,
+        osm_name: str,
+        gtfs_src: str,
+    ):
+        self.key_name = key_name
+        self.osm_name = osm_name
+        self.gtfs_src = gtfs_src
+        self.data_dir = f'{CACHE_DIR}/{key_name}/data'
+        self.gmns_dir = f'{CACHE_DIR}/{key_name}/gmns'
+        self.gtfs_dir = f'{CACHE_DIR}/{key_name}/gtfs'
+        self.g2d_dir = f'{CACHE_DIR}/{key_name}/g2d'
+        self.db_path = f'{CITY_DIR}/{key_name}.db'
+
+CITY_MAP = {
+    'toronto': City(
+        key_name='toronto',
+        osm_name='Toronto, ON, Canada', 
+        gtfs_src='http://opendata.toronto.ca/toronto.transit.commission/ttc-routes-and-schedules/OpenData_TTC_Schedules.zip'
+    )
 }
 
-template_db = 'template.db'
-
-def setup_template_db():
-    if os.path.exists(template_db):
-        os.remove(template_db)
-
-    conn = sqlite3.connect(template_db)
+def load_libspatialite(conn: sqlite3.Connection):
+    print('Loading libspatialite')
     conn.enable_load_extension(True)
-    conn.execute('SELECT load_extension("mod_spatialite");')
-    conn.execute('SELECT InitSpatialMetaData(1);')
+    conn.load_extension('mod_spatialite')
+
+def get_data_from_OSM(city: City):
+    import osmnx as ox
+    import pyrosm as po
+    import osm2gmns as og
+
+    nodes_file = f'{city.data_dir}/nodes.gpkg'
+    edges_file = f'{city.data_dir}/edges.gpkg'
+
+    # Download the drive network
+    print('Downloading OSM road network data')
+    graph = ox.graph_from_place(city.osm_name, network_type='drive', simplify=False)
+
+    # Get nodes.gpkg and edges.gpkg
+    print('Extracting GDFS data')
+    nodes, edges = ox.graph_to_gdfs(graph)
+    nodes.to_file(nodes_file, driver='GPKG')
+    edges.to_file(edges_file, driver='GPKG')
+
+    # Download the .osm.pbf file from pyrosm
+    print('Getting .osm.pbf from pyrosm')
+    fp = po.get_data(city.key_name, directory=city.data_dir)
+
+    # takes like 30 minutes
+    print('Converting to GMNS')
+    net = og.getNetFromFile(fp, network_types=('auto',), POI=True, POI_sampling_ratio=0.1)
+    og.outputNetToCSV(net, output_folder=city.gmns_dir)
+
+def add_nodes_edges_osmnx(
+    city: City,
+    conn: sqlite3.Connection,
+):
+    print('Loading OSM road network data to database')
+    nodes_file = f'{city.data_dir}/nodes.gpkg'
+    edges_file = f'{city.data_dir}/edges.gpkg'
 
     cursor = conn.cursor()
 
-    # Nodes and edges for OSM road network data
-    cursor.execute('''
-    CREATE TABLE nodes (
-        fid INTEGER PRIMARY KEY,
-        geom POINT,
-        osmid INTEGER,
-        y REAL,
-        x REAL
-    );
-    ''')
+    cursor.execute(f'ATTACH DATABASE "{nodes_file}" as nodes_db')
+    cursor.execute('INSERT INTO nodes (fid, geom, osmid, y, x) SELECT fid, geom, osmid, y, x FROM nodes_db.nodes;')
 
-    cursor.execute('''
-    CREATE TABLE edges (
-        fid INTEGER PRIMARY KEY,
-        geom LINESTRING,
-        u INTEGER,
-        v INTEGER,
-        key INTEGER,
-        osmid INTEGER
-    );
-    ''')
-
-    # Zone and demand for travel demand between city grids
-    cursor.execute('''
-    CREATE TABLE zone (
-        zoneid INTEGER PRIMARY KEY,
-        center POINT,
-        geom POLYGON
-    );
-    ''')
-
-    cursor.execute('''
-    CREATE TABLE demand (
-        origid INTEGER,
-        destid INTEGER,
-        dist_km REAL,
-        volume REAL,
-        FOREIGN KEY(origid) REFERENCES zone(zoneid),
-        FOREIGN KEY(destid) REFERENCES zone(zoneid)
-    );
-    ''')
+    cursor.execute(f'ATTACH DATABASE "{edges_file}" as edges_db')
+    cursor.execute('INSERT INTO edges (fid, geom, u, v, key, osmid) SELECT fid, geom, u, v, key, osmid FROM edges_db.edges;')
 
     conn.commit()
-    conn.close()
+    cursor.execute('DETACH DATABASE nodes_db')
+    cursor.execute('DETACH DATABASE edges_db')
 
-def add_nodes_edges_osmnx(osm_city_name, db_name_prefix):
-    nodes_file = 'nodes.gpkg'
-    edges_file = 'edges.gpkg'
+def add_travel_demand_grid2demand(
+    city: City,
+    conn: sqlite3.Connection,
+):
+    import pandas as pd
+    import grid2demand as gd
+
+    # grid2demand
+    print('Getting demand matrix')
+    net = gd.GRID2DEMAND(input_dir=city.gmns_dir, output_dir=city.g2d_dir)
+    net.load_network() # expects node.csv and poi.csv
+    net.net2zone(cell_width=1, cell_height=1, unit='km')
+    net.run_gravity_model()
+    net.save_results_to_csv(output_dir=city.g2d_dir) # outputs zone.csv and demand.csv
+
+    # load dataframe
+    print('Loading dataframe')
+    zone = pd.read_csv(f'{city.g2d_dir}/zone.csv')
+    demand = pd.read_csv(f'{city.g2d_dir}/demand.csv')
+
+    print('Renaming columns')
+    zone.rename(columns={'zone_id': 'zoneid', 'centroid': 'center', 'geometry': 'geom'}, inplace=True)
+    demand.rename(columns={'o_zone_id': 'origid', 'd_zone_id': 'destid'}, inplace=True)
+
+    print('Inserting rows')
+    zone[['zoneid', 'center', 'geom']].to_sql('zone', conn, if_exists='append', index=False)
+    demand[['origid', 'destid', 'dist_km', 'volume']].to_sql('demand', conn, if_exists='append', index=False)
+
+def add_gtfs_data(
+    city: City,
+    conn: sqlite3.Connection,
+):
+    print(f'Downloading GTFS data from {city.gtfs_src}')
+    response = requests.get(city.gtfs_src)
+    response.raise_for_status()
+
+    file_name = city.gtfs_src.split('/')[-1]
+    file_name = f'{city.gtfs_dir}/{file_name}'
+    print(f'Extracting GTFS data into {file_name}')
+    with open(file_name, 'wb') as f:
+        f.write(response.content)
     
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.chdir(tmpdir)
-        print('Downloading OSM road network data')
-        graph = ox.graph_from_place(osm_city_name, network_type='drive', simplify=False)
-        nodes, edges = ox.graph_to_gdfs(graph)
-        nodes.to_file(nodes_file, driver='GPKG')
-        edges.to_file(edges_file, driver='GPKG')
+    with zipfile.ZipFile(file_name, 'r') as zip_ref:
+        zip_ref.extractall(path=city.gtfs_dir)
 
-        print('Loading OSM road network data to database')
-        
-        city_db = f'{db_name_prefix}.db'
+    # TODO Handle if a table is missing or already filled
+    print('Loading GTFS files to database')
+    cursor = conn.cursor()
+    # copy all the .txt files in the extracted folder to the database
+    for file in os.listdir(path=city.gtfs_dir):
+        if file.endswith('.txt'):
+            file_path = f'{city.gtfs_dir}/{file}'
+            print(f'Loading {file_path} to database')
+            with open(file_path, 'r') as f:
+                reader = csv.reader(f)
+                columns = next(reader)
+                table_name = f'gtfs_{file.split(".")[0]}'
+                # Insert all the data from the file
+                cursor.executemany(f"INSERT INTO {table_name} VALUES ({','.join(['?'] * len(columns))})", reader)
 
-        print('Obtaining connection to sqlite')
-        conn = sqlite3.connect(city_db)
-        conn.enable_load_extension(True)
-
-        # Load SpatiaLite extension
-        print('Loading libspatialite')
-        conn.execute('SELECT load_extension("mod_spatialite");')
-
-        cursor = conn.cursor()
-
-        cursor.execute(f'ATTACH DATABASE "{nodes_file}" as nodes_db')
-        cursor.execute('''
-        INSERT INTO nodes (fid, geom, osmid, y, x)
-        SELECT fid, geom, osmid, y, x FROM nodes_db.nodes;
-        ''')
-
-        cursor.execute(f'ATTACH DATABASE "{edges_file}" as edges_db')
-        cursor.execute('''
-        INSERT INTO edges (fid, geom, u, v, key, osmid)
-        SELECT fid, geom, u, v, key, osmid FROM edges_db.edges;
-        ''')
-
-        conn.commit()
-        cursor.execute('DETACH DATABASE nodes_db')
-        cursor.execute('DETACH DATABASE edges_db')
-        conn.close()
-
-def add_travel_demand_grid2demand(osm_city_name, db_name_prefix):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.chdir(tmpdir)
-
-        ox.settings.all_oneway=True
-        ox.settings.log_console = True
-
-        # download osm file
-        print('Downloading OSM file')
-        graph = ox.graph_from_place(osm_city_name, network_type='drive', simplify=False)
-        ox.save_graph_xml(graph, 'map.osm')
-
-        # download all POIs
-        print('Downloading POIs')
-        tags = {'amenities': True, 'building': True}
-        gdf = ox.features_from_place(osm_city_name, tags=tags)
-        gdf.to_csv('poi.csv')
-
-        # convert to gmns
-        print('Converting to GMNS')
-        net = og.getNetFromFile('map.osm')
-        og.outputNetToCSV(net)
-
-        # grid2demand
-        print('Getting demand matrix')
-        net = gd.GRID2DEMAND()
-        net.load_network() # expects node.csv and poi.csv
-        net.net2zone(cell_width=10, cell_height=10, unit='km')
-        net.run_gravity_model()
-        net.save_results_to_csv(output_dir=tmpdir) # outputs zone.csv and demand.csv
-
-        # load dataframe
-        print('Loading dataframe')
-        zone = pd.read_csv('zone.csv')
-        demand = pd.read_csv('demand.csv')
-
-        # put dataframe in sqlite
-        print('Connecting to database')
-        city_db = f'{db_name_prefix}.db'
-
-        conn = sqlite3.connect(city_db)
-        conn.enable_load_extension(True)
-        conn.execute('SELECT load_extension("mod_spatialite");')
-
-        print('Renaming columns')
-        zone.rename(columns={'zone_id': 'zoneid', 'centroid': 'center', 'geometry': 'geom'}, inplace=True)
-        demand.rename(columns={'o_zone_id': 'origid', 'd_zone_id': 'destid'}, inplace=True)
-
-        print('Inserting rows')
-        zone[['zoneid', 'center', 'geom']].to_sql('zone', conn, if_exists='append', index=False)
-        demand[['origid', 'destid', 'dist_km', 'volume']].to_sql('demand', conn, if_exists='append', index=False)
-
-        conn.close()
-
-def add_gtfs_data(osm_city_name, db_name_prefix):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.chdir(tmpdir)
-
-        src = GTFS_DATA_SOURCE[osm_city_name]
-        print(f'Downloading GTFS data from {src}')
-        response = requests.get(src)
-        response.raise_for_status()
-
-        file_name = src.split('/')[-1]
-        print(f'Extracting GTFS data from {file_name}')
-        with open(file_name, 'wb') as f:
-            f.write(response.content)
-        
-        with zipfile.ZipFile(file_name, 'r') as zip_ref:
-            zip_ref.extractall()
-        
-        print('Connecting to database')
-        city_db = f'{db_name_prefix}.db'
-        conn = sqlite3.connect(city_db)
-    
-        print('Loading GTFS files to database')
-        cursor = conn.cursor()
-        # copy all the .txt files in the extracted folder to the database
-        for file in os.listdir():
-            if file.endswith('.txt'):
-                print(f'Loading {file} to database')
-                with open(file, 'r') as f:
-                    reader = csv.reader(f)
-                    columns = next(reader)
-                    table_name = f'gtfs_{file.split(".")[0]}'
-                    cursor.execute(f'''
-                    CREATE TABLE IF NOT EXISTS {table_name} (
-                    {", ".join(f"{col} TEXT" for col in columns)}
-                    );
-                    ''')
-
-                    # Insert all the data from the file
-                    cursor.executemany(f"INSERT INTO {table_name} VALUES ({','.join(['?'] * len(columns))})", reader)
-
-        conn.commit()
-        conn.close()
+    conn.commit()
 
 def main():
-    setup_template_db()
+    parser = argparse.ArgumentParser(description='Populate a database with city data')
+    parser.add_argument('city', choices=CITY_MAP.keys(), help='City to populate')
+    args = parser.parse_args()
 
-    osm_city_name = 'Toronto, ON, Canada'
-    db_name_prefix = 'toronto'
+    print('Setting up files')
+    setup_files()
 
-    if not os.path.exists(f'{db_name_prefix}.db'):
-        shutil.copyfile(template_db, f'{db_name_prefix}.db')
+    city = CITY_MAP[args.city]
+    conn = sqlite3.connect(city.db_path)
+    load_libspatialite(conn)
 
-    cwd = os.getcwd()
-    db_name_prefix = f'{cwd}/{db_name_prefix}'
+    print('1/4: GETTING DATA FROM OSM')
+    get_data_from_OSM(city)
+    print('2/4: ADDING NODES AND EDGES')
+    add_nodes_edges_osmnx(city, conn)
+    print('3/4: ADDING TRAVEL DEMAND')
+    add_travel_demand_grid2demand(city, conn)
+    print('4/4: ADDING GTFS DATA')
+    add_gtfs_data(city, conn)
 
-    add_nodes_edges_osmnx(osm_city_name, db_name_prefix)
-    add_travel_demand_grid2demand(osm_city_name, db_name_prefix)
-    add_gtfs_data(osm_city_name, db_name_prefix)
+    conn.close()
 
 if __name__ == '__main__':
     main()
