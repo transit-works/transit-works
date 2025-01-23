@@ -19,19 +19,19 @@ pub struct TransitNetwork {
 impl TransitNetwork {
     // Remove a stop from a given route
     // Cleanup the stop from RTree if no longer referenced
-    pub fn remove_stop(
-        &mut self, 
-        stop: Arc<TransitStop>, 
-        route: &mut TransitRoute,
-    ) {
+    pub fn remove_stop(&mut self, stop: Arc<TransitStop>, route: &mut TransitRoute) {
         // Remove the stop from the given route
-        route.stops.retain(|route_stop| !Arc::ptr_eq(route_stop, &stop));
+        route
+            .stops
+            .retain(|route_stop| !Arc::ptr_eq(route_stop, &stop));
 
         // Remove the stop from the RTree if it is no longer referenced
-        let still_referenced = self
-            .routes
-            .iter()
-            .any(|route| route.stops.iter().any(|route_stop| Arc::ptr_eq(route_stop, &stop)));
+        let still_referenced = self.routes.iter().any(|route| {
+            route
+                .stops
+                .iter()
+                .any(|route_stop| Arc::ptr_eq(route_stop, &stop))
+        });
         if !still_referenced {
             self.stops.remove(&RTreeNode {
                 envelope: compute_envelope(&stop.geom),
@@ -42,13 +42,10 @@ impl TransitNetwork {
 
     // Add a stop at a node on the road network
     // Reuse existing stop if it already exists
-    pub fn add_stop(
-        &mut self,
-        stop: Arc<TransitStop>,
-        route: &mut TransitRoute,
-    ) {
+    pub fn add_stop(&mut self, stop: Arc<TransitStop>, route: &mut TransitRoute) {
         // Check if the stop already exists in the network
-        let existing_stop = self.stops
+        let existing_stop = self
+            .stops
             .nearest_neighbor_iter(&stop.geom.x_y().into())
             .find(|node| Arc::ptr_eq(&node.stop, &stop));
 
@@ -71,7 +68,7 @@ impl TransitNetwork {
             let transit_stop = Arc::new(TransitStop {
                 stop_id: stop.stop_id.clone(),
                 geom: Point::new(
-                    stop.stop_lon.unwrap_or_default(), 
+                    stop.stop_lon.unwrap_or_default(),
                     stop.stop_lat.unwrap_or_default(),
                 ),
             });
@@ -79,10 +76,7 @@ impl TransitNetwork {
                 envelope: compute_envelope(&transit_stop.geom),
                 stop: Arc::clone(&transit_stop),
             });
-            stops_map.insert(
-                stop.stop_id.clone(), 
-                Arc::clone(&transit_stop),
-            );
+            stops_map.insert(stop.stop_id.clone(), Arc::clone(&transit_stop));
         }
         let mut routes = Vec::new();
         for trip in gtfs.trips.values() {

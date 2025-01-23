@@ -11,7 +11,7 @@ impl<T: Id> Id for Arc<T> {
     }
 }
 
-/// Agency representing a public transit operator. 
+/// Agency representing a public transit operator.
 /// https://gtfs.org/documentation/schedule/reference/#agencytxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Agency {
@@ -34,7 +34,7 @@ impl Id for Agency {
     }
 }
 
-/// A physical stop, station, or area. 
+/// A physical stop, station, or area.
 /// https://gtfs.org/documentation/schedule/reference/#stopstxt
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Stop {
@@ -91,7 +91,7 @@ pub enum WheelchairBoarding {
     NotAccessible,
 }
 
-/// A transportation route. 
+/// A transportation route.
 /// https://gtfs.org/documentation/schedule/reference/#routestxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Route {
@@ -138,7 +138,7 @@ pub enum RouteType {
     Monorail,
 }
 
-/// A scheduled trip for a route. 
+/// A scheduled trip for a route.
 /// https://gtfs.org/documentation/schedule/reference/#tripstxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Trip {
@@ -186,7 +186,7 @@ pub enum BikesAllowed {
     NotAllowed,
 }
 
-/// Scheduled stop time for a trip. 
+/// Scheduled stop time for a trip.
 /// https://gtfs.org/documentation/schedule/reference/#stop_timestxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StopTime {
@@ -241,7 +241,7 @@ pub enum Timepoint {
     Exact,
 }
 
-/// Weekly schedule of service. 
+/// Weekly schedule of service.
 /// https://gtfs.org/documentation/schedule/reference/#calendartxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Calendar {
@@ -263,7 +263,7 @@ impl Id for Calendar {
     }
 }
 
-/// Exceptions for the schedule of a service. 
+/// Exceptions for the schedule of a service.
 /// https://gtfs.org/documentation/schedule/reference/#calendar_datestxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CalendarDate {
@@ -281,7 +281,7 @@ pub enum ExceptionType {
     Removed,
 }
 
-/// Represents a level in a station. 
+/// Represents a level in a station.
 /// https://gtfs.org/documentation/schedule/reference/#levelstxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level {
@@ -296,7 +296,7 @@ impl Id for Level {
     }
 }
 
-/// Shape points that define the path of a route. 
+/// Shape points that define the path of a route.
 /// https://gtfs.org/documentation/schedule/reference/#shapestxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Shape {
@@ -313,7 +313,7 @@ impl Id for Shape {
     }
 }
 
-/// Fare information for a route. 
+/// Fare information for a route.
 /// https://gtfs.org/documentation/schedule/reference/#fare_attributestxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FareAttribute {
@@ -354,7 +354,7 @@ pub enum Transfers {
     UnlimitedTransfers,
 }
 
-/// Rules that define the application of fares to routes or zones. 
+/// Rules that define the application of fares to routes or zones.
 /// https://gtfs.org/documentation/schedule/reference/#fare_rulestxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FareRule {
@@ -371,7 +371,7 @@ impl Id for FareRule {
     }
 }
 
-/// Defines frequency-based service for a trip. 
+/// Defines frequency-based service for a trip.
 /// https://gtfs.org/documentation/schedule/reference/#frequenciestxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Frequency {
@@ -391,7 +391,7 @@ pub enum ExactTimes {
     ScheduleBased,
 }
 
-/// Rules for making connections at transfer points between routes. 
+/// Rules for making connections at transfer points between routes.
 /// https://gtfs.org/documentation/schedule/reference/#transferstxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Transfer {
@@ -414,7 +414,7 @@ pub enum TransferType {
     NotPossible,
 }
 
-/// Pathways within stations to guide passengers between locations. 
+/// Pathways within stations to guide passengers between locations.
 /// https://gtfs.org/documentation/schedule/reference/#pathwaystxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pathway {
@@ -466,7 +466,7 @@ pub enum Directionality {
     Bidirectional,
 }
 
-/// Translations for customer-facing dataset fields. 
+/// Translations for customer-facing dataset fields.
 /// https://gtfs.org/documentation/schedule/reference/#translationstxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Translation {
@@ -479,7 +479,7 @@ pub struct Translation {
     pub field_value: Option<String>,
 }
 
-/// Metadata about the feed, including version and publisher information. 
+/// Metadata about the feed, including version and publisher information.
 /// https://gtfs.org/documentation/schedule/reference/#feed_infotxt
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeedInfo {

@@ -1,5 +1,5 @@
 use geo_types::Polygon;
-use petgraph::{Graph, Directed, graph::NodeIndex};
+use petgraph::{graph::NodeIndex, Directed, Graph};
 use rstar::{RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -8,9 +8,9 @@ use wkt::Wkt;
 // Layer 1 - Data structure describing grid network and O-D matrix data
 pub struct GridNetwork {
     /// Allows for spatial querying of zones (nodes)
-    rtree: RTree<RTreeNode>,
+    pub rtree: RTree<RTreeNode>,
     /// Allows for relations between zones (if needed) e.g. travel demand between 2 zones
-    graph: Graph<Zone, Link>,
+    pub graph: Graph<Zone, Link>,
 }
 
 impl GridNetwork {
@@ -49,15 +49,15 @@ impl GridNetwork {
     }
 }
 
-struct Link {
-    origid: u32,
-    destid: u32,
-    weight: f64,
+pub struct Link {
+    pub origid: u32,
+    pub destid: u32,
+    pub weight: f64,
 }
 
-struct Zone {
-    zoneid: u32,
-    polygon: Polygon<f64>,
+pub struct Zone {
+    pub zoneid: u32,
+    pub polygon: Polygon<f64>,
 }
 
 struct RTreeNode {

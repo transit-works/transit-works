@@ -1,8 +1,11 @@
-use crate::gtfs::{gtfs::Gtfs, structs::{Route, Stop, Trip}};
+use crate::gtfs::{
+    gtfs::Gtfs,
+    structs::{Route, Stop, Trip},
+};
 
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json::{json, Value};
 
 pub fn convert_to_geojson(features: &Vec<Value>) -> Value {
     let output = json!({
@@ -23,7 +26,8 @@ pub fn get_all_features(gtfs_data: &Gtfs) -> Vec<Value> {
 
 // Build route features from gtfs data
 pub fn get_route_features(gtfs_data: &Gtfs) -> Vec<Value> {
-    let features = gtfs_data.routes
+    let features = gtfs_data
+        .routes
         .values()
         .map(|route| {
             json!({
@@ -41,7 +45,8 @@ pub fn get_route_features(gtfs_data: &Gtfs) -> Vec<Value> {
                     "route_url": &route.route_url,
                 }
             })
-        }).collect::<Vec<Value>>();
+        })
+        .collect::<Vec<Value>>();
 
     return features;
 }
@@ -62,7 +67,10 @@ pub fn get_route_coords(route: &Route, gtfs_data: &Gtfs) -> Vec<[f64; 2]> {
     let shape_id = route_to_shape.get(&route.route_id).unwrap();
 
     let route_shapes = gtfs_data.shapes.get(shape_id).unwrap();
-    route_shapes.iter().map(|shape| [shape.shape_pt_lon, shape.shape_pt_lat]).collect()
+    route_shapes
+        .iter()
+        .map(|shape| [shape.shape_pt_lon, shape.shape_pt_lat])
+        .collect()
 }
 
 // Build stop features from gtfs data
@@ -93,7 +101,8 @@ pub fn get_stop_features(stops: &HashMap<String, Arc<Stop>>) -> Vec<Value> {
                     "stop_transfers": &stop.transfers,
                 }
             })
-        }).collect::<Vec<Value>>();
+        })
+        .collect::<Vec<Value>>();
 
     return features;
 }

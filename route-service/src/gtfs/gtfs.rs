@@ -2,8 +2,8 @@ use crate::gtfs::error::Error;
 use crate::gtfs::raw_gtfs::GtfsDataSet;
 use crate::gtfs::structs::*;
 
-use std::convert::TryFrom;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -58,14 +58,14 @@ impl TryFrom<GtfsDataSet> for Gtfs {
     /// Tries to build a [Gtfs] from a [GtfsDataSet]
     fn try_from(raw: GtfsDataSet) -> Result<Gtfs, Error> {
         let stops = to_stop_map(
-            raw.stops?, 
-            raw.transfers.unwrap_or_else(|| Ok(Vec::new()))?, 
+            raw.stops?,
+            raw.transfers.unwrap_or_else(|| Ok(Vec::new()))?,
             raw.pathways.unwrap_or_else(|| Ok(Vec::new()))?,
         )?;
         let trips = to_trips_map(
-            raw.trips?, 
-            raw.stop_times?, 
-            raw.frequencies.unwrap_or_else(|| Ok(Vec::new()))?, 
+            raw.trips?,
+            raw.stop_times?,
+            raw.frequencies.unwrap_or_else(|| Ok(Vec::new()))?,
             &stops,
         )?;
         let mut fare_rules = HashMap::<String, Vec<FareRule>>::new();
@@ -101,7 +101,7 @@ fn to_stop_map(
     transfers: Vec<Transfer>,
     pathways: Vec<Pathway>,
 ) -> Result<HashMap<String, Arc<Stop>>, Error> {
-    let mut stop_map: HashMap<String, Stop> = 
+    let mut stop_map: HashMap<String, Stop> =
         stops.into_iter().map(|s| (s.stop_id.clone(), s)).collect();
 
     for transfer in transfers {
@@ -133,10 +133,7 @@ fn to_stop_map(
 fn to_shape_map(shapes: Vec<Shape>) -> HashMap<String, Vec<Shape>> {
     let mut res = HashMap::default();
     for s in shapes {
-        let shape = 
-            res
-                .entry(s.shape_id.to_owned())
-                .or_insert_with(Vec::new);
+        let shape = res.entry(s.shape_id.to_owned()).or_insert_with(Vec::new);
         shape.push(s);
     }
     for shapes in res.values_mut() {

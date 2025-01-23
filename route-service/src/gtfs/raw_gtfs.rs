@@ -27,9 +27,9 @@ pub struct GtfsDataSet {
 }
 
 impl GtfsDataSet {
-    pub fn from_path<P>(path: P) -> Result<GtfsDataSet, Error> 
-    where 
-        P: AsRef<Path>
+    pub fn from_path<P>(path: P) -> Result<GtfsDataSet, Error>
+    where
+        P: AsRef<Path>,
     {
         let p = path.as_ref();
         if p.is_file() {
@@ -49,40 +49,52 @@ impl GtfsDataSet {
         println!("  Trips: {}", mandatory_file_summary(&self.trips));
         println!("  Stop times: {}", mandatory_file_summary(&self.stop_times));
         println!("  Calendar: {}", optional_file_summary(&self.calendar));
-        println!("  Calendar Dates: {}", optional_file_summary(&self.calendar_dates));
+        println!(
+            "  Calendar Dates: {}",
+            optional_file_summary(&self.calendar_dates)
+        );
         println!("  Shapes: {}", optional_file_summary(&self.shapes));
-        println!("  Fare Attributes: {}", optional_file_summary(&self.fare_attributes));
+        println!(
+            "  Fare Attributes: {}",
+            optional_file_summary(&self.fare_attributes)
+        );
         println!("  Fare Rules: {}", optional_file_summary(&self.fare_rules));
-        println!("  Frequencies: {}", optional_file_summary(&self.frequencies));
+        println!(
+            "  Frequencies: {}",
+            optional_file_summary(&self.frequencies)
+        );
         println!("  Transfers: {}", optional_file_summary(&self.transfers));
         println!("  Pathways: {}", optional_file_summary(&self.pathways));
         println!("  Feed info: {}", optional_file_summary(&self.feed_info));
-        println!("  Translations: {}", optional_file_summary(&self.translations));
+        println!(
+            "  Translations: {}",
+            optional_file_summary(&self.translations)
+        );
     }
 
     fn read_from_dir(path: &Path) -> Result<GtfsDataSet, Error> {
         Ok(GtfsDataSet {
-            agencies: GtfsDataSet::read_obj_from_path(path, "agency.txt"), 
-            stops: GtfsDataSet::read_obj_from_path(path, "stops.txt"), 
-            routes: GtfsDataSet::read_obj_from_path(path, "routes.txt"), 
-            trips: GtfsDataSet::read_obj_from_path(path, "trips.txt"), 
-            stop_times: GtfsDataSet::read_obj_from_path(path, "stop_times.txt"), 
+            agencies: GtfsDataSet::read_obj_from_path(path, "agency.txt"),
+            stops: GtfsDataSet::read_obj_from_path(path, "stops.txt"),
+            routes: GtfsDataSet::read_obj_from_path(path, "routes.txt"),
+            trips: GtfsDataSet::read_obj_from_path(path, "trips.txt"),
+            stop_times: GtfsDataSet::read_obj_from_path(path, "stop_times.txt"),
             calendar: GtfsDataSet::optional_read_obj_from_path(path, "calendar.txt"),
-            calendar_dates: GtfsDataSet::optional_read_obj_from_path(path, "calendar_dates.txt"), 
-            shapes: GtfsDataSet::optional_read_obj_from_path(path, "shapes.txt"), 
-            fare_attributes: GtfsDataSet::optional_read_obj_from_path(path, "fare_attributes.txt"), 
-            fare_rules: GtfsDataSet::optional_read_obj_from_path(path, "fare_rules.txt"), 
-            frequencies: GtfsDataSet::optional_read_obj_from_path(path, "frequencies.txt"), 
-            transfers: GtfsDataSet::optional_read_obj_from_path(path, "transfers.txt"), 
-            pathways: GtfsDataSet::optional_read_obj_from_path(path, "pathways.txt"), 
-            feed_info: GtfsDataSet::optional_read_obj_from_path(path, "feed_info.txt"), 
+            calendar_dates: GtfsDataSet::optional_read_obj_from_path(path, "calendar_dates.txt"),
+            shapes: GtfsDataSet::optional_read_obj_from_path(path, "shapes.txt"),
+            fare_attributes: GtfsDataSet::optional_read_obj_from_path(path, "fare_attributes.txt"),
+            fare_rules: GtfsDataSet::optional_read_obj_from_path(path, "fare_rules.txt"),
+            frequencies: GtfsDataSet::optional_read_obj_from_path(path, "frequencies.txt"),
+            transfers: GtfsDataSet::optional_read_obj_from_path(path, "transfers.txt"),
+            pathways: GtfsDataSet::optional_read_obj_from_path(path, "pathways.txt"),
+            feed_info: GtfsDataSet::optional_read_obj_from_path(path, "feed_info.txt"),
             translations: GtfsDataSet::optional_read_obj_from_path(path, "translations.txt"),
         })
     }
 
     fn read_from_sqlite3(path: &Path) -> Result<GtfsDataSet, Error> {
         let conn = Connection::open(path)?;
-        Ok(GtfsDataSet{
+        Ok(GtfsDataSet {
             agencies: GtfsDataSet::read_obj_sqlite3(&conn, "gtfs_agency"),
             stops: GtfsDataSet::read_obj_sqlite3(&conn, "gtfs_stops"),
             routes: GtfsDataSet::read_obj_sqlite3(&conn, "gtfs_routes"),
@@ -108,7 +120,10 @@ impl GtfsDataSet {
         let p = path.join(file_name);
         if p.exists() {
             File::open(p)
-                .map_err(|e| Error::NamedFileIO { file_name: file_name.to_owned(), source: Box::new(e) })
+                .map_err(|e| Error::NamedFileIO {
+                    file_name: file_name.to_owned(),
+                    source: Box::new(e),
+                })
                 .and_then(|r| GtfsDataSet::read_obj(r, &file_name))
         } else {
             Err(Error::MissingFile(file_name.to_owned()))
@@ -185,7 +200,10 @@ impl GtfsDataSet {
         Ok(objs)
     }
 
-    fn optional_read_obj_sqlite3<O>(conn: &Connection, table_name: &str) -> Option<Result<Vec<O>, Error>>
+    fn optional_read_obj_sqlite3<O>(
+        conn: &Connection,
+        table_name: &str,
+    ) -> Option<Result<Vec<O>, Error>>
     where
         for<'de> O: Deserialize<'de>,
     {
@@ -222,20 +240,19 @@ impl GtfsDataSet {
 
     fn get_column_names(conn: &Connection, table_name: &str) -> Result<Vec<String>, Error> {
         let mut stmt = conn.prepare(&format!("PRAGMA table_info('{}')", table_name))?;
-        let rows = stmt.query_map([], |row| {
-            Ok(row.get(1)?) 
-        })?;
-    
+        let rows = stmt.query_map([], |row| Ok(row.get(1)?))?;
+
         let mut column_names: Vec<String> = Vec::new();
         for row in rows {
             column_names.push(row?);
         }
-    
+
         Ok(column_names)
     }
 
     fn check_table_exists(conn: &Connection, table_name: &str) -> Result<(), Error> {
-        let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")?;
+        let mut stmt =
+            conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")?;
         let mut rows = stmt.query(params![table_name])?;
         if rows.next()?.is_none() {
             Err(Error::MissingFile(table_name.to_owned()))
