@@ -106,19 +106,20 @@ impl TransitNetwork {
     }
 }
 
+#[derive(PartialEq, Clone)]
 pub struct TransitRoute {
     pub route_id: String,
     pub route_type: RouteType,
     pub stops: Vec<Arc<TransitStop>>,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct TransitStop {
     pub stop_id: String,
     pub geom: Point,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct RTreeNode {
     pub envelope: AABB<[f64; 2]>,
     pub stop: Arc<TransitStop>,

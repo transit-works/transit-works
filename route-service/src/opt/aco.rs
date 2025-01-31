@@ -186,8 +186,22 @@ impl ACO {
         &mut self,
         od: &GridNetwork,
         road: &RoadNetwork,
-        transit: &mut TransitNetwork,
-    ) {
-        panic!("Not implemented");
+        transit: &TransitNetwork,
+    ) -> TransitNetwork {
+        let mut ret = TransitNetwork {
+            routes: Vec::new(),
+            stops: transit.stops.clone(),
+        };
+        for _ in 0..self.num_iterations {
+            let mut new_routes = Vec::new();
+            for route in transit.routes.iter() {
+                if let Some(new_route) = self.adjust_route(route, od, road, &ret) {
+                    new_routes.push(new_route);
+                }
+            }
+            self.update_pheromone(&new_routes);
+            ret.routes = new_routes;
+        }
+        ret
     }
 }
