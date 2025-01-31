@@ -1292,6 +1292,7 @@ dependencies = [
  "csv",
  "geo-types",
  "petgraph",
+ "rand",
  "rstar",
  "rusqlite",
  "serde",

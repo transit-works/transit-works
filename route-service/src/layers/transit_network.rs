@@ -11,9 +11,9 @@ use crate::layers::error::Error;
 // Layer 3 - Data structure describing the transit network
 pub struct TransitNetwork {
     /// Set of all the transit routes in the network
-    routes: Vec<TransitRoute>,
+    pub routes: Vec<TransitRoute>,
     /// RTree of all the transit stops for spatial queries
-    stops: RTree<RTreeNode>,
+    pub stops: RTree<RTreeNode>,
 }
 
 impl TransitNetwork {
@@ -107,21 +107,21 @@ impl TransitNetwork {
 }
 
 pub struct TransitRoute {
-    route_id: String,
-    route_type: RouteType,
-    stops: Vec<Arc<TransitStop>>,
+    pub route_id: String,
+    pub route_type: RouteType,
+    pub stops: Vec<Arc<TransitStop>>,
 }
 
 #[derive(PartialEq)]
 pub struct TransitStop {
-    stop_id: String,
-    geom: Point,
+    pub stop_id: String,
+    pub geom: Point,
 }
 
 #[derive(PartialEq)]
-struct RTreeNode {
-    envelope: AABB<[f64; 2]>,
-    stop: Arc<TransitStop>,
+pub struct RTreeNode {
+    pub envelope: AABB<[f64; 2]>,
+    pub stop: Arc<TransitStop>,
 }
 
 impl PointDistance for RTreeNode {

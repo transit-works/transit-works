@@ -47,6 +47,12 @@ impl RoadNetwork {
             graph: graph,
         }))
     }
+
+    pub fn find_nearest_node(&self, x: f64, y: f64) -> Option<NodeIndex> {
+        let point = [x, y];
+        let nearest = self.rtree.locate_at_point(&point).unwrap();
+        Some(nearest.node_index)
+    }
 }
 
 struct Node {
@@ -58,6 +64,15 @@ struct Node {
 struct RTreeNode {
     envelope: AABB<[f64; 2]>,
     node_index: NodeIndex,
+}
+
+impl rstar::PointDistance for RTreeNode {
+    fn distance_2(&self, point: &[f64; 2]) -> f64 {
+        let node_point = self.envelope.lower();
+        let dx = node_point[0] - point[0];
+        let dy = node_point[1] - point[1];
+        dx * dx + dy * dy
+    }
 }
 
 impl RTreeObject for RTreeNode {
