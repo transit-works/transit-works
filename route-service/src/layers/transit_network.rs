@@ -17,6 +17,12 @@ pub struct TransitNetwork {
 }
 
 impl TransitNetwork {
+    pub fn print_stats(&self) {
+        println!("Transit network:");
+        println!("  Routes: {}", self.routes.len());
+        println!("  Stops: {}", self.stops.size());
+    }
+
     // Remove a stop from a given route
     // Cleanup the stop from RTree if no longer referenced
     pub fn remove_stop(&mut self, stop: Arc<TransitStop>, route: &mut TransitRoute) {

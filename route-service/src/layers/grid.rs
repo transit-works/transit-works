@@ -14,6 +14,12 @@ pub struct GridNetwork {
 }
 
 impl GridNetwork {
+    pub fn print_stats(&self) {
+        println!("Grid network:");
+        println!("  Zones: {}", self.graph.node_count());
+        println!("  Links: {}", self.graph.edge_count());
+    }
+
     pub fn load(dbname: &str) -> Result<Arc<GridNetwork>> {
         let conn = Connection::open(dbname)?;
 
@@ -77,7 +83,7 @@ pub struct Zone {
     pub polygon: Polygon<f64>,
 }
 
-struct RTreeNode {
+pub struct RTreeNode {
     envelope: AABB<[f64; 2]>,
     node_index: NodeIndex,
 }

@@ -14,6 +14,12 @@ pub struct RoadNetwork {
 }
 
 impl RoadNetwork {
+    pub fn print_stats(&self) {
+        println!("Road network:");
+        println!("  Nodes: {}", self.graph.node_count());
+        println!("  Edges: {}", self.graph.edge_count());
+    }
+
     pub fn load(dbname: &str) -> Result<Arc<RoadNetwork>> {
         let conn = Connection::open(dbname)?;
 

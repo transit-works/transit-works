@@ -1,5 +1,8 @@
 use rand::Rng;
-use std::{collections::{HashMap, HashSet}, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::layers::{
     grid::GridNetwork,
@@ -11,7 +14,7 @@ const MAX_ROUTE_LEN: usize = 20;
 const INIT_PHEROMONE: f64 = 0.1;
 const P : f64 = 0.1;
 
-struct ACO {
+pub struct ACO {
     // parameters
     alpha: f64, // pheromone weight
     beta: f64,  // heuristic weight
@@ -28,7 +31,18 @@ struct ACO {
 //   2. The start and end stops of each route remain the same
 // https://ieeexplore.ieee.org/document/8790117
 impl ACO {
-    fn init(transit: &TransitNetwork) -> Self {
+    pub fn print_stats(&self) {
+        println!("ACO parameters:");
+        println!("  Alpha: {}", self.alpha);
+        println!("  Beta: {}", self.beta);
+        println!("  Rho: {}", self.rho);
+        println!("  Q: {}", self.q);
+        println!("  Number of ants: {}", self.num_ants);
+        println!("  Number of iterations: {}", self.num_iterations);
+        println!("  Number of pheromones: {}", self.pheromone.len());
+    }
+
+    pub fn init(transit: &TransitNetwork) -> Self {
         let num_ants = 20;
         let num_iterations = 200;
         let alpha = 2.0;
@@ -73,7 +87,9 @@ impl ACO {
 
         // all stops in 500m radius
         let coords = current.geom.x_y();
-        let nearby_stops = transit.stops.locate_within_distance([coords.0, coords.1], 500.0);
+        let nearby_stops = transit
+            .stops
+            .locate_within_distance([coords.0, coords.1], 500.0);
 
         // compute probability of visiting each stop
         let from = current.stop_id.clone();
@@ -87,8 +103,12 @@ impl ACO {
                 continue;
             }
             let to = stop.stop_id.clone();
-            let pheromone = self.pheromone.get(&(from.clone(), to.clone())).unwrap_or(&INIT_PHEROMONE);
-            let heuristic = self.calculate_heuristic(current.clone(), stop.clone(), end.clone(), od, road);
+            let pheromone = self
+                .pheromone
+                .get(&(from.clone(), to.clone()))
+                .unwrap_or(&INIT_PHEROMONE);
+            let heuristic =
+                self.calculate_heuristic(current.clone(), stop.clone(), end.clone(), od, road);
             let probability = pheromone.powf(self.alpha) * heuristic.powf(self.beta);
             total += probability;
             probabilities.push((stop.clone(), probability));
@@ -125,15 +145,12 @@ impl ACO {
         let reversed_demand = od.demand_between_coords(tx, ty, fx, fy);
         // euclidean distance to end stop, to encourage stops that move towards to end
         let (ex, ey) = end.geom.x_y();
+        // TODO make this road distance
         let distance = ((tx - ex).powi(2) + (ty - ey).powi(2)).sqrt();
-
         (demand + reversed_demand + P)/(2.0 * distance)
     }
 
-    fn update_pheromone(
-        &mut self,
-        routes: &[TransitRoute],
-    ) {
+    fn update_pheromone(&mut self, routes: &[TransitRoute]) {
         // Decay
         for pheromone in self.pheromone.values_mut() {
             *pheromone *= 1.0 - self.rho;
@@ -167,7 +184,9 @@ impl ACO {
         visited.insert(start.stop_id.clone());
         let mut curr = start;
         while curr != end {
-            if let Some(next) = self.select_next_stop(curr, end.clone(), &visited, od, road, transit) {
+            if let Some(next) =
+                self.select_next_stop(curr, end.clone(), &visited, od, road, transit)
+            {
                 stops.push(next.clone());
                 visited.insert(next.stop_id.clone());
                 curr = next;
@@ -187,7 +206,7 @@ impl ACO {
         })
     }
 
-    fn run(
+    pub fn run(
         &mut self,
         od: &GridNetwork,
         road: &RoadNetwork,
@@ -199,6 +218,9 @@ impl ACO {
         };
         for _ in 0..self.num_iterations {
             let mut new_routes = Vec::new();
+            // TODO: cannot adjust routes that are not type BUS
+            // TODO: need to parrallelize this
+            // TODO: use num_ants
             for route in transit.routes.iter() {
                 if let Some(new_route) = self.adjust_route(route, od, road, &ret) {
                     new_routes.push(new_route);
