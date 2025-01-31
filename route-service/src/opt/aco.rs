@@ -9,6 +9,7 @@ use crate::layers::{
 
 const MAX_ROUTE_LEN: usize = 20;
 const INIT_PHEROMONE: f64 = 0.1;
+const P : f64 = 0.1;
 
 struct ACO {
     // parameters
@@ -118,11 +119,15 @@ impl ACO {
         let (fx, fy) = from.geom.x_y();
         let (tx, ty) = to.geom.x_y();
         // TODO should consider other existing routes and avoid canibalizing demand
+        // find number of routes that use the stop
+        // 
         let demand = od.demand_between_coords(fx, fy, tx, ty);
+        let reversed_demand = od.demand_between_coords(tx, ty, fx, fy);
         // euclidean distance to end stop, to encourage stops that move towards to end
         let (ex, ey) = end.geom.x_y();
         let distance = ((tx - ex).powi(2) + (ty - ey).powi(2)).sqrt();
-        demand/distance
+
+        (demand + reversed_demand + P)/(2.0 * distance)
     }
 
     fn update_pheromone(
