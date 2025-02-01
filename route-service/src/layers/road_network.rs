@@ -28,7 +28,7 @@ impl RoadNetwork {
 
         let mut rtree = RTree::<RTreeNode>::new();
         let mut graph = Graph::<Node, Edge, Directed>::new();
-        let mut node_map = HashMap::<u32, NodeIndex>::new();
+        let mut node_map = HashMap::<u64, NodeIndex>::new();
 
         for node in nodes {
             let node_index = graph.add_node(node);
@@ -37,7 +37,7 @@ impl RoadNetwork {
                 envelope: envelope,
                 node_index: node_index,
             });
-            node_map.insert(graph[node_index].fid, node_index);
+            node_map.insert(graph[node_index].osmid, node_index);
         }
 
         for edge in edges {
@@ -62,9 +62,9 @@ impl RoadNetwork {
 }
 
 struct Node {
-    fid: u32,
+    fid: u64,
     geom: Point,
-    osmid: u32,
+    osmid: u64,
 }
 
 struct RTreeNode {
@@ -93,12 +93,12 @@ fn compute_envelope(point: &Point<f64>) -> AABB<[f64; 2]> {
 }
 
 struct Edge {
-    fid: u32,
+    fid: u64,
     geom: LineString,
-    u: u32,
-    v: u32,
-    key: u32,
-    osmid: u32,
+    u: u64,
+    v: u64,
+    key: u64,
+    osmid: u64,
 }
 
 fn read_edges(conn: &Connection) -> Result<Vec<Edge>> {
@@ -120,7 +120,7 @@ fn read_edges(conn: &Connection) -> Result<Vec<Edge>> {
 }
 
 fn read_nodes(conn: &Connection) -> Result<Vec<Node>> {
-    let mut stmt = conn.prepare("SELECT fid, geom, osmid FROM edges")?;
+    let mut stmt = conn.prepare("SELECT fid, geom, osmid FROM nodes")?;
     let node_iter = stmt.query_map(params![], |row| {
         let wkt_str: String = row.get(1)?;
         let wkt = Wkt::from_str(&wkt_str).unwrap();

@@ -68,6 +68,7 @@ def load_libspatialite(conn: sqlite3.Connection):
     print('Loading libspatialite')
     conn.enable_load_extension(True)
     conn.load_extension('mod_spatialite')
+    conn.execute('SELECT InitSpatialMetadata(1);')
 
 def get_data_from_OSM(city: City):
     import osmnx as ox
@@ -100,21 +101,35 @@ def add_nodes_edges_osmnx(
     city: City,
     conn: sqlite3.Connection,
 ):
+    import pandas as pd
+
     print('Loading OSM road network data to database')
     nodes_file = f'{city.data_dir}/nodes.gpkg'
     edges_file = f'{city.data_dir}/edges.gpkg'
 
-    cursor = conn.cursor()
+    # Clear the nodes and edges tables
+    conn.execute('DELETE FROM nodes;')
+    conn.execute('DELETE FROM edges;')
 
-    cursor.execute(f'ATTACH DATABASE "{nodes_file}" as nodes_db')
-    cursor.execute('INSERT INTO nodes (fid, geom, osmid, y, x) SELECT fid, geom, osmid, y, x FROM nodes_db.nodes;')
+    print('Reading nodes...')
+    with sqlite3.connect(nodes_file) as nodes_conn:
+        nodes_conn.enable_load_extension(True)
+        nodes_conn.execute('''SELECT load_extension('mod_spatialite');''')
+        nodes_conn.execute('SELECT EnableGpkgMode();')
+        nodes_df = pd.read_sql('SELECT fid, ST_AsText(geom) as geom, osmid, y, x FROM nodes', nodes_conn)
 
-    cursor.execute(f'ATTACH DATABASE "{edges_file}" as edges_db')
-    cursor.execute('INSERT INTO edges (fid, geom, u, v, key, osmid) SELECT fid, geom, u, v, key, osmid FROM edges_db.edges;')
+    print('Reading edges...')
+    with sqlite3.connect(edges_file) as edges_conn:
+        edges_conn.enable_load_extension(True)
+        edges_conn.execute('''SELECT load_extension('mod_spatialite');''')
+        edges_conn.execute('SELECT EnableGpkgMode();')
+        edges_df = pd.read_sql('SELECT fid, ST_AsText(geom) as geom, u, v, key, osmid FROM edges', edges_conn)
+
+    print('Inserting rows')
+    nodes_df[['fid', 'geom', 'osmid', 'y', 'x']].to_sql('nodes', conn, if_exists='replace', index=False)
+    edges_df[['fid', 'geom', 'u', 'v', 'key', 'osmid']].to_sql('edges', conn, if_exists='replace', index=False)
 
     conn.commit()
-    cursor.execute('DETACH DATABASE nodes_db')
-    cursor.execute('DETACH DATABASE edges_db')
 
 def add_travel_demand_grid2demand(
     city: City,

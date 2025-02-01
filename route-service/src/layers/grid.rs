@@ -140,7 +140,7 @@ fn read_links(conn: &Connection) -> Result<Vec<Link>> {
 }
 
 fn read_zones(conn: &Connection) -> Result<Vec<Zone>> {
-    let mut stmt = conn.prepare("SELECT zoneid, geom FROM zones")?;
+    let mut stmt = conn.prepare("SELECT zoneid, geom FROM zone")?;
     let zone_iter = stmt.query_map(params![], |row| {
         let wkt_str: String = row.get(1)?;
         let wkt = Wkt::from_str(&wkt_str).unwrap();
