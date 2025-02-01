@@ -1,5 +1,7 @@
+use clap::FromArgMatches;
 use geo_types::{LineString, Point};
-use petgraph::{graph::NodeIndex, Directed, Graph};
+use geo::{algorithm::Length, Euclidean, EuclideanLength};
+use petgraph::{algo::astar, graph::{node_index, NodeIndex}, Directed, Graph};
 use rstar::{RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -56,9 +58,40 @@ impl RoadNetwork {
 
     pub fn find_nearest_node(&self, x: f64, y: f64) -> Option<NodeIndex> {
         let point = [x, y];
-        let nearest = self.rtree.locate_at_point(&point).unwrap();
+        let nearest = self.rtree.nearest_neighbor(&point).unwrap();
         Some(nearest.node_index)
     }
+
+    pub fn edge_weight(edge: &Edge) -> f64 {
+        let from = edge.geom.0.first();
+        let to = edge.geom.0.last();
+
+        let weight = edge.geom.length::<Euclidean>();
+
+        weight
+    }
+    
+    pub fn get_road_distance(&self, fx : f64, fy : f64, tx : f64, ty : f64) -> (f64, Vec<NodeIndex>){
+
+        let from : NodeIndex = self.find_nearest_node(fx, fy).unwrap();
+        let to : NodeIndex = self.find_nearest_node(tx, ty).unwrap();
+
+        let heuristic = |n: NodeIndex| {
+            let a = self.graph[n].geom;
+            let b = self.graph[to].geom;
+            ((a.x() - b.x()).powi(2) + (a.y() - b.y()).powi(2)).sqrt()
+        };
+
+        let res = astar(&self.graph, from, |node| node == to, |e| Self::edge_weight(e.weight()), heuristic);
+
+        if let Some((cost, path)) = res{
+            (cost, path)
+        }
+        else{
+            (0.0, vec![])
+        }
+    }
+    
 }
 
 struct Node {
