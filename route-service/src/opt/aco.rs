@@ -12,7 +12,7 @@ use crate::layers::{
 
 const MAX_ROUTE_LEN: usize = 20;
 const INIT_PHEROMONE: f64 = 0.1;
-const P : f64 = 0.1;
+const P: f64 = 0.1;
 
 pub struct ACO {
     // parameters
@@ -24,6 +24,7 @@ pub struct ACO {
     num_iterations: usize,
     // pheromone is assigned to edges between stops
     pheromone: HashMap<(String, String), f64>,
+    solutions: Vec<Vec<TransitRoute>>,
 }
 
 // Assumptions:
@@ -50,6 +51,7 @@ impl ACO {
         let rho = 0.1;
         let q = 100.0;
         let mut pheromone = HashMap::new();
+        let solutions = Vec::new();
 
         // Initialize pheromone matrix
         // Place small amount of pheromone on edges between stops on existing routes
@@ -69,6 +71,7 @@ impl ACO {
             num_ants,
             num_iterations,
             pheromone,
+            solutions,
         }
     }
 
@@ -140,14 +143,14 @@ impl ACO {
         let (tx, ty) = to.geom.x_y();
         // TODO should consider other existing routes and avoid canibalizing demand
         // find number of routes that use the stop
-        // 
+        //
         let demand = od.demand_between_coords(fx, fy, tx, ty);
         let reversed_demand = od.demand_between_coords(tx, ty, fx, fy);
         // euclidean distance to end stop, to encourage stops that move towards to end
         let (ex, ey) = end.geom.x_y();
         // TODO make this road distance
         let distance = ((tx - ex).powi(2) + (ty - ey).powi(2)).sqrt();
-        (demand + reversed_demand + P)/(2.0 * distance)
+        (demand + reversed_demand + P) / (2.0 * distance)
     }
 
     fn update_pheromone(&mut self, routes: &[TransitRoute]) {
@@ -169,7 +172,44 @@ impl ACO {
         }
     }
 
-    fn adjust_route(
+    //returns the best solution from a list of solutions based on an evaluation function
+    fn evaluate_solutions(
+        &mut self,
+        solutions: Vec<Vec<TransitRoute>>,
+        od: &GridNetwork,
+    ) -> Vec<TransitRoute> {
+        let mut best_solution: Vec<TransitRoute> = Vec::new();
+        let mut best_cost: f64 = 0.0;
+        for solution in solutions.iter() {
+            let mut curr_cost: f64 = 0.0;
+            for tr in solution.iter() {
+                for i in 0..tr.stops.len() - 1 {
+                    let from = tr.stops[i].clone();
+                    let to = tr.stops[i + 1].clone();
+
+                    let (fx, fy) = from.geom.x_y();
+                    let (tx, ty) = to.geom.x_y();
+
+                    let demand = od.demand_between_coords(fx, fy, tx, ty);
+                    // TODO make this road distance and fix it based on research paper
+                    let distance = ((tx - fx).powi(2) + (ty - fy).powi(2)).sqrt();
+
+                    curr_cost += demand / distance;
+                }
+            }
+
+            if curr_cost > best_cost {
+                best_cost = curr_cost;
+                best_solution = solution.clone();
+            }
+
+            curr_cost = 0.0;
+        }
+
+        best_solution
+    }
+
+    pub fn adjust_route(
         &mut self,
         route: &TransitRoute,
         od: &GridNetwork,
@@ -216,18 +256,29 @@ impl ACO {
             routes: Vec::new(),
             stops: transit.stops.clone(),
         };
+
+        //initialize solutions
+        let mut best_solution = transit.routes.clone();
+        ret.routes = best_solution.clone();
+
         for _ in 0..self.num_iterations {
-            let mut new_routes = Vec::new();
-            // TODO: cannot adjust routes that are not type BUS
-            // TODO: need to parrallelize this
-            // TODO: use num_ants
-            for route in transit.routes.iter() {
-                if let Some(new_route) = self.adjust_route(route, od, road, &ret) {
-                    new_routes.push(new_route);
+            for _ in 0..self.num_ants {
+                let mut new_routes: Vec<TransitRoute> = Vec::new();
+                // TODO: cannot adjust routes that are not type BUS
+                // TODO: need to parrallelize this
+                // TODO: use num_ants
+                // TODO: Loop over the best solution and not over the same original route
+                for route in best_solution.iter() {
+                    if let Some(new_route) = self.adjust_route(route, od, road, &ret) {
+                        new_routes.push(new_route);
+                    }
                 }
+                self.solutions.push(new_routes.clone());
+                self.update_pheromone(&new_routes);
+                ret.routes = new_routes;
             }
-            self.update_pheromone(&new_routes);
-            ret.routes = new_routes;
+
+            best_solution = self.evaluate_solutions(self.solutions.clone(), od);
         }
         ret
     }
