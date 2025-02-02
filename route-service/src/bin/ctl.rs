@@ -1,5 +1,8 @@
+use std::time::Instant;
+
 use clap::Parser;
 
+use route_service::gtfs::geojson;
 use route_service::gtfs::gtfs::Gtfs;
 use route_service::layers::{
     grid::GridNetwork, road_network::RoadNetwork, transit_network::TransitNetwork,
@@ -27,7 +30,7 @@ fn main() {
     gtfs.print_stats();
 
     println!("Building transit network from GTFS");
-    let transit = TransitNetwork::from_gtfs(gtfs).unwrap();
+    let transit = TransitNetwork::from_gtfs(&gtfs).unwrap();
     transit.print_stats();
 
     println!("Building grid network from path: {}", args.db_path);
@@ -43,6 +46,43 @@ fn main() {
     aco.print_stats();
 
     println!("Running ACO!");
+    let start = Instant::now();
     let network_result = aco.run(&grid, &road, &transit);
+    println!("  ACO finished in {:?}", start.elapsed());
     network_result.print_stats();
+
+    output_routes_geojson(&network_result, &gtfs, &road, &args.output_path);
+}
+
+// Convert TransitNetwork to GeoJSON
+// GTFS is an intermediate format
+fn output_routes_geojson(
+    transit: &TransitNetwork,
+    src_gtfs: &Gtfs,
+    road: &RoadNetwork,
+    path: &str,
+) {
+    println!(
+        "Writing {} routes as geojson to path: {}",
+        transit.routes.len(),
+        path
+    );
+    println!("  Converting GTFS to GeoJSON");
+    let start = Instant::now();
+    let gtfs = transit.to_gtfs(src_gtfs, road);
+    println!("  Converted GTFS to GeoJSON in {:?}", start.elapsed());
+    gtfs.print_stats();
+    output_geojson(&gtfs, path)
+}
+
+// Output GTFS as GeoJSON
+fn output_geojson(gtfs: &Gtfs, path: &str) {
+    println!("Writing GTFS as geojson to path: {}", path);
+    let start = Instant::now();
+    let features = geojson::get_all_features(&gtfs);
+    println!("  There are {} features", features.len());
+    let geojson = geojson::convert_to_geojson(&features);
+    println!("  Generated GeoJSON in {:?}", start.elapsed());
+    std::fs::write(path, serde_json::to_string_pretty(&geojson).unwrap()).unwrap();
+    println!("  Wrote GeoJSON");
 }

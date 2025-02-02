@@ -65,7 +65,7 @@ impl RoadNetwork {
         Some(nearest.node_index)
     }
 
-    pub fn edge_weight(edge: &Edge) -> f64 {
+    fn edge_weight(edge: &Edge) -> f64 {
         let from = edge.geom.0.first();
         let to = edge.geom.0.last();
 

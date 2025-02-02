@@ -69,7 +69,7 @@ impl TransitNetwork {
         route.stops.push(Arc::clone(&stop));
     }
 
-    pub fn from_gtfs(gtfs: Gtfs) -> Result<TransitNetwork, Error> {
+    pub fn from_gtfs(gtfs: &Gtfs) -> Result<TransitNetwork, Error> {
         let mut stops = RTree::new();
         let mut stops_map = HashMap::new();
         for stop in gtfs.stops.values() {
@@ -118,7 +118,7 @@ impl TransitNetwork {
         let mut trips: HashMap<String, Trip> = HashMap::new();
         let mut routes: HashMap<String, Route> = HashMap::new();
         let mut shapes: HashMap<String, Vec<Shape>> = HashMap::new();
-        self.routes.iter().for_each(|route| {
+        for route in self.routes.iter() {
             let route_id = route.route_id.clone();
             let mut shape = Vec::new();
             let mut stop_times = Vec::new();
@@ -127,9 +127,10 @@ impl TransitNetwork {
             let mut shape_pt_sequence = 0;
             route.stops.iter().for_each(|stop| {
                 let stop_id = stop.stop_id.clone();
-                let src_stop = src_gtfs.stops.get(&stop_id).unwrap();
                 let gtfs_stop: Arc<Stop> = if !stops.contains_key(&stop_id) {
-                    stops.insert(stop_id.clone(), src_stop.clone()).unwrap()
+                    let src_stop = src_gtfs.stops.get(&stop_id).unwrap();
+                    stops.insert(stop_id.clone(), src_stop.clone());
+                    src_stop.clone()
                 } else {
                     stops.get(&stop_id).unwrap().clone()
                 };
@@ -187,7 +188,7 @@ impl TransitNetwork {
                 },
             );
             shapes.insert(route_id.clone(), shape);
-        });
+        }
 
         Gtfs {
             stops: stops,
