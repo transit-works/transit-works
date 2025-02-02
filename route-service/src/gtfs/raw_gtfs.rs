@@ -41,6 +41,7 @@ impl GtfsDataSet {
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_stats(&self) {
         println!("GTFS data:");
         println!("  Agencies: {}", mandatory_file_summary(&self.agencies));

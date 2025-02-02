@@ -75,6 +75,7 @@ impl ACO {
         }
     }
 
+    // TODO cannot select stops that are not type BUS
     fn select_next_stop(
         &self,
         current: Arc<TransitStop>,
@@ -266,8 +267,6 @@ impl ACO {
                 let mut new_routes: Vec<TransitRoute> = Vec::new();
                 // TODO: cannot adjust routes that are not type BUS
                 // TODO: need to parrallelize this
-                // TODO: use num_ants
-                // TODO: Loop over the best solution and not over the same original route
                 for route in best_solution.iter() {
                     if let Some(new_route) = self.adjust_route(route, od, road, &ret) {
                         new_routes.push(new_route);

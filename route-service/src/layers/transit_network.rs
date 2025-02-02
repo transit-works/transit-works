@@ -5,8 +5,10 @@ use geo_types::Point;
 use rstar::{Envelope, PointDistance, RTree, RTreeObject, AABB};
 
 use crate::gtfs::gtfs::Gtfs;
-use crate::gtfs::structs::RouteType;
+use crate::gtfs::structs::{Route, RouteType, Shape, Stop, StopTime, Trip};
 use crate::layers::error::Error;
+
+use super::road_network::RoadNetwork;
 
 // Layer 3 - Data structure describing the transit network
 pub struct TransitNetwork {
@@ -109,6 +111,91 @@ impl TransitNetwork {
             routes: routes,
             stops: stops,
         })
+    }
+
+    pub fn to_gtfs(&self, src_gtfs: &Gtfs, road: &RoadNetwork) -> Gtfs {
+        let mut stops: HashMap<String, Arc<Stop>> = HashMap::new();
+        let mut trips: HashMap<String, Trip> = HashMap::new();
+        let mut routes: HashMap<String, Route> = HashMap::new();
+        let mut shapes: HashMap<String, Vec<Shape>> = HashMap::new();
+        self.routes.iter().for_each(|route| {
+            let route_id = route.route_id.clone();
+            let mut shape = Vec::new();
+            let mut stop_times = Vec::new();
+            let mut stop_sequence = 0;
+            let mut prev_stop: Option<&Arc<TransitStop>> = None;
+            let mut shape_pt_sequence = 0;
+            route.stops.iter().for_each(|stop| {
+                let stop_id = stop.stop_id.clone();
+                let src_stop = src_gtfs.stops.get(&stop_id).unwrap();
+                let gtfs_stop: Arc<Stop> = if !stops.contains_key(&stop_id) {
+                    stops.insert(stop_id.clone(), src_stop.clone()).unwrap()
+                } else {
+                    stops.get(&stop_id).unwrap().clone()
+                };
+                // This probably needs to be fixed
+                stop_times.push(StopTime {
+                    trip_id: route_id.clone(),
+                    stop_id: stop_id.clone(),
+                    stop_sequence: stop_sequence,
+                    stop: gtfs_stop.clone(),
+                    ..StopTime::default()
+                });
+                // The trip points to a shape
+                if let Some(ps) = prev_stop {
+                    let (_, path) = road.get_road_distance(
+                        ps.geom.x(),
+                        ps.geom.y(),
+                        stop.geom.x(),
+                        stop.geom.y(),
+                    );
+                    for node_index in path.iter() {
+                        let node = road.get_node(*node_index);
+                        shape.push(Shape {
+                            shape_id: route_id.clone(),
+                            shape_pt_lat: node.geom.y(),
+                            shape_pt_lon: node.geom.x(),
+                            shape_pt_sequence: shape_pt_sequence,
+                            ..Shape::default()
+                        });
+                        shape_pt_sequence += 1;
+                    }
+                }
+                stop_sequence += 1;
+                prev_stop = Some(stop);
+            });
+            trips.insert(
+                route_id.clone(),
+                Trip {
+                    route_id: route_id.clone(),
+                    trip_id: route_id.clone(),
+                    shape_id: Some(route_id.clone()),
+                    ..Trip::default()
+                },
+            );
+            let src_route = src_gtfs.routes.get(&route_id).unwrap();
+            routes.insert(
+                route_id.clone(),
+                Route {
+                    route_id: route_id.clone(),
+                    route_short_name: src_route.route_short_name.clone(),
+                    route_long_name: src_route.route_long_name.clone(),
+                    route_desc: src_route.route_desc.clone(),
+                    route_type: src_route.route_type,
+                    route_url: src_route.route_url.clone(),
+                    ..Route::default()
+                },
+            );
+            shapes.insert(route_id.clone(), shape);
+        });
+
+        Gtfs {
+            stops: stops,
+            trips: trips,
+            routes: routes,
+            shapes: shapes,
+            ..Gtfs::default()
+        }
     }
 }
 

@@ -1,7 +1,6 @@
-use clap::FromArgMatches;
+use geo::{algorithm::Length, Euclidean};
 use geo_types::{LineString, Point};
-use geo::{algorithm::Length, Euclidean, EuclideanLength};
-use petgraph::{algo::astar, graph::{node_index, NodeIndex}, Directed, Graph};
+use petgraph::{algo::astar, graph::NodeIndex, Directed, Graph};
 use rstar::{RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -20,6 +19,10 @@ impl RoadNetwork {
         println!("Road network:");
         println!("  Nodes: {}", self.graph.node_count());
         println!("  Edges: {}", self.graph.edge_count());
+    }
+
+    pub fn get_node(&self, node_index: NodeIndex) -> &Node {
+        &self.graph[node_index]
     }
 
     pub fn load(dbname: &str) -> Result<Arc<RoadNetwork>> {
@@ -70,11 +73,10 @@ impl RoadNetwork {
 
         weight
     }
-    
-    pub fn get_road_distance(&self, fx : f64, fy : f64, tx : f64, ty : f64) -> (f64, Vec<NodeIndex>){
 
-        let from : NodeIndex = self.find_nearest_node(fx, fy).unwrap();
-        let to : NodeIndex = self.find_nearest_node(tx, ty).unwrap();
+    pub fn get_road_distance(&self, fx: f64, fy: f64, tx: f64, ty: f64) -> (f64, Vec<NodeIndex>) {
+        let from: NodeIndex = self.find_nearest_node(fx, fy).unwrap();
+        let to: NodeIndex = self.find_nearest_node(tx, ty).unwrap();
 
         let heuristic = |n: NodeIndex| {
             let a = self.graph[n].geom;
@@ -82,21 +84,25 @@ impl RoadNetwork {
             ((a.x() - b.x()).powi(2) + (a.y() - b.y()).powi(2)).sqrt()
         };
 
-        let res = astar(&self.graph, from, |node| node == to, |e| Self::edge_weight(e.weight()), heuristic);
+        let res = astar(
+            &self.graph,
+            from,
+            |node| node == to,
+            |e| Self::edge_weight(e.weight()),
+            heuristic,
+        );
 
-        if let Some((cost, path)) = res{
+        if let Some((cost, path)) = res {
             (cost, path)
-        }
-        else{
+        } else {
             (0.0, vec![])
         }
     }
-    
 }
 
-struct Node {
+pub struct Node {
     fid: u64,
-    geom: Point,
+    pub geom: Point,
     osmid: u64,
 }
 

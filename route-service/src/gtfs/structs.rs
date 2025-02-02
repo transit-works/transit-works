@@ -93,7 +93,7 @@ pub enum WheelchairBoarding {
 
 /// A transportation route.
 /// https://gtfs.org/documentation/schedule/reference/#routestxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Route {
     pub route_id: String,
     pub agency_id: Option<String>,
@@ -114,7 +114,7 @@ impl Id for Route {
 }
 
 /// Type of transportation used on a route.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum RouteType {
     #[serde(rename = "0")]
     Tram,
@@ -122,6 +122,7 @@ pub enum RouteType {
     Subway,
     #[serde(rename = "2")]
     Rail,
+    #[default]
     #[serde(rename = "3")]
     Bus,
     #[serde(rename = "4")]
@@ -140,7 +141,7 @@ pub enum RouteType {
 
 /// A scheduled trip for a route.
 /// https://gtfs.org/documentation/schedule/reference/#tripstxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Trip {
     pub route_id: String,
     pub service_id: String,
@@ -188,7 +189,7 @@ pub enum BikesAllowed {
 
 /// Scheduled stop time for a trip.
 /// https://gtfs.org/documentation/schedule/reference/#stop_timestxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct StopTime {
     pub trip_id: String,
     pub arrival_time: Option<String>,
@@ -298,7 +299,7 @@ impl Id for Level {
 
 /// Shape points that define the path of a route.
 /// https://gtfs.org/documentation/schedule/reference/#shapestxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Shape {
     pub shape_id: String,
     pub shape_pt_lat: f64,

@@ -12,12 +12,6 @@ pub enum Error {
     /// The given path to the GTFS is neither a file nor a directory
     #[error("Could not read GTFS: {0} is neither a file nor a directory")]
     NotFileNorDirectory(String),
-    /// The time is not given in the HH:MM:SS format
-    #[error("'{0}' is not a valid time; HH:MM:SS format is expected.")]
-    InvalidTime(String),
-    /// The color is not given in the RRGGBB format, without a leading `#`
-    #[error("'{0}' is not a valid color; RRGGBB format is expected, without a leading `#`")]
-    InvalidColor(String),
     /// Generic Input/Output error while reading a file
     #[error("impossible to read file")]
     IO(#[from] std::io::Error),
@@ -30,10 +24,6 @@ pub enum Error {
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
-    /// Impossible to fetch the remote archive by the URL
-    #[cfg(feature = "read-url")]
-    #[error("impossible to remotely access file")]
-    Fetch(#[from] reqwest::Error),
     /// Impossible to read a CSV file
     #[error("impossible to read csv file '{file_name}'")]
     CSVError {
@@ -55,6 +45,7 @@ pub enum Error {
 
 /// Specific line from a CSV file that could not be read
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct LineError {
     /// Headers of the CSV file
     pub headers: Vec<String>,
