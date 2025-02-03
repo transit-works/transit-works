@@ -32,6 +32,10 @@ fn main() {
     let gtfs = Gtfs::from_path(&args.gtfs_path).unwrap();
     gtfs.print_stats();
 
+    // output to geojson
+    let gtfs_geojson_path = format!("{}/gtfs.geojson", args.output_dir);
+    output_geojson(&gtfs, &gtfs_geojson_path);
+
     println!("Building transit network from GTFS");
     let mut transit = TransitNetwork::from_gtfs(&gtfs).unwrap();
     transit.print_stats();

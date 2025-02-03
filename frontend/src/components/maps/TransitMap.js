@@ -93,14 +93,17 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
       ? data.features.find(feature => feature.properties.route_id === selectedRoute)
       : null;
   const filteredData = selectedRouteObject
-      ? {
+    ? {
         ...data,
-        features: data.features.filter(feature => 
-          feature.properties.route_id === selectedRoute || 
-          (feature.properties.stop_id && selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
-        )
+        features: data.features.filter(
+          feature =>
+            feature.properties.route_id === selectedRoute ||
+            (feature.properties.stop_id &&
+              selectedRouteObject.properties.route_stops &&
+              selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
+        ),
       }
-      : data;
+    : data;
 
   const layers = [
     new GeoJsonLayer({

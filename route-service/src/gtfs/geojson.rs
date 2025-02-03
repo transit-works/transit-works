@@ -4,7 +4,7 @@ use crate::gtfs::{
 };
 
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 pub fn convert_to_geojson(features: &Vec<Value>) -> Value {
@@ -102,19 +102,27 @@ fn build_route_shape_mapping(trips: &HashMap<String, Trip>) -> HashMap<String, S
 
 // Map route_id to [stop_id]
 fn build_route_stop_mapping(trips: &HashMap<String, Trip>) -> HashMap<String, Vec<String>> {
-    let mut mapping: HashMap<String, Vec<String>> = HashMap::new();
-
+    let mut set_mapping: HashMap<String, HashSet<String>> = HashMap::new();
     for trip in trips.values() {
-        for stop_time in &trip.stop_times {
-            let stop_id = stop_time.stop_id.clone();
-            mapping
-                .entry(trip.route_id.clone())
-                .or_insert(vec![])
-                .push(stop_id);
-        }
+        let stop_id = trip
+            .stop_times
+            .iter()
+            .map(|stop_time| stop_time.stop_id.clone())
+            .collect::<HashSet<String>>();
+
+        set_mapping
+            .entry(trip.route_id.clone())
+            .or_insert(HashSet::new())
+            .extend(stop_id);
     }
 
-    return mapping;
+    set_mapping
+        .into_iter()
+        .map(|(route_id, stop_ids)| {
+            let stop_ids = stop_ids.into_iter().collect();
+            (route_id, stop_ids)
+        })
+        .collect::<HashMap<String, Vec<String>>>()
 }
 
 fn get_route_coords(
