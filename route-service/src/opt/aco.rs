@@ -4,11 +4,14 @@ use std::{
     sync::Arc,
 };
 
-use crate::{gtfs::structs::RouteType, layers::{
-    grid::GridNetwork,
-    road_network::RoadNetwork,
-    transit_network::{TransitNetwork, TransitRoute, TransitStop},
-}};
+use crate::{
+    gtfs::structs::RouteType,
+    layers::{
+        grid::GridNetwork,
+        road_network::RoadNetwork,
+        transit_network::{TransitNetwork, TransitRoute, TransitStop},
+    },
+};
 
 const MAX_ROUTE_LEN: usize = 20;
 const INIT_PHEROMONE: f64 = 0.1;
@@ -271,7 +274,9 @@ impl ACO {
                     if route.route_type != RouteType::Bus {
                         continue;
                     }
-                    if let Some(new_route) = self.adjust_route(route, od, road, &transit, &new_routes) {
+                    if let Some(new_route) =
+                        self.adjust_route(route, od, road, &transit, &new_routes)
+                    {
                         new_routes.push(new_route);
                     }
                 }

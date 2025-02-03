@@ -42,7 +42,8 @@ fn main() {
     road.print_stats();
 
     // Only consider non-bus routes
-    transit.routes = transit.routes
+    transit.routes = transit
+        .routes
         .into_iter()
         .filter(|route| route.route_type != route_service::gtfs::structs::RouteType::Bus)
         .take(20)
