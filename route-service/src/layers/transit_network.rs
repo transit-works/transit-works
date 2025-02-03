@@ -119,6 +119,26 @@ impl TransitNetwork {
         let mut routes: HashMap<String, Route> = HashMap::new();
         let mut shapes: HashMap<String, Vec<Shape>> = HashMap::new();
         for route in self.routes.iter() {
+            if route.route_type != RouteType::Bus {
+                // Copy non-bus routes / trips / shapes / stops as is
+                let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
+                routes.insert(src_route.route_id.clone(), (*src_route).clone());
+                for (src_trip_id, src_trip) in src_gtfs.trips.iter() {
+                    if src_trip.route_id != route.route_id {
+                        continue;
+                    }
+                    trips.insert(src_trip_id.clone(), (*src_trip).clone());
+                    if let Some(src_shape_id) = &src_trip.shape_id {
+                        let src_shape = src_gtfs.shapes.get(src_shape_id).unwrap();
+                        shapes.insert(src_shape_id.clone(), src_shape.clone());
+                    }
+                    for src_stop_time in src_trip.stop_times.iter() {
+                        let src_stop = src_gtfs.stops.get(&src_stop_time.stop_id).unwrap();
+                        stops.insert(src_stop.stop_id.clone(), src_stop.clone());
+                    }
+                }
+                continue;
+            }
             let route_id = route.route_id.clone();
             let mut shape = Vec::new();
             let mut stop_times = Vec::new();

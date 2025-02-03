@@ -30,7 +30,7 @@ fn main() {
     gtfs.print_stats();
 
     println!("Building transit network from GTFS");
-    let transit = TransitNetwork::from_gtfs(&gtfs).unwrap();
+    let mut transit = TransitNetwork::from_gtfs(&gtfs).unwrap();
     transit.print_stats();
 
     println!("Building grid network from path: {}", args.db_path);
@@ -41,17 +41,25 @@ fn main() {
     let road = RoadNetwork::load(&args.db_path).unwrap();
     road.print_stats();
 
+    // Only consider non-bus routes
+    transit.routes = transit.routes
+        .into_iter()
+        .filter(|route| route.route_type != route_service::gtfs::structs::RouteType::Bus)
+        .take(20)
+        .collect();
+
     println!("Initializing ACO");
     let mut aco = ACO::init(&transit);
     aco.print_stats();
 
     println!("Running ACO!");
     let start = Instant::now();
-    let network_result = aco.run(&grid, &road, &transit);
+    let solution = aco.run(&grid, &road, &transit);
     println!("  ACO finished in {:?}", start.elapsed());
-    network_result.print_stats();
+    solution.print_stats();
 
-    output_routes_geojson(&network_result, &gtfs, &road, &args.output_path);
+    // Output the best solution as GeoJSON
+    output_routes_geojson(&solution, &gtfs, &road, &args.output_path);
 }
 
 // Convert TransitNetwork to GeoJSON

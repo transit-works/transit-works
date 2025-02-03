@@ -93,7 +93,7 @@ pub enum WheelchairBoarding {
 
 /// A transportation route.
 /// https://gtfs.org/documentation/schedule/reference/#routestxt
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Route {
     pub route_id: String,
     pub agency_id: Option<String>,
@@ -141,7 +141,7 @@ pub enum RouteType {
 
 /// A scheduled trip for a route.
 /// https://gtfs.org/documentation/schedule/reference/#tripstxt
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Trip {
     pub route_id: String,
     pub service_id: String,
@@ -189,7 +189,7 @@ pub enum BikesAllowed {
 
 /// Scheduled stop time for a trip.
 /// https://gtfs.org/documentation/schedule/reference/#stop_timestxt
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct StopTime {
     pub trip_id: String,
     pub arrival_time: Option<String>,
@@ -299,7 +299,7 @@ impl Id for Level {
 
 /// Shape points that define the path of a route.
 /// https://gtfs.org/documentation/schedule/reference/#shapestxt
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Shape {
     pub shape_id: String,
     pub shape_pt_lat: f64,
@@ -374,7 +374,7 @@ impl Id for FareRule {
 
 /// Defines frequency-based service for a trip.
 /// https://gtfs.org/documentation/schedule/reference/#frequenciestxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Frequency {
     pub trip_id: String,
     pub start_time: String,
@@ -384,8 +384,9 @@ pub struct Frequency {
 }
 
 /// Specifies whether exact times are used for a frequency.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum ExactTimes {
+    #[default]
     #[serde(rename = "0")]
     FrequencyBased,
     #[serde(rename = "1")]

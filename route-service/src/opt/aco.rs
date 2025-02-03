@@ -4,11 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use crate::layers::{
+use crate::{gtfs::structs::RouteType, layers::{
     grid::GridNetwork,
     road_network::RoadNetwork,
     transit_network::{TransitNetwork, TransitRoute, TransitStop},
-};
+}};
 
 const MAX_ROUTE_LEN: usize = 20;
 const INIT_PHEROMONE: f64 = 0.1;
@@ -175,11 +175,11 @@ impl ACO {
 
     //returns the best solution from a list of solutions based on an evaluation function
     fn evaluate_solutions(
-        &mut self,
-        solutions: Vec<Vec<TransitRoute>>,
+        &self,
+        solutions: &Vec<Vec<TransitRoute>>,
         od: &GridNetwork,
     ) -> Vec<TransitRoute> {
-        let mut best_solution: Vec<TransitRoute> = Vec::new();
+        let mut best_solution = &solutions[0];
         let mut best_cost: f64 = 0.0;
         for solution in solutions.iter() {
             let mut curr_cost: f64 = 0.0;
@@ -198,16 +198,13 @@ impl ACO {
                     curr_cost += demand / distance;
                 }
             }
-
             if curr_cost > best_cost {
                 best_cost = curr_cost;
-                best_solution = solution.clone();
+                best_solution = solution;
             }
-
-            curr_cost = 0.0;
         }
 
-        best_solution
+        best_solution.clone()
     }
 
     pub fn adjust_route(
@@ -216,6 +213,7 @@ impl ACO {
         od: &GridNetwork,
         road: &RoadNetwork,
         transit: &TransitNetwork,
+        routes: &[TransitRoute],
     ) -> Option<TransitRoute> {
         let start: Arc<TransitStop> = route.stops.first().unwrap().clone();
         let end: Arc<TransitStop> = route.stops.last().unwrap().clone();
@@ -253,32 +251,38 @@ impl ACO {
         road: &RoadNetwork,
         transit: &TransitNetwork,
     ) -> TransitNetwork {
-        let mut ret = TransitNetwork {
-            routes: Vec::new(),
-            stops: transit.stops.clone(),
-        };
-
         //initialize solutions
         let mut best_solution = transit.routes.clone();
-        ret.routes = best_solution.clone();
+
+        // the init solution is all the non bus routes
+        let base_solution = transit
+            .routes
+            .iter()
+            .filter(|route| route.route_type != RouteType::Bus)
+            .map(|route| route.clone())
+            .collect::<Vec<TransitRoute>>();
 
         for _ in 0..self.num_iterations {
             for _ in 0..self.num_ants {
-                let mut new_routes: Vec<TransitRoute> = Vec::new();
-                // TODO: cannot adjust routes that are not type BUS
+                let mut new_routes = base_solution.clone();
                 // TODO: need to parrallelize this
                 for route in best_solution.iter() {
-                    if let Some(new_route) = self.adjust_route(route, od, road, &ret) {
+                    // Cannot adjust non-bus routes. These are already copied in the new_routes solution.
+                    if route.route_type != RouteType::Bus {
+                        continue;
+                    }
+                    if let Some(new_route) = self.adjust_route(route, od, road, &transit, &new_routes) {
                         new_routes.push(new_route);
                     }
                 }
-                self.solutions.push(new_routes.clone());
                 self.update_pheromone(&new_routes);
-                ret.routes = new_routes;
+                self.solutions.push(new_routes);
             }
-
-            best_solution = self.evaluate_solutions(self.solutions.clone(), od);
+            best_solution = self.evaluate_solutions(&self.solutions, od);
         }
-        ret
+        TransitNetwork {
+            routes: best_solution,
+            stops: transit.stops.clone(),
+        }
     }
 }
