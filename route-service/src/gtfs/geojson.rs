@@ -25,7 +25,9 @@ pub fn get_all_features(gtfs_data: &Gtfs) -> Vec<Value> {
 }
 
 // Build route features from gtfs data
-pub fn get_route_features(gtfs_data: &Gtfs) -> Vec<Value> {
+fn get_route_features(gtfs_data: &Gtfs) -> Vec<Value> {
+    let route_to_shape = build_route_shape_mapping(&gtfs_data.trips);
+    let route_to_stops = build_route_stop_mapping(&gtfs_data.trips);
     let features = gtfs_data
         .routes
         .values()
@@ -34,7 +36,7 @@ pub fn get_route_features(gtfs_data: &Gtfs) -> Vec<Value> {
                 "type": "Feature",
                 "geometry": {
                     "type": "LineString",
-                    "coordinates": get_route_coords(&route, gtfs_data),
+                    "coordinates": get_route_coords(&route, gtfs_data, &route_to_shape),
                 },
                 "properties": {
                     "route_id": &route.route_id,
@@ -43,6 +45,7 @@ pub fn get_route_features(gtfs_data: &Gtfs) -> Vec<Value> {
                     "route_desc": &route.route_desc,
                     "route_type": &route.route_type,
                     "route_url": &route.route_url,
+                    "route_stops": &route_to_stops.get(&route.route_id).unwrap_or(&vec![]),
                 }
             })
         })
@@ -51,30 +54,8 @@ pub fn get_route_features(gtfs_data: &Gtfs) -> Vec<Value> {
     return features;
 }
 
-pub fn build_route_shape_mapping(trips: &HashMap<String, Trip>) -> HashMap<String, String> {
-    let mut mapping: HashMap<String, String> = HashMap::new();
-
-    for trip in trips.values() {
-        let shape_id = trip.shape_id.clone().unwrap_or_else(|| String::new());
-        mapping.entry(trip.route_id.clone()).or_insert(shape_id);
-    }
-
-    return mapping;
-}
-
-pub fn get_route_coords(route: &Route, gtfs_data: &Gtfs) -> Vec<[f64; 2]> {
-    let route_to_shape = build_route_shape_mapping(&gtfs_data.trips);
-    let shape_id = route_to_shape.get(&route.route_id).unwrap();
-
-    let route_shapes = gtfs_data.shapes.get(shape_id).unwrap();
-    route_shapes
-        .iter()
-        .map(|shape| [shape.shape_pt_lon, shape.shape_pt_lat])
-        .collect()
-}
-
 // Build stop features from gtfs data
-pub fn get_stop_features(stops: &HashMap<String, Arc<Stop>>) -> Vec<Value> {
+fn get_stop_features(stops: &HashMap<String, Arc<Stop>>) -> Vec<Value> {
     let features = stops
         .values()
         .map(|stop| {
@@ -105,4 +86,47 @@ pub fn get_stop_features(stops: &HashMap<String, Arc<Stop>>) -> Vec<Value> {
         .collect::<Vec<Value>>();
 
     return features;
+}
+
+// Map route_id to shape_id
+fn build_route_shape_mapping(trips: &HashMap<String, Trip>) -> HashMap<String, String> {
+    let mut mapping: HashMap<String, String> = HashMap::new();
+
+    for trip in trips.values() {
+        let shape_id = trip.shape_id.clone().unwrap_or_else(|| String::new());
+        mapping.entry(trip.route_id.clone()).or_insert(shape_id);
+    }
+
+    return mapping;
+}
+
+// Map route_id to [stop_id]
+fn build_route_stop_mapping(trips: &HashMap<String, Trip>) -> HashMap<String, Vec<String>> {
+    let mut mapping: HashMap<String, Vec<String>> = HashMap::new();
+
+    for trip in trips.values() {
+        for stop_time in &trip.stop_times {
+            let stop_id = stop_time.stop_id.clone();
+            mapping
+                .entry(trip.route_id.clone())
+                .or_insert(vec![])
+                .push(stop_id);
+        }
+    }
+
+    return mapping;
+}
+
+fn get_route_coords(
+    route: &Route,
+    gtfs_data: &Gtfs,
+    route_to_shape: &HashMap<String, String>,
+) -> Vec<[f64; 2]> {
+    let shape_id = route_to_shape.get(&route.route_id).unwrap();
+
+    let route_shapes = gtfs_data.shapes.get(shape_id).unwrap();
+    route_shapes
+        .iter()
+        .map(|shape| [shape.shape_pt_lon, shape.shape_pt_lat])
+        .collect()
 }

@@ -80,6 +80,7 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
                   <h4 className="text-background text-2xl text-center">Route Information</h4>
                   <p><b>Route ID: </b>{popupInfo.properties.route_id}</p>
                   <p><b>Name: </b>{popupInfo.properties.route_long_name}</p>
+                  <p><b>Route type: </b>{popupInfo.properties.route_type}</p>
                 </div>}
               </p>
             </div>
@@ -87,10 +88,17 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
       )
   );
 
-  const filteredData = selectedRoute
+  // Display the selectedd route and its stops
+  const selectedRouteObject = selectedRoute
+      ? data.features.find(feature => feature.properties.route_id === selectedRoute)
+      : null;
+  const filteredData = selectedRouteObject
       ? {
         ...data,
-        features: data.features.filter(feature => feature.properties.route_id === selectedRoute)
+        features: data.features.filter(feature => 
+          feature.properties.route_id === selectedRoute || 
+          (feature.properties.stop_id && selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
+        )
       }
       : data;
 

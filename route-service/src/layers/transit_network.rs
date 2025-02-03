@@ -94,11 +94,11 @@ impl TransitNetwork {
             let mut encountered_stops = HashSet::new();
             // Must check stop_times, and push each unique stop_id for this route
             // For routing, we do not care about times, they can be optimized separately
-            for stop_time in trip.stop_times.iter() {
-                if !encountered_stops.contains(&stop_time.stop_id) {
-                    let stop = gtfs.stops.get(&stop_time.stop_id).unwrap();
+            for stop_times in trip.stop_times.iter() {
+                if !encountered_stops.contains(&stop_times.stop_id) {
+                    let stop = gtfs.stops.get(&stop_times.stop_id).unwrap();
                     stops.push(Arc::clone(stops_map.get(&stop.stop_id).unwrap()));
-                    encountered_stops.insert(stop_time.stop_id.clone());
+                    encountered_stops.insert(stop_times.stop_id.clone());
                 }
             }
             routes.push(TransitRoute {
@@ -120,6 +120,7 @@ impl TransitNetwork {
         let mut shapes: HashMap<String, Vec<Shape>> = HashMap::new();
         for route in self.routes.iter() {
             if route.route_type != RouteType::Bus {
+                // TODO this block is not getting all the shapes somehow, some stops are not part of the route
                 // Copy non-bus routes / trips / shapes / stops as is
                 let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
                 routes.insert(src_route.route_id.clone(), (*src_route).clone());
@@ -191,6 +192,7 @@ impl TransitNetwork {
                     route_id: route_id.clone(),
                     trip_id: route_id.clone(),
                     shape_id: Some(route_id.clone()),
+                    stop_times: stop_times,
                     ..Trip::default()
                 },
             );

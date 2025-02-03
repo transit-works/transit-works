@@ -296,6 +296,9 @@ impl ACO {
                     {
                         println!("ACO::run     Adjusted route: {}", new_route.route_id);
                         new_routes.push(new_route);
+                    } else {
+                        println!("ACO::run     Failed to adjust route: {}", route.route_id);
+                        new_routes.push(route.clone());
                     }
                 }
                 println!("ACO::run   Updating pheromones");
