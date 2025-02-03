@@ -2,6 +2,7 @@ use rand::Rng;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Instant,
 };
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
     },
 };
 
-const MAX_ROUTE_LEN: usize = 20;
+const MAX_ROUTE_LEN: usize = 100;
 const INIT_PHEROMONE: f64 = 0.1;
 const P: f64 = 0.1;
 
@@ -47,8 +48,8 @@ impl ACO {
     }
 
     pub fn init(transit: &TransitNetwork) -> Self {
-        let num_ants = 20;
-        let num_iterations = 200;
+        let num_ants = 5;
+        let num_iterations = 5;
         let alpha = 2.0;
         let beta = 3.0;
         let rho = 0.1;
@@ -59,10 +60,9 @@ impl ACO {
         // Initialize pheromone matrix
         // Place small amount of pheromone on edges between stops on existing routes
         for route in transit.routes.iter() {
-            for i in 0..route.stops.len() - 1 {
-                let from = route.stops[i].stop_id.clone();
-                let to = route.stops[i + 1].stop_id.clone();
-                pheromone.insert((from, to), INIT_PHEROMONE);
+            for w in route.stops.windows(2) {
+                pheromone.insert((w[0].stop_id.clone(), w[1].stop_id.clone()), INIT_PHEROMONE);
+                pheromone.insert((w[1].stop_id.clone(), w[0].stop_id.clone()), INIT_PHEROMONE);
             }
         }
 
@@ -93,10 +93,12 @@ impl ACO {
         let mut total = 0.0;
 
         // all stops in 500m radius
+        let sq_r =
+            (500.0 / (111_320.0 * (current.geom.y() * std::f64::consts::PI / 180.0).cos())).powi(2);
         let coords = current.geom.x_y();
         let nearby_stops = transit
             .stops
-            .locate_within_distance([coords.0, coords.1], 500.0);
+            .locate_within_distance([coords.0, coords.1], sq_r);
 
         // compute probability of visiting each stop
         let from = current.stop_id.clone();
@@ -112,7 +114,7 @@ impl ACO {
             let to = stop.stop_id.clone();
             let pheromone = self
                 .pheromone
-                .get(&(from.clone(), to.clone()))
+                .get(&(from.clone(), to))
                 .unwrap_or(&INIT_PHEROMONE);
             let heuristic =
                 self.calculate_heuristic(current.clone(), stop.clone(), end.clone(), od, road);
@@ -141,13 +143,12 @@ impl ACO {
         to: Arc<TransitStop>,
         end: Arc<TransitStop>,
         od: &GridNetwork,
-        _road: &RoadNetwork,
+        road: &RoadNetwork,
     ) -> f64 {
         let (fx, fy) = from.geom.x_y();
         let (tx, ty) = to.geom.x_y();
         // TODO should consider other existing routes and avoid canibalizing demand
         // find number of routes that use the stop
-        //
         let demand = od.demand_between_coords(fx, fy, tx, ty);
         let reversed_demand = od.demand_between_coords(tx, ty, fx, fy);
         // euclidean distance to end stop, to encourage stops that move towards to end
@@ -167,11 +168,16 @@ impl ACO {
         for route in routes {
             // TODO deposit should be proportional to route evaluation
             let deposit = self.q / route.stops.len() as f64;
-            for i in 0..route.stops.len() - 1 {
-                let from = route.stops[i].stop_id.clone();
-                let to = route.stops[i + 1].stop_id.clone();
-                let pheromone = self.pheromone.get_mut(&(from, to)).unwrap();
-                *pheromone += deposit;
+            // add or set the pheromone to deposit
+            for w in route.stops.windows(2) {
+                *self
+                    .pheromone
+                    .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
+                    .or_insert(0.0) += deposit;
+                *self
+                    .pheromone
+                    .entry((w[1].stop_id.clone(), w[0].stop_id.clone()))
+                    .or_insert(0.0) += deposit;
             }
         }
     }
@@ -254,6 +260,10 @@ impl ACO {
         road: &RoadNetwork,
         transit: &TransitNetwork,
     ) -> TransitNetwork {
+        println!("Running ACO");
+        self.print_stats();
+        let start = Instant::now();
+
         //initialize solutions
         let mut best_solution = transit.routes.clone();
 
@@ -265,26 +275,41 @@ impl ACO {
             .map(|route| route.clone())
             .collect::<Vec<TransitRoute>>();
 
-        for _ in 0..self.num_iterations {
-            for _ in 0..self.num_ants {
+        for i in 0..self.num_iterations {
+            println!("ACO::run Iteration: {}/{}", i, self.num_iterations);
+            for a in 0..self.num_ants {
+                println!("ACO::run   Ant: {}/{}", a, self.num_ants);
                 let mut new_routes = base_solution.clone();
                 // TODO: need to parrallelize this
                 for route in best_solution.iter() {
                     // Cannot adjust non-bus routes. These are already copied in the new_routes solution.
                     if route.route_type != RouteType::Bus {
+                        println!(
+                            "ACO::run     Skipping route: {}, type: {:?}",
+                            route.route_id, route.route_type
+                        );
                         continue;
                     }
+                    println!("ACO::run     Adjusting route: {}", route.route_id);
                     if let Some(new_route) =
                         self.adjust_route(route, od, road, &transit, &new_routes)
                     {
+                        println!("ACO::run     Adjusted route: {}", new_route.route_id);
                         new_routes.push(new_route);
                     }
                 }
+                println!("ACO::run   Updating pheromones");
                 self.update_pheromone(&new_routes);
                 self.solutions.push(new_routes);
             }
+            println!("ACO::run   Evaluating solutions");
             best_solution = self.evaluate_solutions(&self.solutions, od);
         }
+        println!(
+            "ACO::run ACO finished in {:?}, returing {} optimized routes",
+            start.elapsed(),
+            best_solution.len()
+        );
         TransitNetwork {
             routes: best_solution,
             stops: transit.stops.clone(),

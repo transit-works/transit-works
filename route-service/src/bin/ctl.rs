@@ -19,7 +19,10 @@ struct Args {
     db_path: String,
 
     #[arg(long)]
-    output_path: String,
+    output_dir: String,
+
+    #[arg(long)]
+    suffix: Option<String>,
 }
 
 fn main() {
@@ -42,12 +45,11 @@ fn main() {
     road.print_stats();
 
     // Only consider non-bus routes
-    transit.routes = transit
-        .routes
-        .into_iter()
-        .filter(|route| route.route_type != route_service::gtfs::structs::RouteType::Bus)
-        .take(20)
-        .collect();
+    transit.routes = transit.routes.into_iter().take(20).collect();
+
+    let suffix = args.suffix.unwrap_or("".to_string());
+    let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);
+    output_routes_geojson(&transit, &gtfs, &road, &before_path);
 
     println!("Initializing ACO");
     let mut aco = ACO::init(&transit);
@@ -59,8 +61,8 @@ fn main() {
     println!("  ACO finished in {:?}", start.elapsed());
     solution.print_stats();
 
-    // Output the best solution as GeoJSON
-    output_routes_geojson(&solution, &gtfs, &road, &args.output_path);
+    let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
+    output_routes_geojson(&solution, &gtfs, &road, &solution_path);
 }
 
 // Convert TransitNetwork to GeoJSON

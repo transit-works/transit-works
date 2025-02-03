@@ -1,4 +1,4 @@
-use geo::{algorithm::Length, Euclidean};
+use geo::{algorithm::Length, Haversine};
 use geo_types::{LineString, Point};
 use petgraph::{algo::astar, graph::NodeIndex, Directed, Graph};
 use rstar::{RTree, RTreeObject, AABB};
@@ -65,15 +65,6 @@ impl RoadNetwork {
         Some(nearest.node_index)
     }
 
-    fn edge_weight(edge: &Edge) -> f64 {
-        let from = edge.geom.0.first();
-        let to = edge.geom.0.last();
-
-        let weight = edge.geom.length::<Euclidean>();
-
-        weight
-    }
-
     pub fn get_road_distance(&self, fx: f64, fy: f64, tx: f64, ty: f64) -> (f64, Vec<NodeIndex>) {
         let from: NodeIndex = self.find_nearest_node(fx, fy).unwrap();
         let to: NodeIndex = self.find_nearest_node(tx, ty).unwrap();
@@ -84,11 +75,13 @@ impl RoadNetwork {
             ((a.x() - b.x()).powi(2) + (a.y() - b.y()).powi(2)).sqrt()
         };
 
+        let edge_weight = |e: &Edge| e.geom.length::<Haversine>();
+
         let res = astar(
             &self.graph,
             from,
             |node| node == to,
-            |e| Self::edge_weight(e.weight()),
+            |e| edge_weight(e.weight()),
             heuristic,
         );
 
