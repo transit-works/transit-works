@@ -260,7 +260,7 @@ impl ACO {
         road: &RoadNetwork,
         transit: &TransitNetwork,
     ) -> TransitNetwork {
-        println!("Running ACO");
+        log::info!("Running ACO");
         self.print_stats();
         let start = Instant::now();
 
@@ -276,40 +276,40 @@ impl ACO {
             .collect::<Vec<TransitRoute>>();
 
         for i in 0..self.num_iterations {
-            println!("ACO::run Iteration: {}/{}", i, self.num_iterations);
+            log::debug!("Iteration: {}/{}", i, self.num_iterations);
             for a in 0..self.num_ants {
-                println!("ACO::run   Ant: {}/{}", a, self.num_ants);
+                log::debug!("  Ant: {}/{}", a, self.num_ants);
                 let mut new_routes = base_solution.clone();
                 // TODO: need to parrallelize this
                 for route in best_solution.iter() {
                     // Cannot adjust non-bus routes. These are already copied in the new_routes solution.
                     if route.route_type != RouteType::Bus {
-                        println!(
-                            "ACO::run     Skipping route: {}, type: {:?}",
-                            route.route_id, route.route_type
+                        log::debug!(
+                            "    Skipping route: {}, type: {:?}",
+                            route.route_id,
+                            route.route_type
                         );
                         continue;
                     }
-                    println!("ACO::run     Adjusting route: {}", route.route_id);
                     if let Some(new_route) =
                         self.adjust_route(route, od, road, &transit, &new_routes)
                     {
-                        println!("ACO::run     Adjusted route: {}", new_route.route_id);
+                        log::debug!("    Adjusted route: {}", new_route.route_id);
                         new_routes.push(new_route);
                     } else {
-                        println!("ACO::run     Failed to adjust route: {}", route.route_id);
+                        log::debug!("    Failed to adjust route: {}", route.route_id);
                         new_routes.push(route.clone());
                     }
                 }
-                println!("ACO::run   Updating pheromones");
+                log::debug!("  Updating pheromones");
                 self.update_pheromone(&new_routes);
                 self.solutions.push(new_routes);
             }
-            println!("ACO::run   Evaluating solutions");
+            log::debug!("  Evaluating solutions");
             best_solution = self.evaluate_solutions(&self.solutions, od);
         }
-        println!(
-            "ACO::run ACO finished in {:?}, returing {} optimized routes",
+        log::info!(
+            "ACO finished in {:?}, returing {} optimized routes",
             start.elapsed(),
             best_solution.len()
         );
