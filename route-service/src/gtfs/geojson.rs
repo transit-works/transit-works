@@ -89,31 +89,35 @@ fn get_stop_features(stops: &HashMap<String, Arc<Stop>>) -> Vec<Value> {
 }
 
 // Map route_id to shape_id
-fn build_route_shape_mapping(trips: &HashMap<String, Trip>) -> HashMap<String, String> {
+fn build_route_shape_mapping(trips: &HashMap<String, Vec<Trip>>) -> HashMap<String, String> {
     let mut mapping: HashMap<String, String> = HashMap::new();
 
-    for trip in trips.values() {
-        let shape_id = trip.shape_id.clone().unwrap_or_else(|| String::new());
-        mapping.entry(trip.route_id.clone()).or_insert(shape_id);
+    for trip_list in trips.values() {
+        for trip in trip_list {
+            let shape_id = trip.shape_id.clone().unwrap_or_else(|| String::new());
+            mapping.entry(trip.route_id.clone()).or_insert(shape_id);
+        }
     }
 
     return mapping;
 }
 
 // Map route_id to [stop_id]
-fn build_route_stop_mapping(trips: &HashMap<String, Trip>) -> HashMap<String, Vec<String>> {
+fn build_route_stop_mapping(trips: &HashMap<String, Vec<Trip>>) -> HashMap<String, Vec<String>> {
     let mut set_mapping: HashMap<String, HashSet<String>> = HashMap::new();
-    for trip in trips.values() {
-        let stop_id = trip
-            .stop_times
-            .iter()
-            .map(|stop_time| stop_time.stop_id.clone())
-            .collect::<HashSet<String>>();
+    for trip_list in trips.values() {
+        for trip in trip_list {
+            let stop_id = trip
+                .stop_times
+                .iter()
+                .map(|stop_time| stop_time.stop_id.clone())
+                .collect::<HashSet<String>>();
 
-        set_mapping
-            .entry(trip.route_id.clone())
-            .or_insert(HashSet::new())
-            .extend(stop_id);
+            set_mapping
+                .entry(trip.route_id.clone())
+                .or_insert(HashSet::new())
+                .extend(stop_id);
+        }
     }
 
     set_mapping

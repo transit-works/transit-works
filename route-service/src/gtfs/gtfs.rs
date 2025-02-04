@@ -16,8 +16,8 @@ pub struct Gtfs {
     pub stops: HashMap<String, Arc<Stop>>,
     /// Routes by `route_id`
     pub routes: HashMap<String, Route>,
-    /// All trips by `trip_id`
-    pub trips: HashMap<String, Trip>,
+    /// All trips by `route_id`
+    pub trips: HashMap<String, Vec<Trip>>,
     /// All agencies
     pub agencies: Vec<Agency>,
     /// All shapes by `shape_id`
@@ -72,10 +72,16 @@ impl TryFrom<GtfsDataSet> for Gtfs {
         for f in raw.fare_rules.unwrap_or_else(|| Ok(Vec::new()))? {
             (*fare_rules.entry(f.fare_id.clone()).or_default()).push(f);
         }
+        let route_to_trips = trips.values().fold(HashMap::new(), |mut acc, t| {
+            acc.entry(t.route_id.clone())
+                .or_insert_with(Vec::new)
+                .push(t.clone());
+            acc
+        });
         Ok(Gtfs {
             stops: stops,
             routes: to_map(raw.routes?),
-            trips: trips,
+            trips: route_to_trips,
             agencies: raw.agencies?,
             shapes: to_shape_map(raw.shapes.unwrap_or_else(|| Ok(Vec::new()))?),
             fare_attributes: to_map(raw.fare_attributes.unwrap_or_else(|| Ok(Vec::new()))?),

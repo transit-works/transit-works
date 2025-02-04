@@ -37,7 +37,7 @@ fn main() {
     output_geojson(&gtfs, &gtfs_geojson_path);
 
     println!("Building transit network from GTFS");
-    let mut transit = TransitNetwork::from_gtfs(&gtfs).unwrap();
+    let transit = TransitNetwork::from_gtfs(&gtfs).unwrap();
     transit.print_stats();
 
     println!("Building grid network from path: {}", args.db_path);
@@ -49,7 +49,7 @@ fn main() {
     road.print_stats();
 
     // Only consider non-bus routes
-    transit.routes = transit.routes.into_iter().take(20).collect();
+    // transit.routes = transit.routes.into_iter().take(20).collect();
 
     let suffix = args.suffix.unwrap_or("".to_string());
     let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);

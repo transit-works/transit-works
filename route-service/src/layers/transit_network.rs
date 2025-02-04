@@ -87,18 +87,19 @@ impl TransitNetwork {
             stops_map.insert(stop.stop_id.clone(), Arc::clone(&transit_stop));
         }
         let mut routes = Vec::new();
-        for trip in gtfs.trips.values() {
-            let route_id = trip.route_id.clone();
-            let route = gtfs.routes.get(&route_id).unwrap();
+        for route in gtfs.routes.values() {
+            let route_id = route.route_id.clone();
             let mut stops = Vec::new();
             let mut encountered_stops = HashSet::new();
             // Must check stop_times, and push each unique stop_id for this route
             // For routing, we do not care about times, they can be optimized separately
-            for stop_times in trip.stop_times.iter() {
-                if !encountered_stops.contains(&stop_times.stop_id) {
-                    let stop = gtfs.stops.get(&stop_times.stop_id).unwrap();
-                    stops.push(Arc::clone(stops_map.get(&stop.stop_id).unwrap()));
-                    encountered_stops.insert(stop_times.stop_id.clone());
+            for trip in gtfs.trips.get(&route_id).unwrap() {
+                for stop_times in trip.stop_times.iter() {
+                    if !encountered_stops.contains(&stop_times.stop_id) {
+                        let stop = gtfs.stops.get(&stop_times.stop_id).unwrap();
+                        stops.push(Arc::clone(stops_map.get(&stop.stop_id).unwrap()));
+                        encountered_stops.insert(stop_times.stop_id.clone());
+                    }
                 }
             }
             routes.push(TransitRoute {
@@ -115,7 +116,7 @@ impl TransitNetwork {
 
     pub fn to_gtfs(&self, src_gtfs: &Gtfs, road: &RoadNetwork) -> Gtfs {
         let mut stops: HashMap<String, Arc<Stop>> = HashMap::new();
-        let mut trips: HashMap<String, Trip> = HashMap::new();
+        let mut trips: HashMap<String, Vec<Trip>> = HashMap::new();
         let mut routes: HashMap<String, Route> = HashMap::new();
         let mut shapes: HashMap<String, Vec<Shape>> = HashMap::new();
         for route in self.routes.iter() {
@@ -124,11 +125,13 @@ impl TransitNetwork {
                 // Copy non-bus routes / trips / shapes / stops as is
                 let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
                 routes.insert(src_route.route_id.clone(), (*src_route).clone());
-                for (src_trip_id, src_trip) in src_gtfs.trips.iter() {
-                    if src_trip.route_id != route.route_id {
-                        continue;
-                    }
-                    trips.insert(src_trip_id.clone(), (*src_trip).clone());
+
+                let src_trips = src_gtfs.trips.get(&route.route_id).unwrap();
+                for src_trip in src_trips.iter() {
+                    trips
+                        .entry(route.route_id.clone())
+                        .or_insert_with(Vec::new)
+                        .push((*src_trip).clone());
                     if let Some(src_shape_id) = &src_trip.shape_id {
                         let src_shape = src_gtfs.shapes.get(src_shape_id).unwrap();
                         shapes.insert(src_shape_id.clone(), src_shape.clone());
@@ -186,15 +189,16 @@ impl TransitNetwork {
                 stop_sequence += 1;
                 prev_stop = Some(stop);
             });
+            // TODO eventually can have many trips...
             trips.insert(
                 route_id.clone(),
-                Trip {
+                vec![Trip {
                     route_id: route_id.clone(),
                     trip_id: route_id.clone(),
                     shape_id: Some(route_id.clone()),
                     stop_times: stop_times,
                     ..Trip::default()
-                },
+                }],
             );
             let src_route = src_gtfs.routes.get(&route_id).unwrap();
             routes.insert(
