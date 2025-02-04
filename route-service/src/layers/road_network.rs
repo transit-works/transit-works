@@ -1,15 +1,19 @@
-use geo::{algorithm::Length, Haversine};
+use geo::{algorithm::Length, BoundingRect, Haversine};
 use geo_types::{LineString, Point};
-use petgraph::{algo::astar, graph::NodeIndex, Directed, Graph};
-use rstar::{RTree, RTreeObject, AABB};
+use petgraph::{algo::astar, graph::NodeIndex, prelude::EdgeIndex, Directed, Graph};
+use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use wkt::Wkt;
 
+use super::geo_util;
+
 // Layer 2 - Graph data strcture to store the nodes and edges of a city street network
 pub struct RoadNetwork {
     /// Allows for spatial querying of intersection (nodes)
-    rtree: RTree<RTreeNode>,
+    rtree_nodes: RTree<RTreeNode>,
+    /// Allows for spatial querying of edges
+    rtree_edges: RTree<RTreeEdge>,
     /// Allows for relational querying of intersection connectons (nodes) via roads (edges)
     graph: Graph<Node, Edge>,
 }
@@ -31,14 +35,15 @@ impl RoadNetwork {
         let nodes = read_nodes(&conn)?;
         let edges = read_edges(&conn)?;
 
-        let mut rtree = RTree::<RTreeNode>::new();
+        let mut rtree_nodes = RTree::<RTreeNode>::new();
+        let mut rtree_edges = RTree::<RTreeEdge>::new();
         let mut graph = Graph::<Node, Edge, Directed>::new();
         let mut node_map = HashMap::<u64, NodeIndex>::new();
 
         for node in nodes {
             let node_index = graph.add_node(node);
-            let envelope = compute_envelope(&graph[node_index].geom);
-            rtree.insert(RTreeNode {
+            let envelope = compute_node_envelope(&graph[node_index].geom);
+            rtree_nodes.insert(RTreeNode {
                 envelope: envelope,
                 node_index: node_index,
             });
@@ -49,25 +54,51 @@ impl RoadNetwork {
             if let (Some(&from_node), Some(&to_node)) =
                 (node_map.get(&edge.u), node_map.get(&edge.v))
             {
-                graph.add_edge(from_node, to_node, edge);
+                let edge_index = graph.add_edge(from_node, to_node, edge);
+                let envelope = compute_edge_envelope(&graph[edge_index]);
+                rtree_edges.insert(RTreeEdge {
+                    envelope: envelope,
+                    edge_index: edge_index,
+                });
             }
         }
 
         Ok(Arc::new(RoadNetwork {
-            rtree: rtree,
+            rtree_nodes: rtree_nodes,
+            rtree_edges: rtree_edges,
             graph: graph,
         }))
     }
 
     pub fn find_nearest_node(&self, x: f64, y: f64) -> Option<NodeIndex> {
         let point = [x, y];
-        let nearest = self.rtree.nearest_neighbor(&point).unwrap();
+        let nearest = self.rtree_nodes.nearest_neighbor(&point).unwrap();
         Some(nearest.node_index)
     }
 
+    fn find_nearest_edge(&self, x: f64, y: f64) -> Option<EdgeIndex> {
+        let mut nearest_dist = f64::INFINITY;
+        let mut nearest_edge = None;
+
+        let (x1, y1, x2, y2) = geo_util::compute_envelope(x, y, 100.0);
+        let envelope = AABB::from_corners([x1, y1], [x2, y2]);
+
+        let point = Point::new(x, y);
+        for candidate in self.rtree_edges.locate_in_envelope_intersecting(&envelope) {
+            let edge = &self.graph[candidate.edge_index];
+            let dist = edge.geom.distance_2(&point);
+            if dist < nearest_dist {
+                nearest_dist = dist;
+                nearest_edge = Some(candidate.edge_index);
+            }
+        }
+
+        nearest_edge
+    }
+
     pub fn get_road_distance(&self, fx: f64, fy: f64, tx: f64, ty: f64) -> (f64, Vec<NodeIndex>) {
-        let from: NodeIndex = self.find_nearest_node(fx, fy).unwrap();
-        let to: NodeIndex = self.find_nearest_node(tx, ty).unwrap();
+        let from = self.find_nearest_node(fx, fy).unwrap();
+        let to = self.find_nearest_node(tx, ty).unwrap();
 
         let heuristic = |n: NodeIndex| {
             let a = self.graph[n].geom;
@@ -120,8 +151,29 @@ impl RTreeObject for RTreeNode {
     }
 }
 
-fn compute_envelope(point: &Point<f64>) -> AABB<[f64; 2]> {
+fn compute_node_envelope(point: &Point<f64>) -> AABB<[f64; 2]> {
     return AABB::from_point(point.x_y().into());
+}
+
+struct RTreeEdge {
+    envelope: AABB<[f64; 2]>,
+    edge_index: EdgeIndex,
+}
+
+impl RTreeObject for RTreeEdge {
+    type Envelope = AABB<[f64; 2]>;
+    fn envelope(&self) -> Self::Envelope {
+        self.envelope
+    }
+}
+
+fn compute_edge_envelope(edge: &Edge) -> AABB<[f64; 2]> {
+    let rect = edge.geom.bounding_rect().unwrap();
+    let min_x = rect.min().x;
+    let min_y = rect.min().y;
+    let max_x = rect.max().x;
+    let max_y = rect.max().y;
+    AABB::from_corners([min_x, min_y], [max_x, max_y])
 }
 
 struct Edge {

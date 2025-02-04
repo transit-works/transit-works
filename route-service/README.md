@@ -12,6 +12,11 @@ To run:
 cargo run
 ```
 
+To run ctl:
+```
+RUST_LOG=debug cargo run --bin ctl -- --gtfs-path "/Users/<user>/workspace/transit-works/scripts/city_data/toronto/gtfs" --db-path "/Users/<user>/workspace/transit-works/scripts/city_db/toronto.db" --output-dir "/Users/<user>/workspace/transit-works/frontend/public" --suffix "5"
+```
+
 # References
 - Ant colony algorithm for rational transit network design of urban passenger transport (https://ieeexplore.ieee.org/document/6986883)
 - Optimal Placement of Bus Stops using Particle Swarm Optimization (https://ieeexplore.ieee.org/document/10112283)

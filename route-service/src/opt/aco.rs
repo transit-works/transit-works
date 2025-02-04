@@ -9,6 +9,7 @@ use std::{
 use crate::{
     gtfs::structs::RouteType,
     layers::{
+        geo_util,
         grid::GridNetwork,
         road_network::RoadNetwork,
         transit_network::{TransitNetwork, TransitRoute, TransitStop},
@@ -89,12 +90,9 @@ impl ACO {
         let mut total = 0.0;
 
         // all stops in 500m radius
-        let sq_r =
-            (500.0 / (111_320.0 * (current.geom.y() * std::f64::consts::PI / 180.0).cos())).powi(2);
-        let coords = current.geom.x_y();
-        let nearby_stops = transit
-            .stops
-            .locate_within_distance([coords.0, coords.1], sq_r);
+        let (x, y) = current.geom.x_y();
+        let sq_r = geo_util::compute_square_radius(x, y, 500.0);
+        let nearby_stops = transit.stops.locate_within_distance([x, y], sq_r);
 
         // compute probability of visiting each stop
         let from = current.stop_id.clone();

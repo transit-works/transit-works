@@ -50,11 +50,14 @@ fn main() {
     road.print_stats();
 
     // Only consider non-bus routes
-    transit.routes = transit.routes.into_iter().take(20).collect();
+    // 73521 and 73480 weird
+    // transit.routes = transit.routes.into_iter().filter(|r| r.route_id == "73521").collect();
 
     let suffix = args.suffix.unwrap_or("".to_string());
     let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);
     output_routes_geojson(&transit, &gtfs, &road, &before_path);
+
+    return;
 
     println!("Initializing ACO");
     let mut aco = ACO::init();

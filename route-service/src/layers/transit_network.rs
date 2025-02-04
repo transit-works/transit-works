@@ -93,12 +93,22 @@ impl TransitNetwork {
             let mut encountered_stops = HashSet::new();
             // Must check stop_times, and push each unique stop_id for this route
             // For routing, we do not care about times, they can be optimized separately
-            for trip in gtfs.trips.get(&route_id).unwrap() {
-                for stop_times in trip.stop_times.iter() {
-                    if !encountered_stops.contains(&stop_times.stop_id) {
-                        let stop = gtfs.stops.get(&stop_times.stop_id).unwrap();
-                        stops.push(Arc::clone(stops_map.get(&stop.stop_id).unwrap()));
-                        encountered_stops.insert(stop_times.stop_id.clone());
+            if let Some(inbound_trip) = gtfs.trips.get(&route_id).unwrap().first() {
+                let outbound_trip = gtfs
+                    .trips
+                    .get(&route_id)
+                    .unwrap()
+                    .iter()
+                    .find(|trip| trip.direction_id != inbound_trip.direction_id);
+                for trip in [Some(inbound_trip), outbound_trip] {
+                    if let Some(trip) = trip {
+                        for stop_times in trip.stop_times.iter() {
+                            if !encountered_stops.contains(&stop_times.stop_id) {
+                                let stop = gtfs.stops.get(&stop_times.stop_id).unwrap();
+                                stops.push(Arc::clone(stops_map.get(&stop.stop_id).unwrap()));
+                                encountered_stops.insert(stop_times.stop_id.clone());
+                            }
+                        }
                     }
                 }
             }
