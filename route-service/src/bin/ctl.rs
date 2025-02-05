@@ -7,7 +7,7 @@ use route_service::gtfs::gtfs::Gtfs;
 use route_service::layers::{
     grid::GridNetwork, road_network::RoadNetwork, transit_network::TransitNetwork,
 };
-use route_service::opt::aco::ACO;
+// use route_service::opt::aco::ACO;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -51,24 +51,24 @@ fn main() {
 
     // Only consider non-bus routes
     // 73480 73530
-    transit.routes = transit.routes.into_iter().take(20).collect();
+    // transit.routes = transit.routes.into_iter().take(20).collect();
 
     let suffix = args.suffix.unwrap_or("".to_string());
     let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);
     output_routes_geojson(&transit, &gtfs, &road, &before_path);
 
-    println!("Initializing ACO");
-    let mut aco = ACO::init();
-    aco.print_stats();
+    // println!("Initializing ACO");
+    // let mut aco = ACO::init();
+    // aco.print_stats();
 
-    println!("Running ACO!");
-    let start = Instant::now();
-    let solution = aco.run(&grid, &road, &transit);
-    println!("  ACO finished in {:?}", start.elapsed());
-    solution.print_stats();
+    // println!("Running ACO!");
+    // let start = Instant::now();
+    // let solution = aco.run(&grid, &road, &transit);
+    // println!("  ACO finished in {:?}", start.elapsed());
+    // solution.print_stats();
 
-    let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
-    output_routes_geojson(&solution, &gtfs, &road, &solution_path);
+    // let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
+    // output_routes_geojson(&solution, &gtfs, &road, &solution_path);
 }
 
 // Convert TransitNetwork to GeoJSON

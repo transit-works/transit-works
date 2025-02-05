@@ -8,122 +8,122 @@ use crate::gtfs::gtfs::Gtfs;
 use crate::gtfs::structs::{Route, RouteType, Shape, Stop, StopTime, Trip};
 use crate::layers::error::Error;
 
+use super::geo_util;
 use super::road_network::RoadNetwork;
 
 // Layer 3 - Data structure describing the transit network
 pub struct TransitNetwork {
     /// Set of all the transit routes in the network
     pub routes: Vec<TransitRoute>,
-    /// RTree of all the transit stops for spatial queries
-    pub stops: RTree<RTreeNode>,
+    /// RTrees of all the transit stops for spatial queries
+    /// `inbound_stops` are stops that are part of the inbound direction of a route
+    pub inbound_stops: RTree<RTreeNode>,
+    /// `outbound_stops` are stops that are part of the outbound direction of a route
+    pub outbound_stops: RTree<RTreeNode>,
 }
 
 impl TransitNetwork {
     pub fn print_stats(&self) {
         println!("Transit network:");
         println!("  Routes: {}", self.routes.len());
-        println!("  Stops: {}", self.stops.size());
+        println!("  Inbound stops: {}", self.inbound_stops.size());
+        println!("  Outbound stops: {}", self.outbound_stops.size());
     }
 
-    // Remove a stop from a given route
-    // Cleanup the stop from RTree if no longer referenced
-    pub fn remove_stop(&mut self, stop: Arc<TransitStop>, route: &mut TransitRoute) {
-        // Remove the stop from the given route
-        route
-            .stops
-            .retain(|route_stop| !Arc::ptr_eq(route_stop, &stop));
-
-        // Remove the stop from the RTree if it is no longer referenced
-        let still_referenced = self.routes.iter().any(|route| {
-            route
-                .stops
-                .iter()
-                .any(|route_stop| Arc::ptr_eq(route_stop, &stop))
-        });
-        if !still_referenced {
-            self.stops.remove(&RTreeNode {
-                envelope: compute_envelope(&stop.geom),
-                stop: Arc::clone(&stop),
-            });
-        }
-    }
-
-    // Add a stop at a node on the road network
-    // Reuse existing stop if it already exists
-    pub fn add_stop(&mut self, stop: Arc<TransitStop>, route: &mut TransitRoute) {
-        // Check if the stop already exists in the network
-        let existing_stop = self
-            .stops
-            .nearest_neighbor_iter(&stop.geom.x_y().into())
-            .find(|node| Arc::ptr_eq(&node.stop, &stop));
-
-        // If the stop does not exist, add it to the RTree
-        if existing_stop.is_none() {
-            self.stops.insert(RTreeNode {
-                envelope: compute_envelope(&stop.geom),
-                stop: Arc::clone(&stop),
-            });
-        }
-
-        // Add the stop to the route
-        route.stops.push(Arc::clone(&stop));
-    }
-
+    /// Build a transit network from GTFS data
+    ///
+    /// # Parameters
+    /// - `gtfs`: The GTFS data
+    ///
+    /// # Returns
+    /// A transit network
+    ///
+    /// For each routes, extracts the longest INBOUND and OUTBOUND trips
+    /// and classifies stops from these trips as INBOUND or OUTBOUND depending on their
+    /// geodesic bearing. Stops are stored in an RTree for spatial queries.
     pub fn from_gtfs(gtfs: &Gtfs) -> Result<TransitNetwork, Error> {
-        let mut stops = RTree::new();
-        let mut stops_map = HashMap::new();
-        for stop in gtfs.stops.values() {
-            let transit_stop = Arc::new(TransitStop {
-                stop_id: stop.stop_id.clone(),
-                geom: Point::new(
-                    stop.stop_lon.unwrap_or_default(),
-                    stop.stop_lat.unwrap_or_default(),
-                ),
-            });
-            stops.insert(RTreeNode {
-                envelope: compute_envelope(&transit_stop.geom),
-                stop: Arc::clone(&transit_stop),
-            });
-            stops_map.insert(stop.stop_id.clone(), Arc::clone(&transit_stop));
-        }
         let mut routes = Vec::new();
+        let mut inbound_stops = RTree::new();
+        let mut outbound_stops = RTree::new();
+        let mut stops_map = HashMap::new();
         for route in gtfs.routes.values() {
             let route_id = route.route_id.clone();
-            let mut stops = Vec::new();
-            let mut encountered_stops = HashSet::new();
-            // Must check stop_times, and push each unique stop_id for this route
-            // For routing, we do not care about times, they can be optimized separately
-            if let Some(inbound_trip) = gtfs.trips.get(&route_id).unwrap().first() {
-                let outbound_trip = gtfs
-                    .trips
-                    .get(&route_id)
-                    .unwrap()
-                    .iter()
-                    .find(|trip| trip.direction_id != inbound_trip.direction_id);
-                for trip in [Some(inbound_trip)] {
-                    if let Some(trip) = trip {
-                        for stop_times in trip.stop_times.iter() {
-                            if !encountered_stops.contains(&stop_times.stop_id) {
-                                let stop = gtfs.stops.get(&stop_times.stop_id).unwrap();
-                                stops.push(Arc::clone(stops_map.get(&stop.stop_id).unwrap()));
-                                encountered_stops.insert(stop_times.stop_id.clone());
-                            }
-                        }
-                    }
-                }
-            }
+            let (trip1, trip2) = match pick_inbound_outbound_trips(&route_id, gtfs) {
+                Some(trips) => trips,
+                None => continue,
+            };
+            // Get the longest trip in each direction
             routes.push(TransitRoute {
                 route_id: route_id,
                 route_type: route.route_type,
-                stops: stops,
+                inbound_stops: vec![],
+                outbound_stops: vec![],
             });
+            for trip in [trip1, trip2] {
+                // Classify route as "outbound" or "inbound"
+                let (insert_stops, insert_stops_tree) = if trip_is_outbound(trip) {
+                    (
+                        &mut routes.last_mut().unwrap().outbound_stops,
+                        &mut outbound_stops,
+                    )
+                } else {
+                    (
+                        &mut routes.last_mut().unwrap().inbound_stops,
+                        &mut inbound_stops,
+                    )
+                };
+                // Extract the sequence of stops from the trip
+                let mut encountered_stops = HashSet::new();
+                for stop_times in trip.stop_times.iter() {
+                    // Skip duplicate stops
+                    if encountered_stops.contains(&stop_times.stop_id) {
+                        continue;
+                    }
+                    // Allocate or return existing transit stop
+                    let stop = {
+                        if let Some(existing_stop) = stops_map.get(&stop_times.stop_id) {
+                            // Return reference if stop exists
+                            Arc::clone(existing_stop)
+                        } else {
+                            // Create a new stop and insert to rtree
+                            let new_stop = Arc::new(TransitStop {
+                                stop_id: stop_times.stop_id.clone(),
+                                geom: Point::new(
+                                    stop_times.stop.stop_lon.unwrap_or_default(),
+                                    stop_times.stop.stop_lat.unwrap_or_default(),
+                                ),
+                            });
+                            stops_map.insert(stop_times.stop_id.clone(), Arc::clone(&new_stop));
+                            let rtree_node = RTreeNode {
+                                envelope: compute_envelope(&new_stop.geom),
+                                stop: Arc::clone(&new_stop),
+                            };
+                            insert_stops_tree.insert(rtree_node);
+                            new_stop
+                        }
+                    };
+                    insert_stops.push(stop);
+                    encountered_stops.insert(stop_times.stop_id.clone());
+                }
+            }
         }
         Ok(TransitNetwork {
             routes: routes,
-            stops: stops,
+            inbound_stops: inbound_stops,
+            outbound_stops: outbound_stops,
         })
     }
 
+    /// Convert the transit network to GTFS format
+    ///
+    /// # Parameters
+    /// - `src_gtfs`: The original GTFS data
+    /// - `road`: The road network
+    ///
+    /// # Returns
+    /// A GTFS object representing the transit network
+    /// Currently only outputs the OUTBOUND trip of each route.
+    /// TODO: Support inbound and outbound trips, display separate on frontend + geojson
     pub fn to_gtfs(&self, src_gtfs: &Gtfs, road: &RoadNetwork) -> Gtfs {
         let mut stops: HashMap<String, Arc<Stop>> = HashMap::new();
         let mut trips: HashMap<String, Vec<Trip>> = HashMap::new();
@@ -135,9 +135,16 @@ impl TransitNetwork {
                 // Copy non-bus routes / trips / shapes / stops as is
                 let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
                 routes.insert(src_route.route_id.clone(), (*src_route).clone());
-
-                let src_trips = src_gtfs.trips.get(&route.route_id).unwrap();
-                for src_trip in src_trips.iter() {
+                let trip = {
+                    let (trip1, trip2) =
+                        pick_inbound_outbound_trips(&route.route_id, src_gtfs).unwrap();
+                    if trip_is_outbound(trip1) {
+                        trip1
+                    } else {
+                        trip2
+                    }
+                };
+                for src_trip in [trip] {
                     trips
                         .entry(route.route_id.clone())
                         .or_insert_with(Vec::new)
@@ -159,7 +166,7 @@ impl TransitNetwork {
             let mut stop_sequence = 0;
             let mut prev_stop: Option<&Arc<TransitStop>> = None;
             let mut shape_pt_sequence = 0;
-            route.stops.iter().for_each(|stop| {
+            route.outbound_stops.iter().for_each(|stop| {
                 let stop_id = stop.stop_id.clone();
                 let gtfs_stop: Arc<Stop> = if !stops.contains_key(&stop_id) {
                     let src_stop = src_gtfs.stops.get(&stop_id).unwrap();
@@ -236,11 +243,81 @@ impl TransitNetwork {
     }
 }
 
+/// Pick the longest trip in each direction
+///
+/// # Parameters
+/// - `route_id`: The route to pick the trips from
+/// - `gtfs`: The GTFS data
+///
+/// # Returns
+/// A tuple containing the longest trip in each direction
+/// or None if 2 trips in different directions were not found.
+fn pick_inbound_outbound_trips<'a>(
+    route_id: &String,
+    gtfs: &'a Gtfs,
+) -> Option<(&'a Trip, &'a Trip)> {
+    // Get the longest trip in each direction
+    let trip1 = gtfs
+        .trips
+        .get(route_id)
+        .unwrap()
+        .iter()
+        .filter(|trip| trip.direction_id == Some(0))
+        .max_by_key(|trip| trip.stop_times.len());
+    let trip2 = gtfs
+        .trips
+        .get(route_id)
+        .unwrap()
+        .iter()
+        .filter(|trip| trip.direction_id == Some(1))
+        .max_by_key(|trip| trip.stop_times.len());
+    if let (Some(trip1), Some(trip2)) = (trip1, trip2) {
+        // Ensure that the trips are in different directions
+        assert_ne!(
+            trip_is_outbound(trip1),
+            trip_is_outbound(trip2),
+            "The trips must be in different directions"
+        );
+        Some((trip1, trip2))
+    } else {
+        // If there are no trips in one direction, return None
+        None
+    }
+}
+
+/// Check if the trip is outbound
+///
+/// # Parameters
+/// - `trip`: The trip to check
+///
+/// # Returns
+/// `true` if the trip is outbound, `false` otherwise
+/// Outbound is defined as trips that have a northerly or
+/// easterly geodesic bearing
+fn trip_is_outbound(trip: &Trip) -> bool {
+    let (first, last) = (
+        trip.stop_times.first().unwrap().stop.clone(),
+        trip.stop_times.last().unwrap().stop.clone(),
+    );
+    let (a, b) = (
+        Point::new(
+            first.stop_lon.unwrap_or_default(),
+            first.stop_lat.unwrap_or_default(),
+        ),
+        Point::new(
+            last.stop_lon.unwrap_or_default(),
+            last.stop_lat.unwrap_or_default(),
+        ),
+    );
+    geo_util::is_outbound(a, b)
+}
+
 #[derive(PartialEq, Clone)]
 pub struct TransitRoute {
     pub route_id: String,
     pub route_type: RouteType,
-    pub stops: Vec<Arc<TransitStop>>,
+    pub inbound_stops: Vec<Arc<TransitStop>>,
+    pub outbound_stops: Vec<Arc<TransitStop>>,
 }
 
 #[derive(PartialEq, Clone)]
