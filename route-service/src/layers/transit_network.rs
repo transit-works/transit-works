@@ -100,7 +100,7 @@ impl TransitNetwork {
                     .unwrap()
                     .iter()
                     .find(|trip| trip.direction_id != inbound_trip.direction_id);
-                for trip in [Some(inbound_trip), outbound_trip] {
+                for trip in [Some(inbound_trip)] {
                     if let Some(trip) = trip {
                         for stop_times in trip.stop_times.iter() {
                             if !encountered_stops.contains(&stop_times.stop_id) {

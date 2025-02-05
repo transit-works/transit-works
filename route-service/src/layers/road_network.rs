@@ -1,4 +1,4 @@
-use geo::{algorithm::Length, BoundingRect, Haversine};
+use geo::{algorithm::Length, BoundingRect, Distance, Haversine};
 use geo_types::{LineString, Point};
 use petgraph::{algo::astar, graph::NodeIndex, prelude::EdgeIndex, Directed, Graph};
 use rstar::{PointDistance, RTree, RTreeObject, AABB};
@@ -103,7 +103,7 @@ impl RoadNetwork {
         let heuristic = |n: NodeIndex| {
             let a = self.graph[n].geom;
             let b = self.graph[to].geom;
-            ((a.x() - b.x()).powi(2) + (a.y() - b.y()).powi(2)).sqrt()
+            Haversine::distance(a, b)
         };
 
         let edge_weight = |e: &Edge| e.geom.length::<Haversine>();

@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-const MAX_ROUTE_LEN: usize = 50;
+const MAX_ROUTE_LEN: usize = 100;
 const MIN_ROUTE_LEN: usize = 10;
 const LEN_PENALTY: f64 = 0.1;
 const LOOP_PENALTY: f64 = 0.2;
@@ -55,9 +55,9 @@ impl ACO {
     }
 
     pub fn init() -> Self {
-        let aco_num_ant = 5;
+        let aco_num_ant = 1;
         let aco_max_gen = 5;
-        let max_gen = 2;
+        let max_gen = 1;
         let alpha = 2.0;
         let beta = 3.0;
         let rho = 0.1;
@@ -91,7 +91,7 @@ impl ACO {
 
         // all stops in 500m radius
         let (x, y) = current.geom.x_y();
-        let sq_r = geo_util::compute_square_radius(x, y, 500.0);
+        let sq_r = geo_util::compute_square_radius(y, x, 500.0);
         let nearby_stops = transit.stops.locate_within_distance([x, y], sq_r);
 
         // compute probability of visiting each stop
