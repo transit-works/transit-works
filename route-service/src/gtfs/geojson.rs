@@ -95,7 +95,7 @@ fn build_route_shape_mapping(trips: &HashMap<String, Vec<Trip>>) -> HashMap<Stri
     for trip_list in trips.values() {
         for trip in trip_list {
             let shape_id = trip.shape_id.clone().unwrap_or_else(|| String::new());
-            mapping.entry(trip.route_id.clone()).or_insert(shape_id);
+            mapping.insert(trip.route_id.clone(), shape_id);
         }
     }
 
@@ -113,10 +113,11 @@ fn build_route_stop_mapping(trips: &HashMap<String, Vec<Trip>>) -> HashMap<Strin
                 .map(|stop_time| stop_time.stop_id.clone())
                 .collect::<HashSet<String>>();
 
-            set_mapping
-                .entry(trip.route_id.clone())
-                .or_insert(HashSet::new())
-                .extend(stop_id);
+            if let Some(set) = set_mapping.get_mut(&trip.route_id) {
+                set.extend(stop_id);
+            } else {
+                set_mapping.insert(trip.route_id.clone(), stop_id);
+            }
         }
     }
 

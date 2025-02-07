@@ -22,7 +22,7 @@ const LEN_PENALTY: f64 = 0.1;
 const LOOP_PENALTY: f64 = 0.2;
 const NONLINEAR_PENALTY: f64 = 0.3;
 const INIT_PHEROMONE: f64 = 0.1;
-const P: f64 = 0.1;
+const P: f64 = 10.0;
 
 pub struct ACO {
     // parameters
@@ -33,6 +33,7 @@ pub struct ACO {
     aco_num_ant: usize,
     aco_max_gen: usize,
     max_gen: usize,
+    heuristic_cache: HashMap<(String, String), f64>,
 }
 
 // Assumptions:
@@ -52,7 +53,7 @@ impl ACO {
     }
 
     pub fn init() -> Self {
-        let aco_num_ant = 5;
+        let aco_num_ant = 10;
         let aco_max_gen = 5;
         let max_gen = 1;
         let alpha = 2.0;
@@ -60,13 +61,14 @@ impl ACO {
         let rho = 0.1;
         let q = 100.0;
         ACO {
-            alpha,
-            beta,
-            rho,
-            q,
-            aco_num_ant,
-            aco_max_gen,
-            max_gen,
+            alpha: alpha,
+            beta: beta,
+            rho: rho,
+            q: q,
+            aco_num_ant: aco_num_ant,
+            aco_max_gen: aco_max_gen,
+            max_gen: max_gen,
+            heuristic_cache: HashMap::new(),
         }
     }
 
@@ -80,19 +82,20 @@ impl ACO {
         max_gen: usize,
     ) -> Self {
         ACO {
-            alpha,
-            beta,
-            rho,
-            q,
-            aco_num_ant,
-            aco_max_gen,
-            max_gen,
+            alpha: alpha,
+            beta: beta,
+            rho: rho,
+            q: q,
+            aco_num_ant: aco_num_ant,
+            aco_max_gen: aco_max_gen,
+            max_gen: max_gen,
+            heuristic_cache: HashMap::new(),
         }
     }
 
     // TODO cannot select stops that are not type BUS
     fn select_next_stop(
-        &self,
+        &mut self,
         current: Arc<TransitStop>,
         end: Arc<TransitStop>,
         visited: &HashSet<String>,
@@ -101,23 +104,40 @@ impl ACO {
         transit: &TransitNetwork,
         pheromone: &HashMap<(String, String), f64>,
     ) -> Option<Arc<TransitStop>> {
+        let distance_to_end = Haversine::distance(
+            Point::new(current.geom.x(), current.geom.y()),
+            Point::new(end.geom.x(), end.geom.y()),
+        );
+        // if the distance to the end is less than 200m, return the end
+        if distance_to_end < 200.0 {
+            return Some(end.clone());
+        }
         let mut rng = rand::thread_rng();
         let mut choices = Vec::new();
         let mut weights = Vec::new();
 
-        // all stops in 500m radius
-        let (x, y) = current.geom.x_y();
-        let sq_r = geo_util::compute_square_radius(y, x, 500.0);
-        let nearby_stops = transit.outbound_stops.locate_within_distance([x, y], sq_r);
+        // all stops in 200m radius
+        let envelope = geo_util::compute_envelope_rect(
+            current.geom.y(),
+            current.geom.x(),
+            end.geom.y(),
+            end.geom.x(),
+            200.0,
+        );
+        let nearby_stops = transit.outbound_stops.locate_in_envelope(&envelope);
+
+        let stops_within_radius = transit
+            .outbound_stops
+            .locate_in_envelope(&envelope)
+            .into_iter()
+            .count();
+
+        log::trace!("        Found {} stops", stops_within_radius);
 
         // compute probability of visiting each stop
         let from = current.stop_id.clone();
         for nearby_stop in nearby_stops.into_iter() {
             let stop = &nearby_stop.stop;
-            // return the goal stop immediately if it is nearby
-            if stop.stop_id == end.stop_id {
-                return Some(stop.clone());
-            }
             if visited.contains(&stop.stop_id) {
                 continue;
             }
@@ -125,13 +145,17 @@ impl ACO {
             let pheromone = pheromone
                 .get(&(from.clone(), to))
                 .unwrap_or(&INIT_PHEROMONE);
-            let heuristic =
-                ACO::calculate_heuristic(current.clone(), stop.clone(), end.clone(), od, road);
+            let heuristic = self.calculate_heuristic(current.clone(), stop.clone(), od, road);
+            assert_valid_f64(*pheromone, "pheromone");
+            assert_valid_f64(heuristic, "heuristic");
             let probability = pheromone.powf(self.alpha) * heuristic.powf(self.beta);
             choices.push(stop.clone());
             weights.push(probability);
+            assert_valid_f64(probability, "probability");
         }
-
+        if weights.is_empty() {
+            return None;
+        }
         let dist = WeightedIndex::new(&weights).unwrap();
         let idx = dist.sample(&mut rng);
         if idx < choices.len() {
@@ -158,7 +182,7 @@ impl ACO {
         for w in route.outbound_stops.windows(2) {
             *pheromone
                 .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
-                .or_insert(0.0) += deposit;
+                .or_insert(INIT_PHEROMONE) += deposit;
         }
     }
 
@@ -209,17 +233,35 @@ impl ACO {
         visited.insert(start.stop_id.clone());
         let mut curr = start;
         while curr != end {
+            let (cx, cy) = curr.geom.x_y();
+            let cid = curr.stop_id.clone();
             if let Some(next) =
                 self.select_next_stop(curr, end.clone(), &visited, od, road, transit, pheromone)
             {
+                let (nx, ny) = next.geom.x_y();
+                let (ex, ey) = end.geom.x_y();
+                if log::log_enabled!(log::Level::Trace) {
+                    log::trace!(
+                        "        Next stop: {}, distance to end: {}",
+                        next.stop_id,
+                        Haversine::distance(Point::new(nx, ny), Point::new(ex, ey))
+                    );
+                    log::trace!(
+                        "        Current stop: {}, distance to next: {}",
+                        cid,
+                        Haversine::distance(Point::new(cx, cy), Point::new(nx, ny))
+                    );
+                }
                 stops.push(next.clone());
                 visited.insert(next.stop_id.clone());
                 curr = next;
             } else {
+                log::debug!("        Failed to find a next stop");
                 return None;
             }
             // prevent infinite loop
             if stops.len() > MAX_ROUTE_LEN {
+                log::debug!("        Failed to reach end in limit");
                 return None;
             }
         }
@@ -292,7 +334,7 @@ impl ACO {
         let nonlinear_coefficient = length_route / straight_line_distance;
 
         (
-            passenger_demand / (length_route * nonlinear_coefficient),
+            (passenger_demand + P) / (length_route * nonlinear_coefficient + P),
             nonlinear_coefficient,
         )
     }
@@ -312,23 +354,35 @@ impl ACO {
     /// TODO heuristic should consider nearby busses and also the length of the route
     /// Probably want to cache costs between stops / nodes on road network
     fn calculate_heuristic(
+        &mut self,
         from: Arc<TransitStop>,
         to: Arc<TransitStop>,
-        end: Arc<TransitStop>,
         od: &GridNetwork,
         road: &RoadNetwork,
     ) -> f64 {
+        if let Some(heuristic) = self
+            .heuristic_cache
+            .get(&(from.stop_id.clone(), to.stop_id.clone()))
+        {
+            return *heuristic;
+        }
         let (fx, fy) = from.geom.x_y();
         let (tx, ty) = to.geom.x_y();
         // TODO should consider other existing routes and avoid canibalizing demand
-        // find number of routes that use the stop
+        // figure out how to find number of routes that use this stop
         let demand =
             od.demand_between_coords(fx, fy, tx, ty) + od.demand_between_coords(tx, ty, fx, fy);
-        // euclidean distance to end stop, to encourage stops that move towards to end
-        let (ex, ey) = end.geom.x_y();
-        // TODO make this road distance
-        let distance = Haversine::distance(Point::new(tx, ty), Point::new(ex, ey));
-        (demand + P) / (2.0 * distance)
+        let (distance_f_t, _) = road.get_road_distance(fx, fy, tx, ty);
+        if distance_f_t == 0.0 {
+            return 0.0;
+        }
+        assert_valid_f64(demand, "demand");
+        // P is a constant to prevent 0 heuristic and division by 0
+        // (demand + P) / (2.0 * distance_f_t + P)
+        let heuristic = (demand + P) / (2.0 * distance_f_t + P);
+        self.heuristic_cache
+            .insert((from.stop_id.clone(), to.stop_id.clone()), heuristic);
+        heuristic
     }
 
     pub fn run(
@@ -344,25 +398,25 @@ impl ACO {
         for max_gen_i in 0..self.max_gen {
             log::debug!("ACO generation {}", max_gen_i);
             // Sort the routes by their evaluate_route
-            // best_routes.sort_by(|a, b| {
-            //     ACO::evaluate_route(od, road, b)
-            //         .0
-            //         .partial_cmp(&ACO::evaluate_route(od, road, a).0)
-            //         .unwrap()
-            // });
+            best_routes.sort_by(|a, b| {
+                ACO::evaluate_route(od, road, b)
+                    .0
+                    .partial_cmp(&ACO::evaluate_route(od, road, a).0)
+                    .unwrap()
+            });
             for i in 0..best_routes.len() {
-                log::debug!("  Route {}", i);
+                log::debug!("  Route {}, id: {}", i, best_routes[i].route_id);
                 // Do not optimize non-bus routes
                 if best_routes[i].route_type != RouteType::Bus {
                     continue;
                 }
-                // Update pheromone for route
+                let mut pheromone = HashMap::new();
                 let mut best_route = best_routes[i].clone();
                 let mut best_eval = ACO::evaluate_route(&od, &road, &best_route);
-                let mut gen_best_eval = best_eval;
-                let mut pheromone = HashMap::new();
+                let gen_best_eval = best_eval;
                 for aco_max_gen_i in 0..self.aco_max_gen {
                     log::debug!("    Gen {}", aco_max_gen_i);
+                    // Update pheromone for route
                     self.update_route_pheromone(od, road, &best_route, &mut pheromone);
                     for aco_num_ant_i in 0..self.aco_num_ant {
                         log::debug!("      Ant {}", aco_num_ant_i);
@@ -389,7 +443,6 @@ impl ACO {
                 // If the route is better than the best route, replace it
                 if gen_best_eval.0 < best_eval.0 {
                     best_routes[i] = best_route;
-                    gen_best_eval = best_eval;
                 } else {
                     log::debug!("      Route did not improve");
                 }
@@ -406,4 +459,10 @@ impl ACO {
             outbound_stops: transit.outbound_stops.clone(),
         }
     }
+}
+
+fn assert_valid_f64(f: f64, name: &str) {
+    assert!(f.is_finite(), "{} must be finite ({})", name, f);
+    assert!(f == 0.0 || f.is_normal(), "{} must be normal ({})", name, f);
+    assert!(f >= 0.0, "{} must be greater than 0 ({})", name, f);
 }

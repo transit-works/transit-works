@@ -80,9 +80,7 @@ impl RoadNetwork {
         let mut nearest_dist = f64::INFINITY;
         let mut nearest_edge = None;
 
-        let (x1, y1, x2, y2) = geo_util::compute_envelope(x, y, 100.0);
-        let envelope = AABB::from_corners([x1, y1], [x2, y2]);
-
+        let envelope = geo_util::compute_envelope(y, x, 100.0);
         let point = Point::new(x, y);
         for candidate in self.rtree_edges.locate_in_envelope_intersecting(&envelope) {
             let edge = &self.graph[candidate.edge_index];

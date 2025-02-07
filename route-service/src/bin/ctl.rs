@@ -56,7 +56,15 @@ fn main() {
         .routes
         .into_iter()
         .filter(|r| r.route_type == RouteType::Bus)
-        .take(3)
+        .filter(|r| {
+            // r.route_id == "73592"
+                // || r.route_id == "73588"
+                // || r.route_id == "73506"
+                r.route_id == "73594"
+                // || r.route_id == "73480"
+                // || r.route_id == "73530"
+        })
+        .take(10)
         .collect();
 
     let suffix = args.suffix.unwrap_or("".to_string());
