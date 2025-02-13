@@ -69,20 +69,29 @@ fn main() {
 
     // weird tracing routes
     // 73485 73527 73502 73421 73464 73451 73530 73483
-    transit.routes = transit
-        .routes
-        .into_iter()
-        .filter(|r| {
-            r.route_id == "73485"
-                || r.route_id == "73527"
-                || r.route_id == "73502"
-                || r.route_id == "73421"
-                || r.route_id == "73464"
-                || r.route_id == "73451"
-                || r.route_id == "73530"
-                || r.route_id == "73483"
-        })
-        .collect();
+    // remaining
+    // 73489 73430 73589 73493 73521 73473 73536
+    // transit.routes = transit
+    //     .routes
+    //     .into_iter()
+    //     .filter(|r| {
+    //         r.route_id == "73485"
+    //             || r.route_id == "73527"
+    //             || r.route_id == "73502"
+    //             || r.route_id == "73421"
+    //             || r.route_id == "73464"
+    //             || r.route_id == "73451"
+    //             || r.route_id == "73530"
+    //             || r.route_id == "73483"
+    //             || r.route_id == "73489"
+    //             || r.route_id == "73430"
+    //             || r.route_id == "73589"
+    //             || r.route_id == "73493"
+    //             || r.route_id == "73521"
+    //             || r.route_id == "73473"
+    //             || r.route_id == "73536"
+    //     })
+    //     .collect();
 
     let suffix = args.suffix.unwrap_or("".to_string());
     let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);

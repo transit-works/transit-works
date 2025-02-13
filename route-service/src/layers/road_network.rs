@@ -111,7 +111,13 @@ impl RoadNetwork {
         nearest_edge
     }
 
-    fn get_road_distance_coords(&self, fx: f64, fy: f64, tx: f64, ty: f64) -> (f64, Vec<NodeIndex>) {
+    fn get_road_distance_coords(
+        &self,
+        fx: f64,
+        fy: f64,
+        tx: f64,
+        ty: f64,
+    ) -> (f64, Vec<NodeIndex>) {
         let from = self.find_nearest_node(fx, fy).unwrap();
         let to = self.find_nearest_node(tx, ty).unwrap();
         self.get_road_distance(from, to)

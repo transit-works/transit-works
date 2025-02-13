@@ -69,8 +69,5 @@ pub fn is_outbound(a: Point, b: Point) -> bool {
 }
 
 pub fn haversine(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
-    Haversine::distance(
-        Point::new(x1, y1),
-        Point::new(x2, y2),
-    )
+    Haversine::distance(Point::new(x1, y1), Point::new(x2, y2))
 }
