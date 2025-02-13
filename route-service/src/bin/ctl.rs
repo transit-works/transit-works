@@ -57,12 +57,12 @@ fn main() {
         .into_iter()
         .filter(|r| r.route_type == RouteType::Bus)
         .filter(|r| {
-            // r.route_id == "73592"
-                // || r.route_id == "73588"
-                // || r.route_id == "73506"
-                r.route_id == "73594"
-                // || r.route_id == "73480"
-                // || r.route_id == "73530"
+            r.route_id == "73592"
+                || r.route_id == "73588"
+                || r.route_id == "73506"
+                || r.route_id == "73594"
+                || r.route_id == "73480"
+                || r.route_id == "73530"
         })
         .take(10)
         .collect();

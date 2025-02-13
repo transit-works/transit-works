@@ -149,6 +149,9 @@ impl ACO {
             assert_valid_f64(*pheromone, "pheromone");
             assert_valid_f64(heuristic, "heuristic");
             let probability = pheromone.powf(self.alpha) * heuristic.powf(self.beta);
+            if probability == 0.0 {
+                continue;
+            }
             choices.push(stop.clone());
             weights.push(probability);
             assert_valid_f64(probability, "probability");
