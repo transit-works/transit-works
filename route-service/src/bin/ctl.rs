@@ -38,10 +38,6 @@ fn main() {
     let gtfs_geojson_path = format!("{}/gtfs.geojson", args.output_dir);
     output_geojson(&gtfs, &gtfs_geojson_path);
 
-    println!("Building transit network from GTFS");
-    let mut transit = TransitNetwork::from_gtfs(&gtfs).unwrap();
-    transit.print_stats();
-
     println!("Building grid network from path: {}", args.db_path);
     let grid = GridNetwork::load(&args.db_path).unwrap();
     grid.print_stats();
@@ -50,39 +46,60 @@ fn main() {
     let road = RoadNetwork::load(&args.db_path).unwrap();
     road.print_stats();
 
+    println!("Building transit network from GTFS");
+    let mut transit = TransitNetwork::from_gtfs(&gtfs, &road).unwrap();
+    transit.print_stats();
+
     // Only consider non-bus routes
     // 73480 73530
+    // transit.routes = transit
+    //     .routes
+    //     .into_iter()
+    //     .filter(|r| r.route_type == RouteType::Bus)
+    //     .filter(|r| {
+    //         r.route_id == "73592"
+    //             || r.route_id == "73588"
+    //             || r.route_id == "73506"
+    //             || r.route_id == "73594"
+    //             || r.route_id == "73480"
+    //             || r.route_id == "73530"
+    //     })
+    //     .take(10)
+    //     .collect();
+
+    // weird tracing routes
+    // 73485 73527 73502 73421 73464 73451 73530 73483
     transit.routes = transit
         .routes
         .into_iter()
-        .filter(|r| r.route_type == RouteType::Bus)
         .filter(|r| {
-            r.route_id == "73592"
-                || r.route_id == "73588"
-                || r.route_id == "73506"
-                || r.route_id == "73594"
-                || r.route_id == "73480"
+            r.route_id == "73485"
+                || r.route_id == "73527"
+                || r.route_id == "73502"
+                || r.route_id == "73421"
+                || r.route_id == "73464"
+                || r.route_id == "73451"
                 || r.route_id == "73530"
+                || r.route_id == "73483"
         })
-        .take(10)
         .collect();
 
     let suffix = args.suffix.unwrap_or("".to_string());
     let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);
     output_routes_geojson(&transit, &gtfs, &road, &before_path);
 
-    println!("Initializing ACO");
-    let mut aco = ACO::init();
-    aco.print_stats();
+    // println!("Initializing ACO");
+    // let mut aco = ACO::init();
+    // aco.print_stats();
 
-    println!("Running ACO!");
-    let start = Instant::now();
-    let solution = aco.run(&grid, &road, &transit);
-    println!("  ACO finished in {:?}", start.elapsed());
-    solution.print_stats();
+    // println!("Running ACO!");
+    // let start = Instant::now();
+    // let solution = aco.run(&grid, &road, &transit);
+    // println!("  ACO finished in {:?}", start.elapsed());
+    // solution.print_stats();
 
-    let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
-    output_routes_geojson(&solution, &gtfs, &road, &solution_path);
+    // let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
+    // output_routes_geojson(&solution, &gtfs, &road, &solution_path);
 }
 
 // Convert TransitNetwork to GeoJSON

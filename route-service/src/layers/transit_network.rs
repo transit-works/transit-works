@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use geo::{Distance, Haversine};
 use geo_types::Point;
+use petgraph::graph::NodeIndex;
 use rstar::{Envelope, PointDistance, RTree, RTreeObject, AABB};
 
 use crate::gtfs::gtfs::Gtfs;
@@ -41,7 +43,7 @@ impl TransitNetwork {
     /// For each routes, extracts the longest INBOUND and OUTBOUND trips
     /// and classifies stops from these trips as INBOUND or OUTBOUND depending on their
     /// geodesic bearing. Stops are stored in an RTree for spatial queries.
-    pub fn from_gtfs(gtfs: &Gtfs) -> Result<TransitNetwork, Error> {
+    pub fn from_gtfs(gtfs: &Gtfs, road: &RoadNetwork) -> Result<TransitNetwork, Error> {
         let mut routes = Vec::new();
         let mut inbound_stops = RTree::new();
         let mut outbound_stops = RTree::new();
@@ -60,6 +62,7 @@ impl TransitNetwork {
                 outbound_stops: vec![],
             });
             for trip in [trip1, trip2] {
+                let stop_to_node = map_transit_stops_to_road_network_node_index(trip, road);
                 // Classify route as "outbound" or "inbound"
                 let (insert_stops, insert_stops_tree) = if trip_is_outbound(trip) {
                     (
@@ -92,6 +95,7 @@ impl TransitNetwork {
                                     stop_times.stop.stop_lon.unwrap_or_default(),
                                     stop_times.stop.stop_lat.unwrap_or_default(),
                                 ),
+                                node_index: *stop_to_node.get(&stop_times.stop_id).unwrap(),
                             });
                             stops_map.insert(stop_times.stop_id.clone(), Arc::clone(&new_stop));
                             let rtree_node = RTreeNode {
@@ -186,10 +190,8 @@ impl TransitNetwork {
                 // The trip points to a shape
                 if let Some(ps) = prev_stop {
                     let (_, path) = road.get_road_distance(
-                        ps.geom.x(),
-                        ps.geom.y(),
-                        stop.geom.x(),
-                        stop.geom.y(),
+                        ps.node_index,
+                        stop.node_index,
                     );
                     for node_index in path.iter() {
                         let node = road.get_node(*node_index);
@@ -241,6 +243,85 @@ impl TransitNetwork {
             ..Gtfs::default()
         }
     }
+}
+
+/// Map transit stops to road network node index
+///
+/// # Parameters
+/// - `trip`: The trip to map
+/// - `road`: The road network
+///
+/// # Returns
+/// A hashmap mapping stop IDs to road network node indices
+fn map_transit_stops_to_road_network_node_index(
+    trip: &Trip,
+    road: &RoadNetwork,
+) -> HashMap<String, NodeIndex> {
+    let mut stop_to_node = HashMap::new();
+    // initialize the first stop
+    let first_stop = &trip.stop_times.first().unwrap().stop;
+    let first_node = road.find_nearest_node(
+        first_stop.stop_lon.unwrap_or_default(),
+        first_stop.stop_lat.unwrap_or_default(),
+    );
+    stop_to_node.insert(first_stop.stop_id.clone(), first_node.unwrap());
+    // iterate over pairs of stops and determine the appropriate nearest nodes by the most linear path
+    for stop_time in trip.stop_times.windows(3) {
+        let (s1, s2, s3) = (
+            stop_time[0].stop.clone(),
+            stop_time[1].stop.clone(),
+            stop_time[2].stop.clone(),
+        );
+        let (s1_x, s1_y) = (s1.stop_lon.unwrap_or_default(), s1.stop_lat.unwrap_or_default());
+        let (s2_x, s2_y) = (s2.stop_lon.unwrap_or_default(), s2.stop_lat.unwrap_or_default());
+        let (s3_x, s3_y) = (s3.stop_lon.unwrap_or_default(), s3.stop_lat.unwrap_or_default());
+        let (n1, n2, n3) = (
+            road.find_nearest_node(s1_x, s1_y).unwrap(),
+            road.find_nearest_node(s2_x, s2_y).unwrap(),
+            road.find_nearest_node(s3_x, s3_y).unwrap(),
+        );
+        let dist1_2 = road.get_road_distance(n1, n2).0;
+        let dist2_3 = road.get_road_distance(n2, n3).0;
+        let line1_2 = geo_util::haversine(s1_x, s1_y, s2_x, s2_y);
+        let line2_3 = geo_util::haversine(s2_x, s2_y, s3_x, s3_y);
+        let nl1_2 = dist1_2 / line1_2;
+        let nl2_3 = dist2_3 / line2_3;
+        if nl1_2 < 1.1 && nl2_3 < 1.1 {
+            // good enough
+            stop_to_node.insert(s2.stop_id.clone(), n2);
+        } else {
+            // need to maybe move s2 and s3
+            let c2 = road.find_nearest_nodes(s2_x, s2_y, 50.0);
+            let c3 = road.find_nearest_nodes(s3_x, s3_y, 50.0);
+            let mut best_nl = f64::INFINITY;
+            let mut best_n2 = n2;
+            for n2 in &c2 {
+                for n3 in &c3 {
+                    let dist1_2 = road.get_road_distance(n1, *n2).0;
+                    let dist2_3 = road.get_road_distance(*n2, *n3).0;
+                    let line1_2 = geo_util::haversine(s1_x, s1_y, s2_x, s2_y);
+                    let line2_3 = geo_util::haversine(s2_x, s2_y, s3_x, s3_y);
+                    let nl1_2 = dist1_2 / line1_2;
+                    let nl2_3 = dist2_3 / line2_3;
+                    if nl1_2 < 1.1 && nl2_3 < 1.1 {
+                        best_n2 = *n2;
+                        best_nl = (nl1_2 + nl2_3) / 2.0;
+                        break;
+                    } else if (nl1_2 + nl2_3) / 2.0 < best_nl {
+                        best_n2 = *n2;
+                        best_nl = (nl1_2 + nl2_3) / 2.0;
+                    }
+                }
+                if best_nl < 1.1 {
+                    break;
+                }
+            }
+            // best we can do
+            stop_to_node.insert(s2.stop_id.clone(), best_n2);
+        }
+        stop_to_node.insert(s3.stop_id.clone(), n3);
+    }
+    stop_to_node
 }
 
 /// Pick the longest trip in each direction
@@ -324,6 +405,7 @@ pub struct TransitRoute {
 pub struct TransitStop {
     pub stop_id: String,
     pub geom: Point,
+    pub node_index: NodeIndex,
 }
 
 #[derive(PartialEq, Clone)]

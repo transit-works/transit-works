@@ -324,7 +324,7 @@ impl ACO {
             let (tx, ty) = w[1].geom.x_y();
             passenger_demand +=
                 od.demand_between_coords(fx, fy, tx, ty) + od.demand_between_coords(tx, ty, fx, fy);
-            length_route += road.get_road_distance(fx, fy, tx, ty).0 * 2.0;
+            length_route += road.get_road_distance(w[0].node_index, w[1].node_index).0;
         }
 
         let first = route.outbound_stops.first().unwrap();
@@ -375,7 +375,7 @@ impl ACO {
         // figure out how to find number of routes that use this stop
         let demand =
             od.demand_between_coords(fx, fy, tx, ty) + od.demand_between_coords(tx, ty, fx, fy);
-        let (distance_f_t, _) = road.get_road_distance(fx, fy, tx, ty);
+        let (distance_f_t, _) = road.get_road_distance(from.node_index, to.node_index);
         if distance_f_t == 0.0 {
             return 0.0;
         }

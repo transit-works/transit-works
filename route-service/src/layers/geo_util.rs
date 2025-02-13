@@ -1,4 +1,4 @@
-use geo::{Bearing, Geodesic, Point};
+use geo::{Bearing, Distance, Geodesic, Haversine, Point};
 use rstar::{Envelope, AABB};
 
 const LATITUDE_DEGREE_METERS: f64 = 110574.0;
@@ -66,4 +66,11 @@ pub fn is_outbound(a: Point, b: Point) -> bool {
         315.0..=360.0 => true,
         _ => false,
     }
+}
+
+pub fn haversine(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
+    Haversine::distance(
+        Point::new(x1, y1),
+        Point::new(x2, y2),
+    )
 }

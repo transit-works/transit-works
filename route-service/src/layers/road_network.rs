@@ -76,6 +76,23 @@ impl RoadNetwork {
         Some(nearest.node_index)
     }
 
+    pub fn find_nearest_nodes(&self, x: f64, y: f64, radius: f64) -> Vec<NodeIndex> {
+        // get all the nodes in the envelope
+        let envelope = geo_util::compute_envelope(y, x, radius);
+        let mut nearest_nodes = Vec::new();
+        for candidate in self.rtree_nodes.locate_in_envelope_intersecting(&envelope) {
+            nearest_nodes.push(candidate.node_index);
+        }
+        // sort by distance to x, y ascending
+        nearest_nodes.sort_by(|a, b| {
+            let p = &Point::new(x, y);
+            let a_dist = self.graph[*a].geom.distance_2(p);
+            let b_dist = self.graph[*b].geom.distance_2(p);
+            a_dist.partial_cmp(&b_dist).unwrap()
+        });
+        nearest_nodes
+    }
+
     fn find_nearest_edge(&self, x: f64, y: f64) -> Option<EdgeIndex> {
         let mut nearest_dist = f64::INFINITY;
         let mut nearest_edge = None;
@@ -94,10 +111,13 @@ impl RoadNetwork {
         nearest_edge
     }
 
-    pub fn get_road_distance(&self, fx: f64, fy: f64, tx: f64, ty: f64) -> (f64, Vec<NodeIndex>) {
+    fn get_road_distance_coords(&self, fx: f64, fy: f64, tx: f64, ty: f64) -> (f64, Vec<NodeIndex>) {
         let from = self.find_nearest_node(fx, fy).unwrap();
         let to = self.find_nearest_node(tx, ty).unwrap();
+        self.get_road_distance(from, to)
+    }
 
+    pub fn get_road_distance(&self, from: NodeIndex, to: NodeIndex) -> (f64, Vec<NodeIndex>) {
         let heuristic = |n: NodeIndex| {
             let a = self.graph[n].geom;
             let b = self.graph[to].geom;
