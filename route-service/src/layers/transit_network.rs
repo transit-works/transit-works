@@ -45,35 +45,24 @@ impl TransitNetwork {
     /// geodesic bearing. Stops are stored in an RTree for spatial queries.
     pub fn from_gtfs(gtfs: &Gtfs, road: &RoadNetwork) -> Result<TransitNetwork, Error> {
         let mut routes = Vec::new();
-        let mut inbound_stops = RTree::new();
-        let mut outbound_stops = RTree::new();
+        let mut inbound_stops_tree = RTree::new();
+        let mut outbound_stops_tree = RTree::new();
         let mut stops_map = HashMap::new();
         for route in gtfs.routes.values() {
-            let route_id = route.route_id.clone();
-            let (trip1, trip2) = match pick_inbound_outbound_trips(&route_id, gtfs) {
+            // Get the longest trip in each direction
+            let (trip1, trip2) = match pick_inbound_outbound_trips(&route.route_id, gtfs) {
                 Some(trips) => trips,
                 None => continue,
             };
-            // Get the longest trip in each direction
-            routes.push(TransitRoute {
-                route_id: route_id,
-                route_type: route.route_type,
-                inbound_stops: vec![],
-                outbound_stops: vec![],
-            });
+            let mut inbound_stops = vec![];
+            let mut outbound_stops = vec![];
             for trip in [trip1, trip2] {
                 let stop_to_node = map_transit_stops_to_road_network_node_index(trip, road);
                 // Classify route as "outbound" or "inbound"
                 let (insert_stops, insert_stops_tree) = if trip_is_outbound(trip) {
-                    (
-                        &mut routes.last_mut().unwrap().outbound_stops,
-                        &mut outbound_stops,
-                    )
+                    (&mut outbound_stops, &mut outbound_stops_tree)
                 } else {
-                    (
-                        &mut routes.last_mut().unwrap().inbound_stops,
-                        &mut inbound_stops,
-                    )
+                    (&mut inbound_stops, &mut inbound_stops_tree)
                 };
                 // Extract the sequence of stops from the trip
                 let mut encountered_stops = HashSet::new();
@@ -110,11 +99,27 @@ impl TransitNetwork {
                     encountered_stops.insert(stop_times.stop_id.clone());
                 }
             }
+            // Classify route type
+            let route_type = if route.route_type == RouteType::Bus
+                && (is_intercity(trip1, road) || is_intercity(trip2, road))
+            {
+                log::debug!("Classifying route {} as an intercity bus", route.route_id);
+                TransitRouteType::IntercityBus
+            } else {
+                route.route_type.into()
+            };
+            // Add the route to the transit network
+            routes.push(TransitRoute {
+                route_id: route.route_id.clone(),
+                route_type: route_type,
+                inbound_stops: inbound_stops,
+                outbound_stops: outbound_stops,
+            });
         }
         Ok(TransitNetwork {
             routes: routes,
-            inbound_stops: inbound_stops,
-            outbound_stops: outbound_stops,
+            inbound_stops: inbound_stops_tree,
+            outbound_stops: outbound_stops_tree,
         })
     }
 
@@ -134,8 +139,7 @@ impl TransitNetwork {
         let mut routes: HashMap<String, Route> = HashMap::new();
         let mut shapes: HashMap<String, Vec<Shape>> = HashMap::new();
         for route in self.routes.iter() {
-            if route.route_type != RouteType::Bus {
-                // TODO this block is not getting all the shapes somehow, some stops are not part of the route
+            if route.route_type != TransitRouteType::Bus {
                 // Copy non-bus routes / trips / shapes / stops as is
                 let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
                 routes.insert(src_route.route_id.clone(), (*src_route).clone());
@@ -432,9 +436,65 @@ fn trip_is_outbound(trip: &Trip) -> bool {
 #[derive(PartialEq, Clone)]
 pub struct TransitRoute {
     pub route_id: String,
-    pub route_type: RouteType,
+    pub route_type: TransitRouteType,
     pub inbound_stops: Vec<Arc<TransitStop>>,
     pub outbound_stops: Vec<Arc<TransitStop>>,
+}
+
+#[derive(PartialEq, Clone)]
+pub enum TransitRouteType {
+    Tram,
+    Subway,
+    Rail,
+    Bus,
+    Ferry,
+    CableTram,
+    AerialLift,
+    Funicular,
+    Trolleybus,
+    Monorail,
+    IntercityBus,
+}
+
+impl From<RouteType> for TransitRouteType {
+    fn from(route_type: RouteType) -> Self {
+        match route_type {
+            RouteType::Tram => TransitRouteType::Tram,
+            RouteType::Subway => TransitRouteType::Subway,
+            RouteType::Rail => TransitRouteType::Rail,
+            RouteType::Bus => TransitRouteType::Bus,
+            RouteType::Ferry => TransitRouteType::Ferry,
+            RouteType::CableTram => TransitRouteType::CableTram,
+            RouteType::AerialLift => TransitRouteType::AerialLift,
+            RouteType::Funicular => TransitRouteType::Funicular,
+            RouteType::Trolleybus => TransitRouteType::Trolleybus,
+            RouteType::Monorail => TransitRouteType::Monorail,
+        }
+    }
+}
+
+/// Classify intercity bus routes
+///
+/// # Parameters
+/// - `trip`: The trip to check
+/// - `road`: The road network
+///
+/// # Returns
+/// `true` if the trip is intercity (has stops >500.0m from known road network), `false` otherwise
+fn is_intercity(trip: &Trip, road: &RoadNetwork) -> bool {
+    for stop in trip.stop_times.iter().map(|st| &st.stop) {
+        let (sx, sy) = (
+            stop.stop_lon.unwrap_or_default(),
+            stop.stop_lat.unwrap_or_default(),
+        );
+        let nidx = road.find_nearest_node(sx, sy).unwrap();
+        let node = road.get_node(nidx);
+        let (nx, ny) = (node.geom.x(), node.geom.y());
+        if geo_util::haversine(sx, sy, nx, ny) > 500.0 {
+            return true;
+        }
+    }
+    false
 }
 
 #[derive(PartialEq, Clone)]

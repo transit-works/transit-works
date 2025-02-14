@@ -6,14 +6,11 @@ use std::{
     time::Instant,
 };
 
-use crate::{
-    gtfs::structs::RouteType,
-    layers::{
-        geo_util,
-        grid::GridNetwork,
-        road_network::RoadNetwork,
-        transit_network::{TransitNetwork, TransitRoute, TransitStop},
-    },
+use crate::layers::{
+    geo_util,
+    grid::GridNetwork,
+    road_network::RoadNetwork,
+    transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
 };
 
 const MAX_ROUTE_LEN: usize = 100;
@@ -271,7 +268,7 @@ impl ACO {
 
         Some(TransitRoute {
             route_id: route.route_id.clone(),
-            route_type: route.route_type,
+            route_type: route.route_type.clone(),
             inbound_stops: ACO::construct_inbound_stops(&stops, transit),
             outbound_stops: stops,
         })
@@ -410,7 +407,7 @@ impl ACO {
             for i in 0..best_routes.len() {
                 log::debug!("  Route {}, id: {}", i, best_routes[i].route_id);
                 // Do not optimize non-bus routes
-                if best_routes[i].route_type != RouteType::Bus {
+                if best_routes[i].route_type != TransitRouteType::Bus {
                     continue;
                 }
                 let mut pheromone = HashMap::new();
