@@ -2,11 +2,13 @@ use crate::gtfs::error::Error;
 use crate::gtfs::raw_gtfs::GtfsDataSet;
 use crate::gtfs::structs::*;
 
-use std::convert::TryFrom;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::Arc;
 
-#[derive(Default)]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[derive(Default, Clone)]
 pub struct Gtfs {
     /// Calendar by `service_id`
     pub calendar: HashMap<String, Calendar>,
@@ -16,8 +18,8 @@ pub struct Gtfs {
     pub stops: HashMap<String, Arc<Stop>>,
     /// Routes by `route_id`
     pub routes: HashMap<String, Route>,
-    /// All trips by `trip_id`
-    pub trips: HashMap<String, Trip>,
+    /// All trips by `route_id`
+    pub trips: HashMap<String, Vec<Trip>>,
     /// All agencies
     pub agencies: Vec<Agency>,
     /// All shapes by `shape_id`
@@ -28,6 +30,26 @@ pub struct Gtfs {
     pub fare_rules: HashMap<String, Vec<FareRule>>,
     /// All feed info
     pub feed_info: Vec<FeedInfo>,
+}
+
+impl Serialize for Gtfs {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let gtfs_dataset: GtfsDataSet = (*self).clone().try_into().map_err(serde::ser::Error::custom)?;
+        gtfs_dataset.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Gtfs {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let gtfs_dataset = GtfsDataSet::deserialize(deserializer)?;
+        Gtfs::try_from(gtfs_dataset).map_err(serde::de::Error::custom)
+    }
 }
 
 impl Gtfs {
@@ -58,24 +80,30 @@ impl TryFrom<GtfsDataSet> for Gtfs {
     /// Tries to build a [Gtfs] from a [GtfsDataSet]
     fn try_from(raw: GtfsDataSet) -> Result<Gtfs, Error> {
         let stops = to_stop_map(
-            raw.stops?, 
-            raw.transfers.unwrap_or_else(|| Ok(Vec::new()))?, 
+            raw.stops?,
+            raw.transfers.unwrap_or_else(|| Ok(Vec::new()))?,
             raw.pathways.unwrap_or_else(|| Ok(Vec::new()))?,
         )?;
         let trips = to_trips_map(
-            raw.trips?, 
-            raw.stop_times?, 
-            raw.frequencies.unwrap_or_else(|| Ok(Vec::new()))?, 
+            raw.trips?,
+            raw.stop_times?,
+            raw.frequencies.unwrap_or_else(|| Ok(Vec::new()))?,
             &stops,
         )?;
         let mut fare_rules = HashMap::<String, Vec<FareRule>>::new();
         for f in raw.fare_rules.unwrap_or_else(|| Ok(Vec::new()))? {
             (*fare_rules.entry(f.fare_id.clone()).or_default()).push(f);
         }
+        let route_to_trips = trips.values().fold(HashMap::new(), |mut acc, t| {
+            acc.entry(t.route_id.clone())
+                .or_insert_with(Vec::new)
+                .push(t.clone());
+            acc
+        });
         Ok(Gtfs {
             stops: stops,
             routes: to_map(raw.routes?),
-            trips: trips,
+            trips: route_to_trips,
             agencies: raw.agencies?,
             shapes: to_shape_map(raw.shapes.unwrap_or_else(|| Ok(Vec::new()))?),
             fare_attributes: to_map(raw.fare_attributes.unwrap_or_else(|| Ok(Vec::new()))?),
@@ -85,6 +113,64 @@ impl TryFrom<GtfsDataSet> for Gtfs {
             calendar_dates: to_calendar_dates(
                 raw.calendar_dates.unwrap_or_else(|| Ok(Vec::new()))?,
             ),
+        })
+    }
+}
+
+impl TryInto<GtfsDataSet> for Gtfs {
+    type Error = Error;
+    /// Tries to convert a [Gtfs] into a [GtfsDataSet]
+    fn try_into(self) -> Result<GtfsDataSet, Error> {
+        // Reconstruct stops and extract transfers and pathways from each stop.
+        let mut raw_transfers = Vec::new();
+        let mut raw_pathways = Vec::new();
+        let raw_stops: Vec<Stop> = self.stops
+            .into_values()
+            .map(|arc_stop| {
+                // Clone the stop since the Arc is referenced in many places.
+                let mut stop = (*arc_stop).clone();
+                raw_transfers.extend(stop.transfers.drain(0..));
+                raw_pathways.extend(stop.pathways.drain(0..));
+                stop
+            })
+            .collect();
+
+        // Extract trips along with their stop_times and frequencies.
+        let mut raw_stop_times = Vec::new();
+        let mut raw_frequencies = Vec::new();
+        let mut raw_trips = Vec::new();
+        for trip_list in self.trips.into_values() {
+            for mut trip in trip_list {
+                raw_stop_times.append(&mut trip.stop_times);
+                raw_frequencies.append(&mut trip.frequencies);
+                raw_trips.push(trip);
+            }
+        }
+
+        // Flatten other fields from maps.
+        let raw_routes: Vec<Route> = self.routes.into_values().collect();
+        let raw_shapes: Vec<Shape> = self.shapes.into_values().flatten().collect();
+        let raw_fare_attributes: Vec<FareAttribute> = self.fare_attributes.into_values().collect();
+        let raw_fare_rules: Vec<FareRule> = self.fare_rules.into_values().flatten().collect();
+        let raw_calendar: Vec<Calendar> = self.calendar.into_values().collect();
+        let raw_calendar_dates: Vec<CalendarDate> = self.calendar_dates.into_values().flatten().collect();
+
+        Ok(GtfsDataSet {
+            agencies: Ok(self.agencies),
+            stops: Ok(raw_stops),
+            routes: Ok(raw_routes),
+            trips: Ok(raw_trips),
+            stop_times: Ok(raw_stop_times),
+            calendar: Some(Ok(raw_calendar)),
+            calendar_dates: Some(Ok(raw_calendar_dates)),
+            shapes: Some(Ok(raw_shapes)),
+            fare_attributes: Some(Ok(raw_fare_attributes)),
+            fare_rules: Some(Ok(raw_fare_rules)),
+            frequencies: Some(Ok(raw_frequencies)),
+            transfers: Some(Ok(raw_transfers)),
+            pathways: Some(Ok(raw_pathways)),
+            feed_info: Some(Ok(self.feed_info)),
+            translations: None, // optional field not present
         })
     }
 }
@@ -101,7 +187,7 @@ fn to_stop_map(
     transfers: Vec<Transfer>,
     pathways: Vec<Pathway>,
 ) -> Result<HashMap<String, Arc<Stop>>, Error> {
-    let mut stop_map: HashMap<String, Stop> = 
+    let mut stop_map: HashMap<String, Stop> =
         stops.into_iter().map(|s| (s.stop_id.clone(), s)).collect();
 
     for transfer in transfers {
@@ -133,10 +219,7 @@ fn to_stop_map(
 fn to_shape_map(shapes: Vec<Shape>) -> HashMap<String, Vec<Shape>> {
     let mut res = HashMap::default();
     for s in shapes {
-        let shape = 
-            res
-                .entry(s.shape_id.to_owned())
-                .or_insert_with(Vec::new);
+        let shape = res.entry(s.shape_id.to_owned()).or_insert_with(Vec::new);
         shape.push(s);
     }
     for shapes in res.values_mut() {

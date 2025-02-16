@@ -1,20 +1,28 @@
 use geo_types::Polygon;
-use petgraph::{Graph, Directed, graph::NodeIndex};
+use petgraph::{graph::NodeIndex, Directed, Graph};
 use rstar::{RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, str::FromStr};
 use wkt::Wkt;
 
 // Layer 1 - Data structure describing grid network and O-D matrix data
+#[derive(Deserialize, Serialize)]
 pub struct GridNetwork {
     /// Allows for spatial querying of zones (nodes)
-    rtree: RTree<RTreeNode>,
+    pub rtree: RTree<RTreeNode>,
     /// Allows for relations between zones (if needed) e.g. travel demand between 2 zones
-    graph: Graph<Zone, Link>,
+    pub graph: Graph<Zone, Link>,
 }
 
 impl GridNetwork {
-    pub fn load(dbname: &str) -> Result<Arc<GridNetwork>> {
+    pub fn print_stats(&self) {
+        println!("Grid network:");
+        println!("  Zones: {}", self.graph.node_count());
+        println!("  Links: {}", self.graph.edge_count());
+    }
+
+    pub fn load(dbname: &str) -> Result<GridNetwork> {
         let conn = Connection::open(dbname)?;
 
         let links = read_links(&conn)?;
@@ -42,27 +50,53 @@ impl GridNetwork {
             }
         }
 
-        Ok(Arc::new(GridNetwork {
+        Ok(GridNetwork {
             rtree: rtree,
             graph: graph,
-        }))
+        })
+    }
+
+    pub fn find_nearest_zone(&self, x: f64, y: f64) -> Option<NodeIndex> {
+        let point = [x, y];
+        let nearest = self.rtree.locate_at_point(&point).unwrap();
+        Some(nearest.node_index)
+    }
+
+    pub fn demand_between_zones(&self, from: NodeIndex, to: NodeIndex) -> f64 {
+        let link = self.graph.find_edge(from, to).unwrap();
+        self.graph[link].weight
+    }
+
+    pub fn demand_between_coords(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
+        let from = self.find_nearest_zone(x1, y1).unwrap();
+        let to = self.find_nearest_zone(x2, y2).unwrap();
+        self.demand_between_zones(from, to)
     }
 }
 
-struct Link {
-    origid: u32,
-    destid: u32,
-    weight: f64,
+#[derive(Deserialize, Serialize)]
+pub struct Link {
+    pub origid: u32,
+    pub destid: u32,
+    pub weight: f64,
 }
 
-struct Zone {
-    zoneid: u32,
-    polygon: Polygon<f64>,
+#[derive(Deserialize, Serialize)]
+pub struct Zone {
+    pub zoneid: u32,
+    pub polygon: Polygon<f64>,
 }
 
-struct RTreeNode {
+#[derive(Deserialize, Serialize)]
+pub struct RTreeNode {
     envelope: AABB<[f64; 2]>,
     node_index: NodeIndex,
+}
+
+impl rstar::PointDistance for RTreeNode {
+    fn distance_2(&self, point: &[f64; 2]) -> f64 {
+        self.envelope.distance_2(point)
+    }
 }
 
 impl RTreeObject for RTreeNode {
@@ -111,7 +145,7 @@ fn read_links(conn: &Connection) -> Result<Vec<Link>> {
 }
 
 fn read_zones(conn: &Connection) -> Result<Vec<Zone>> {
-    let mut stmt = conn.prepare("SELECT zoneid, geom FROM zones")?;
+    let mut stmt = conn.prepare("SELECT zoneid, geom FROM zone")?;
     let zone_iter = stmt.query_map(params![], |row| {
         let wkt_str: String = row.get(1)?;
         let wkt = Wkt::from_str(&wkt_str).unwrap();
