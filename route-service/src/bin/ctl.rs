@@ -91,11 +91,30 @@ fn main() {
     let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);
     output_routes_geojson(&transit, &gtfs, &road, &before_path);
 
-    return
-
     println!("Initializing ACO");
     let mut aco = ACO::init();
     aco.print_stats();
+
+    // Optimize one route
+    let target_route = transit
+        .routes
+        .iter()
+        .filter(|r| r.route_id == "73485")
+        .next()
+        .unwrap();
+
+    let start = Instant::now();
+    let optimized_route = aco.optimize_route(&grid, &road, &transit, target_route);
+    let optimized_route = optimized_route.unwrap().0;
+    println!("  ACO finished in {:?}", start.elapsed());
+
+    transit.routes = vec![optimized_route];
+    transit.print_stats();
+
+    let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
+    output_routes_geojson(&transit, &gtfs, &road, &solution_path);
+
+    return ();
 
     // Only consider target routes
     let target_routes = transit
