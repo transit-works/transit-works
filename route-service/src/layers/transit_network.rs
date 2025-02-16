@@ -5,6 +5,7 @@ use geo::{Distance, Haversine, Length, LineString};
 use geo_types::Point;
 use petgraph::graph::NodeIndex;
 use rstar::{Envelope, PointDistance, RTree, RTreeObject, AABB};
+use serde::{Deserialize, Serialize};
 
 use crate::gtfs::gtfs::Gtfs;
 use crate::gtfs::structs::{Route, RouteType, Shape, Stop, StopTime, Trip};
@@ -14,6 +15,7 @@ use super::geo_util;
 use super::road_network::RoadNetwork;
 
 // Layer 3 - Data structure describing the transit network
+#[derive(Deserialize, Serialize)]
 pub struct TransitNetwork {
     /// Set of all the transit routes in the network
     pub routes: Vec<TransitRoute>,
@@ -433,7 +435,7 @@ fn trip_is_outbound(trip: &Trip) -> bool {
     geo_util::is_outbound(a, b)
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Deserialize, Serialize)]
 pub struct TransitRoute {
     pub route_id: String,
     pub route_type: TransitRouteType,
@@ -441,7 +443,7 @@ pub struct TransitRoute {
     pub outbound_stops: Vec<Arc<TransitStop>>,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Deserialize, Serialize)]
 pub enum TransitRouteType {
     Tram,
     Subway,
@@ -497,7 +499,7 @@ fn is_intercity(trip: &Trip, road: &RoadNetwork) -> bool {
     false
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Deserialize, Serialize)]
 pub struct TransitStop {
     pub stop_id: String,
     pub geom: Point,
@@ -516,7 +518,7 @@ impl TransitStop {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Deserialize, Serialize)]
 pub struct RTreeNode {
     pub envelope: AABB<[f64; 2]>,
     pub stop: Arc<TransitStop>,

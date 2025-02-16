@@ -13,7 +13,7 @@ impl<T: Id> Id for Arc<T> {
 
 /// Agency representing a public transit operator.
 /// https://gtfs.org/documentation/schedule/reference/#agencytxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Agency {
     pub agency_id: Option<String>,
     pub agency_name: String,
@@ -36,7 +36,7 @@ impl Id for Agency {
 
 /// A physical stop, station, or area.
 /// https://gtfs.org/documentation/schedule/reference/#stopstxt
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Stop {
     pub stop_id: String,
     pub stop_code: Option<String>,
@@ -244,7 +244,7 @@ pub enum Timepoint {
 
 /// Weekly schedule of service.
 /// https://gtfs.org/documentation/schedule/reference/#calendartxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Calendar {
     pub service_id: String,
     pub monday: i16,
@@ -266,7 +266,7 @@ impl Id for Calendar {
 
 /// Exceptions for the schedule of a service.
 /// https://gtfs.org/documentation/schedule/reference/#calendar_datestxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CalendarDate {
     pub service_id: String,
     pub date: String,
@@ -284,7 +284,7 @@ pub enum ExceptionType {
 
 /// Represents a level in a station.
 /// https://gtfs.org/documentation/schedule/reference/#levelstxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Level {
     pub level_id: String,
     pub level_index: f64,
@@ -316,7 +316,7 @@ impl Id for Shape {
 
 /// Fare information for a route.
 /// https://gtfs.org/documentation/schedule/reference/#fare_attributestxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FareAttribute {
     pub fare_id: String,
     pub price: f64,
@@ -357,7 +357,7 @@ pub enum Transfers {
 
 /// Rules that define the application of fares to routes or zones.
 /// https://gtfs.org/documentation/schedule/reference/#fare_rulestxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FareRule {
     pub fare_id: String,
     pub route_id: Option<String>,
@@ -395,7 +395,7 @@ pub enum ExactTimes {
 
 /// Rules for making connections at transfer points between routes.
 /// https://gtfs.org/documentation/schedule/reference/#transferstxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Transfer {
     pub from_stop_id: String,
     pub to_stop_id: String,
@@ -418,7 +418,7 @@ pub enum TransferType {
 
 /// Pathways within stations to guide passengers between locations.
 /// https://gtfs.org/documentation/schedule/reference/#pathwaystxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Pathway {
     pub pathway_id: String,
     pub from_stop_id: String,
@@ -470,7 +470,7 @@ pub enum Directionality {
 
 /// Translations for customer-facing dataset fields.
 /// https://gtfs.org/documentation/schedule/reference/#translationstxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Translation {
     pub table_name: String,
     pub field_name: String,
@@ -483,7 +483,7 @@ pub struct Translation {
 
 /// Metadata about the feed, including version and publisher information.
 /// https://gtfs.org/documentation/schedule/reference/#feed_infotxt
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FeedInfo {
     pub feed_publisher_name: String,
     pub feed_publisher_url: String,

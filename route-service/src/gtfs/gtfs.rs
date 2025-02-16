@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-#[derive(Default)]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[derive(Default, Clone)]
 pub struct Gtfs {
     /// Calendar by `service_id`
     pub calendar: HashMap<String, Calendar>,
@@ -28,6 +30,26 @@ pub struct Gtfs {
     pub fare_rules: HashMap<String, Vec<FareRule>>,
     /// All feed info
     pub feed_info: Vec<FeedInfo>,
+}
+
+impl Serialize for Gtfs {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let gtfs_dataset: GtfsDataSet = (*self).clone().try_into().map_err(serde::ser::Error::custom)?;
+        gtfs_dataset.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Gtfs {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let gtfs_dataset = GtfsDataSet::deserialize(deserializer)?;
+        Gtfs::try_from(gtfs_dataset).map_err(serde::de::Error::custom)
+    }
 }
 
 impl Gtfs {
@@ -91,6 +113,64 @@ impl TryFrom<GtfsDataSet> for Gtfs {
             calendar_dates: to_calendar_dates(
                 raw.calendar_dates.unwrap_or_else(|| Ok(Vec::new()))?,
             ),
+        })
+    }
+}
+
+impl TryInto<GtfsDataSet> for Gtfs {
+    type Error = Error;
+    /// Tries to convert a [Gtfs] into a [GtfsDataSet]
+    fn try_into(self) -> Result<GtfsDataSet, Error> {
+        // Reconstruct stops and extract transfers and pathways from each stop.
+        let mut raw_transfers = Vec::new();
+        let mut raw_pathways = Vec::new();
+        let raw_stops: Vec<Stop> = self.stops
+            .into_values()
+            .map(|arc_stop| {
+                // Clone the stop since the Arc is referenced in many places.
+                let mut stop = (*arc_stop).clone();
+                raw_transfers.extend(stop.transfers.drain(0..));
+                raw_pathways.extend(stop.pathways.drain(0..));
+                stop
+            })
+            .collect();
+
+        // Extract trips along with their stop_times and frequencies.
+        let mut raw_stop_times = Vec::new();
+        let mut raw_frequencies = Vec::new();
+        let mut raw_trips = Vec::new();
+        for trip_list in self.trips.into_values() {
+            for mut trip in trip_list {
+                raw_stop_times.append(&mut trip.stop_times);
+                raw_frequencies.append(&mut trip.frequencies);
+                raw_trips.push(trip);
+            }
+        }
+
+        // Flatten other fields from maps.
+        let raw_routes: Vec<Route> = self.routes.into_values().collect();
+        let raw_shapes: Vec<Shape> = self.shapes.into_values().flatten().collect();
+        let raw_fare_attributes: Vec<FareAttribute> = self.fare_attributes.into_values().collect();
+        let raw_fare_rules: Vec<FareRule> = self.fare_rules.into_values().flatten().collect();
+        let raw_calendar: Vec<Calendar> = self.calendar.into_values().collect();
+        let raw_calendar_dates: Vec<CalendarDate> = self.calendar_dates.into_values().flatten().collect();
+
+        Ok(GtfsDataSet {
+            agencies: Ok(self.agencies),
+            stops: Ok(raw_stops),
+            routes: Ok(raw_routes),
+            trips: Ok(raw_trips),
+            stop_times: Ok(raw_stop_times),
+            calendar: Some(Ok(raw_calendar)),
+            calendar_dates: Some(Ok(raw_calendar_dates)),
+            shapes: Some(Ok(raw_shapes)),
+            fare_attributes: Some(Ok(raw_fare_attributes)),
+            fare_rules: Some(Ok(raw_fare_rules)),
+            frequencies: Some(Ok(raw_frequencies)),
+            transfers: Some(Ok(raw_transfers)),
+            pathways: Some(Ok(raw_pathways)),
+            feed_info: Some(Ok(self.feed_info)),
+            translations: None, // optional field not present
         })
     }
 }

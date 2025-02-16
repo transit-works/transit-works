@@ -1,19 +1,19 @@
-use geo::{algorithm::Length, BoundingRect, Distance, Haversine};
+use geo::{algorithm::Length, Distance, Haversine};
 use geo_types::{LineString, Point};
 use petgraph::{algo::astar, graph::NodeIndex, prelude::EdgeIndex, Directed, Graph};
 use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, str::FromStr};
 use wkt::Wkt;
 
 use super::geo_util;
 
 // Layer 2 - Graph data strcture to store the nodes and edges of a city street network
+#[derive(Deserialize, Serialize)]
 pub struct RoadNetwork {
     /// Allows for spatial querying of intersection (nodes)
     rtree_nodes: RTree<RTreeNode>,
-    /// Allows for spatial querying of edges
-    rtree_edges: RTree<RTreeEdge>,
     /// Allows for relational querying of intersection connectons (nodes) via roads (edges)
     graph: Graph<Node, Edge>,
 }
@@ -29,14 +29,13 @@ impl RoadNetwork {
         &self.graph[node_index]
     }
 
-    pub fn load(dbname: &str) -> Result<Arc<RoadNetwork>> {
+    pub fn load(dbname: &str) -> Result<RoadNetwork> {
         let conn = Connection::open(dbname)?;
 
         let nodes = read_nodes(&conn)?;
         let edges = read_edges(&conn)?;
 
         let mut rtree_nodes = RTree::<RTreeNode>::new();
-        let mut rtree_edges = RTree::<RTreeEdge>::new();
         let mut graph = Graph::<Node, Edge, Directed>::new();
         let mut node_map = HashMap::<u64, NodeIndex>::new();
 
@@ -54,20 +53,14 @@ impl RoadNetwork {
             if let (Some(&from_node), Some(&to_node)) =
                 (node_map.get(&edge.u), node_map.get(&edge.v))
             {
-                let edge_index = graph.add_edge(from_node, to_node, edge);
-                let envelope = compute_edge_envelope(&graph[edge_index]);
-                rtree_edges.insert(RTreeEdge {
-                    envelope: envelope,
-                    edge_index: edge_index,
-                });
+                let _ = graph.add_edge(from_node, to_node, edge);
             }
         }
 
-        Ok(Arc::new(RoadNetwork {
+        Ok(RoadNetwork {
             rtree_nodes: rtree_nodes,
-            rtree_edges: rtree_edges,
             graph: graph,
-        }))
+        })
     }
 
     pub fn find_nearest_node(&self, x: f64, y: f64) -> Option<NodeIndex> {
@@ -91,24 +84,6 @@ impl RoadNetwork {
             a_dist.partial_cmp(&b_dist).unwrap()
         });
         nearest_nodes
-    }
-
-    fn find_nearest_edge(&self, x: f64, y: f64) -> Option<EdgeIndex> {
-        let mut nearest_dist = f64::INFINITY;
-        let mut nearest_edge = None;
-
-        let envelope = geo_util::compute_envelope(y, x, 100.0);
-        let point = Point::new(x, y);
-        for candidate in self.rtree_edges.locate_in_envelope_intersecting(&envelope) {
-            let edge = &self.graph[candidate.edge_index];
-            let dist = edge.geom.distance_2(&point);
-            if dist < nearest_dist {
-                nearest_dist = dist;
-                nearest_edge = Some(candidate.edge_index);
-            }
-        }
-
-        nearest_edge
     }
 
     fn get_road_distance_coords(
@@ -148,12 +123,14 @@ impl RoadNetwork {
     }
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct Node {
     fid: u64,
     pub geom: Point,
     osmid: u64,
 }
 
+#[derive(Deserialize, Serialize)]
 struct RTreeNode {
     envelope: AABB<[f64; 2]>,
     node_index: NodeIndex,
@@ -179,27 +156,7 @@ fn compute_node_envelope(point: &Point<f64>) -> AABB<[f64; 2]> {
     return AABB::from_point(point.x_y().into());
 }
 
-struct RTreeEdge {
-    envelope: AABB<[f64; 2]>,
-    edge_index: EdgeIndex,
-}
-
-impl RTreeObject for RTreeEdge {
-    type Envelope = AABB<[f64; 2]>;
-    fn envelope(&self) -> Self::Envelope {
-        self.envelope
-    }
-}
-
-fn compute_edge_envelope(edge: &Edge) -> AABB<[f64; 2]> {
-    let rect = edge.geom.bounding_rect().unwrap();
-    let min_x = rect.min().x;
-    let min_y = rect.min().y;
-    let max_x = rect.max().x;
-    let max_y = rect.max().y;
-    AABB::from_corners([min_x, min_y], [max_x, max_y])
-}
-
+#[derive(Deserialize, Serialize)]
 struct Edge {
     fid: u64,
     geom: LineString,

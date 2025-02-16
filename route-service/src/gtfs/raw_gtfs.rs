@@ -3,11 +3,12 @@ use crate::gtfs::structs::*;
 
 use csv::StringRecord;
 use rusqlite::{params, Connection};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{fs::File, io::Read, path::Path};
 
 /// GTFS dataset
 /// https://gtfs.org/documentation/schedule/reference/#dataset-files
+#[derive(Serialize, Deserialize)]
 pub struct GtfsDataSet {
     pub agencies: Result<Vec<Agency>, Error>,
     pub stops: Result<Vec<Stop>, Error>,

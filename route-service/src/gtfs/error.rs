@@ -1,3 +1,4 @@
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 /// An error that can occur when processing GTFS data.
@@ -43,8 +44,30 @@ pub enum Error {
     SqliteError(#[from] rusqlite::Error),
 }
 
+impl Serialize for Error {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Error {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Err(serde::de::Error::custom(format!(
+            "cannot deserialize Error: {}",
+            s
+        )))
+    }
+}
+
 /// Specific line from a CSV file that could not be read
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[allow(dead_code)]
 pub struct LineError {
     /// Headers of the CSV file

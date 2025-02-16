@@ -1,3 +1,4 @@
+pub mod city;
 pub mod error;
 pub mod geo_util;
 pub mod grid;

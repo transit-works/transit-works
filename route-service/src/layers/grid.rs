@@ -2,10 +2,12 @@ use geo_types::Polygon;
 use petgraph::{graph::NodeIndex, Directed, Graph};
 use rstar::{RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, str::FromStr};
 use wkt::Wkt;
 
 // Layer 1 - Data structure describing grid network and O-D matrix data
+#[derive(Deserialize, Serialize)]
 pub struct GridNetwork {
     /// Allows for spatial querying of zones (nodes)
     pub rtree: RTree<RTreeNode>,
@@ -20,7 +22,7 @@ impl GridNetwork {
         println!("  Links: {}", self.graph.edge_count());
     }
 
-    pub fn load(dbname: &str) -> Result<Arc<GridNetwork>> {
+    pub fn load(dbname: &str) -> Result<GridNetwork> {
         let conn = Connection::open(dbname)?;
 
         let links = read_links(&conn)?;
@@ -48,10 +50,10 @@ impl GridNetwork {
             }
         }
 
-        Ok(Arc::new(GridNetwork {
+        Ok(GridNetwork {
             rtree: rtree,
             graph: graph,
-        }))
+        })
     }
 
     pub fn find_nearest_zone(&self, x: f64, y: f64) -> Option<NodeIndex> {
@@ -72,17 +74,20 @@ impl GridNetwork {
     }
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct Link {
     pub origid: u32,
     pub destid: u32,
     pub weight: f64,
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct Zone {
     pub zoneid: u32,
     pub polygon: Polygon<f64>,
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct RTreeNode {
     envelope: AABB<[f64; 2]>,
     node_index: NodeIndex,
