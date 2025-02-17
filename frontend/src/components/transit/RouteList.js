@@ -1,16 +1,14 @@
 function RouteList({ data, selectedRoute, setSelectedRoute }) {
   const handleClick = (id) => {
-    setSelectedRoute((prevSelectedRoute) =>
-      prevSelectedRoute === id ? null : id
-    );
+    setSelectedRoute((prevSelectedRoute) => (prevSelectedRoute === id ? null : id));
   };
 
   return (
     <div>
-      <div className="flex flex-row sticky top-0 bg-background-dk py-1">
+      <div className="sticky top-0 flex flex-row bg-background-dk py-1">
         {/* Heading with a bottom border */}
-        <h2 className="text-white text-md font-heading w-16">Route</h2>
-        <h2 className="text-white text-md font-heading ml-2">Route Name</h2>
+        <h2 className="text-md w-16 font-heading text-white">Route</h2>
+        <h2 className="text-md ml-2 font-heading text-white">Route Name</h2>
       </div>
       {data?.features
         ?.filter((feature) => feature.geometry.type !== 'Point')
@@ -19,22 +17,20 @@ function RouteList({ data, selectedRoute, setSelectedRoute }) {
           const isSelected = selectedRoute === route_id;
 
           return (
-            <div key={route_id} className="flex items-center w-full text-left">
-              {isSelected && (
-                <div className="w-2 h-2 mt-1 bg-accent-1 rounded-full mr-2" />
-              )}
+            <div key={route_id} className="flex w-full items-center text-left">
+              {isSelected && <div className="mr-2 mt-1 h-2 w-2 rounded-full bg-accent-1" />}
               <button
                 type="button"
                 onClick={() => handleClick(route_id)}
                 aria-pressed={isSelected}
                 title={route_long_name} // Tooltip for the full route name
-                className={`text-white text-xs text-left pt-1 hover:text-accent-1 hover:cursor-pointer w-full`}
+                className="w-full pt-1 text-left text-xs text-white hover:cursor-pointer hover:text-accent-1"
               >
-                <div className="flex items-center w-full">
-                  <span className="inline-block w-16 whitespace-nowrap overflow-hidden text-ellipsis flex-shrink-0">
+                <div className="flex w-full items-center">
+                  <span className="inline-block w-16 flex-shrink-0 overflow-hidden text-ellipsis whitespace-nowrap">
                     {route_short_name}
                   </span>
-                  <span className="ml-2 whitespace-nowrap overflow-hidden text-ellipsis flex-grow">
+                  <span className="ml-2 flex-grow overflow-hidden text-ellipsis whitespace-nowrap">
                     {route_long_name}
                   </span>
                 </div>
@@ -42,9 +38,7 @@ function RouteList({ data, selectedRoute, setSelectedRoute }) {
             </div>
           );
         })}
-      {(data?.features?.length === 0) && (
-        <p className="text-white p-2">No routes available</p>
-      )}
+      {data?.features?.length === 0 && <p className="p-2 text-white">No routes available</p>}
     </div>
   );
 }

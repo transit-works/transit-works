@@ -20,15 +20,15 @@ export default function ProgressBar({ percentage, name, startColor, endColor }) 
     <div
       className="flex flex-col items-center justify-center"
       style={{
-        width: '100%',  // Container takes full width of the parent
+        width: '100%', // Container takes full width of the parent
         height: '100%', // Container takes full height of the parent
         maxWidth: `${width + 40}px`, // Set a maximum size for responsiveness
         maxHeight: `${height + 40}px`,
       }}
     >
-      <h2 className="font-medium text-xs pt-1 text-white self-start">{name}</h2>
+      <h2 className="self-start pt-1 text-xs font-medium text-white">{name}</h2>
       <svg
-        width="100%"  // Makes the SVG width responsive
+        width="100%" // Makes the SVG width responsive
         height="100%" // Makes the SVG height responsive
         viewBox={`0 0 ${width + 20} ${height + 20}`}
         version="1.1"

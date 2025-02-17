@@ -23,24 +23,13 @@ const colorScale = scaleOrdinal({
   range: [blue, green],
 });
 
-export default function MultiBarChart({
-                                        width,
-                                        height,
-                                        events = false,
-                                        margin = defaultMargin,
-                                      }) {
+export default function MultiBarChart({ width, height, events = false, margin = defaultMargin }) {
   const [data, setData] = useState([]);
   const [keys, setKeys] = useState([]);
   const containerRef = useRef(null); // Initialize containerRef
 
-  const {
-    tooltipOpen,
-    tooltipLeft,
-    tooltipTop,
-    tooltipData,
-    hideTooltip,
-    showTooltip,
-  } = useTooltip();
+  const { tooltipOpen, tooltipLeft, tooltipTop, tooltipData, hideTooltip, showTooltip } =
+    useTooltip();
 
   useEffect(() => {
     async function fetchData() {
@@ -70,10 +59,7 @@ export default function MultiBarChart({
     padding: 0.1,
   });
   const valueScale = scaleLinear({
-    domain: [
-      0,
-      Math.max(...data.map((d) => Math.max(...keys.map((key) => d[key])))),
-    ],
+    domain: [0, Math.max(...data.map((d) => Math.max(...keys.map((key) => d[key]))))],
   });
 
   nameScale.rangeRound([margin.left, width - margin.right]);
@@ -109,10 +95,7 @@ export default function MultiBarChart({
           >
             {(barGroups) =>
               barGroups.map((barGroup) => (
-                <Group
-                  key={`bar-group-${barGroup.index}-${barGroup.x0}`}
-                  left={barGroup.x0}
-                >
+                <Group key={`bar-group-${barGroup.index}-${barGroup.x0}`} left={barGroup.x0}>
                   {barGroup.bars.map((bar, index) => (
                     <rect
                       key={`bar-group-bar-${barGroup.index}-${bar.index}-${bar.value}-${bar.key}`}

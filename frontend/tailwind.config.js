@@ -1,32 +1,32 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
       boxShadow: {
-        'bubble': '0 5px 10px rgba(0, 0, 0, 0.15), 0 10px 20px rgba(0, 0, 0, 0.1)',
+        bubble: '0 5px 10px rgba(0, 0, 0, 0.15), 0 10px 20px rgba(0, 0, 0, 0.1)',
       },
       colors: {
         'accent-1': '#ff1643',
         'accent-2': '#9beb34',
         // Custom Colors
-        'background': '#f5f5f0',
+        background: '#f5f5f0',
         'background-dk': '#060606',
-        'text': '#f2e0e0',
+        text: '#f2e0e0',
         'text-2': '#d1b99e',
-        'primary': '#ca2848',
-        'secondary': '#775631',
-        'accent': "#c4a76e",
+        primary: '#ca2848',
+        secondary: '#775631',
+        accent: '#c4a76e',
       },
       fontFamily: {
-        'heading': ["Fjalla One", "sans-serif"],
-        'body': ["Poppins", "sans-serif"],
-        'logo': ["Staatliches", 'sans-serif'],
-      }
+        heading: ['Fjalla One', 'sans-serif'],
+        body: ['Poppins', 'sans-serif'],
+        logo: ['Staatliches', 'sans-serif'],
+      },
     },
   },
   plugins: [
@@ -50,10 +50,10 @@ module.exports = {
           'scrollbar-color': '#444444 #1a1a1a',
         },
         '.scrollbar-hidden': {
-          'overflow': 'hidden',
+          overflow: 'hidden',
         },
         '.scrollbar-auto': {
-          'overflow': 'auto',
+          overflow: 'auto',
         },
       });
     },

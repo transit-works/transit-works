@@ -1,4 +1,4 @@
-"use client"
+'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { Map, NavigationControl, Popup, useControl } from 'react-map-gl/maplibre';
@@ -14,7 +14,7 @@ const INITIAL_VIEW_STATE = {
   bearing: 0,
 };
 
-const MAP_STYLE = "/styles/dark_matter.json";
+const MAP_STYLE = '/styles/dark_matter.json';
 
 function DeckGLOverlay(props) {
   const overlay = useControl(() => new DeckOverlay(props));
@@ -45,10 +45,14 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
 
   const onClick = (info) => {
     if (info && info.object) {
-      const {type} = info.object.geometry;
+      const { type } = info.object.geometry;
 
-      if (type !== "Point") {
-        setSelectedRoute(prevSelectedRoute => (prevSelectedRoute === info.object.properties.route_id ? null : info.object.properties.route_id));
+      if (type !== 'Point') {
+        setSelectedRoute((prevSelectedRoute) =>
+          prevSelectedRoute === info.object.properties.route_id
+            ? null
+            : info.object.properties.route_id,
+        );
       }
 
       setPopupInfo({
@@ -59,48 +63,65 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
     }
   };
 
-  const renderPopup = () => (
-      popupInfo && (
-          <Popup
-              tipSize={3}
-              anchor="top"
-              longitude={popupInfo.coordinates[0]}
-              latitude={popupInfo.coordinates[1]}
-              closeOnClick={false}
-              onClose={() => setPopupInfo(null)}
-              style={{ zIndex: 10 }}
-          >
-            <div>
-              <p className="text-background text-wrap">
-                {(popupInfo.type === "Point") ? <div>
-                  <h4 className="text-background text-2xl text-center">Stop Information</h4>
-                  <p><b>ID:</b> {popupInfo.properties.stop_id}</p>
-                  <p><b>Name: </b>{popupInfo.properties.stop_name}</p>
-                </div> : <div>
-                  <h4 className="text-background text-2xl text-center">Route Information</h4>
-                  <p><b>Route ID: </b>{popupInfo.properties.route_id}</p>
-                  <p><b>Name: </b>{popupInfo.properties.route_long_name}</p>
-                  <p><b>Route type: </b>{popupInfo.properties.route_type}</p>
-                </div>}
-              </p>
-            </div>
-          </Popup>
-      )
-  );
+  const renderPopup = () =>
+    popupInfo && (
+      <Popup
+        tipSize={3}
+        anchor="top"
+        longitude={popupInfo.coordinates[0]}
+        latitude={popupInfo.coordinates[1]}
+        closeOnClick={false}
+        onClose={() => setPopupInfo(null)}
+        style={{ zIndex: 10 }}
+      >
+        <div>
+          <p className="text-wrap text-background">
+            {popupInfo.type === 'Point' ? (
+              <div>
+                <h4 className="text-center text-2xl text-background">Stop Information</h4>
+                <p>
+                  <b>ID:</b> {popupInfo.properties.stop_id}
+                </p>
+                <p>
+                  <b>Name: </b>
+                  {popupInfo.properties.stop_name}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <h4 className="text-center text-2xl text-background">Route Information</h4>
+                <p>
+                  <b>Route ID: </b>
+                  {popupInfo.properties.route_id}
+                </p>
+                <p>
+                  <b>Name: </b>
+                  {popupInfo.properties.route_long_name}
+                </p>
+                <p>
+                  <b>Route type: </b>
+                  {popupInfo.properties.route_type}
+                </p>
+              </div>
+            )}
+          </p>
+        </div>
+      </Popup>
+    );
 
   // Display the selectedd route and its stops
   const selectedRouteObject = selectedRoute
-      ? data.features.find(feature => feature.properties.route_id === selectedRoute)
-      : null;
+    ? data.features.find((feature) => feature.properties.route_id === selectedRoute)
+    : null;
   const filteredData = selectedRouteObject
     ? {
         ...data,
         features: data.features.filter(
-          feature =>
+          (feature) =>
             feature.properties.route_id === selectedRoute ||
             (feature.properties.stop_id &&
               selectedRouteObject.properties.route_stops &&
-              selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
+              selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id)),
         ),
       }
     : data;
@@ -123,21 +144,21 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
       pickable: true,
       autoHighlight: true,
       onClick,
-      beforeId: 'watername_ocean' // In interleaved mode, render the layer under map labels
-    })
+      beforeId: 'watername_ocean', // In interleaved mode, render the layer under map labels
+    }),
   ];
 
   return (
-      <Map
-          ref={mapRef} // Assign the map instance to ref
-          initialViewState={INITIAL_VIEW_STATE}
-          mapStyle={MAP_STYLE}
-          onLoad={handleMapLoad}
-      >
-        <DeckGLOverlay layers={layers} />
-        <NavigationControl position="top-right" />
-        {renderPopup()}
-      </Map>
+    <Map
+      ref={mapRef} // Assign the map instance to ref
+      initialViewState={INITIAL_VIEW_STATE}
+      mapStyle={MAP_STYLE}
+      onLoad={handleMapLoad}
+    >
+      <DeckGLOverlay layers={layers} />
+      <NavigationControl position="top-right" />
+      {renderPopup()}
+    </Map>
   );
 }
 

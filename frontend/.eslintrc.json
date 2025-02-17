@@ -1,10 +1,5 @@
 {
-  "extends": [
-    "next/core-web-vitals",
-    "airbnb",
-    "airbnb/hooks",
-    "prettier"
-  ],
+  "extends": ["next/core-web-vitals", "airbnb", "airbnb/hooks", "prettier"],
   "rules": {
     // suppress errors for missing 'import React' in files
     "react/react-in-jsx-scope": "off",
