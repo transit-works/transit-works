@@ -8,32 +8,32 @@ export default function ProgressDial({ percentage, name }) {
   // Determine color based on percentage
   let color;
   if (percentage === 0) {
-    color = "#555555"
+    color = '#555555';
   } else if (percentage < 33) {
-    color = "#fd4861"; // Red
+    color = '#fd4861'; // Red
   } else if (percentage < 66) {
-    color = "#ffd700"; // Yellow
+    color = '#ffd700'; // Yellow
   } else {
-    color = "#9beb34"; // Green
+    color = '#9beb34'; // Green
   }
 
   let percentageStr = percentage.toString();
   if (percentageStr.length == 1) {
-    percentageStr = `0${  percentageStr}`;
+    percentageStr = `0${percentageStr}`;
   }
 
   return (
     <div
       className="flex flex-col items-center justify-center"
       style={{
-        width: '100%',  // Makes the container take full width of the parent
+        width: '100%', // Makes the container take full width of the parent
         height: '100%', // Makes the container take full height of the parent
         maxWidth: `${size + 40}px`, // Set a maximum size for responsiveness
         maxHeight: `${size + 40}px`,
       }}
     >
       <svg
-        width="100%"  // Makes the SVG width responsive
+        width="100%" // Makes the SVG width responsive
         height="100%" // Makes the SVG height responsive
         viewBox="-25 -25 250 250"
         version="1.1"
@@ -77,7 +77,7 @@ export default function ProgressDial({ percentage, name }) {
           {percentageStr}
         </text>
       </svg>
-      <h2 className="font-medium text-xs pt-1 text-white">{name}</h2>
+      <h2 className="pt-1 text-xs font-medium text-white">{name}</h2>
     </div>
   );
 }

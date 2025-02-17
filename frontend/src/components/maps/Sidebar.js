@@ -18,17 +18,15 @@ function Sidebar({ data, selectedRoute, setSelectedRoute }) {
   };
 
   return (
-    <div className="flex flex-col relative h-screen">
+    <div className="relative flex h-screen flex-col">
       {/* Sidebar Section */}
-      <div
-        className={`flex flex-col h-full p-3 transition-all duration-300 bg-background-light`}
-      >
+      <div className="bg-background-light flex h-full flex-col p-3 transition-all duration-300">
         {/* Expand Button */}
-        <div className="flex flex-row items-center justify-between pl-2 pb-3 pt-1">
-          <h2 className="text-xl font-heading leading-none text-white">Toronto</h2>
+        <div className="flex flex-row items-center justify-between pb-3 pl-2 pt-1">
+          <h2 className="font-heading text-xl leading-none text-white">Toronto</h2>
           <button
             onClick={toggleSidebar}
-            className="px-2 text-right hover:text-accent text-white font-body text-xs leading-none"
+            className="px-2 text-right font-body text-xs leading-none text-white hover:text-accent"
           >
             {isExpanded ? '< Close Details' : 'View Details >'}
           </button>
@@ -36,10 +34,10 @@ function Sidebar({ data, selectedRoute, setSelectedRoute }) {
 
         {/* Progress Dial Section */}
         <div className="grid grid-cols-2 gap-2">
-          <div className="bg-background-dk border-zinc-800 border rounded-2xl py-2">
+          <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
             <ProgressDial percentage={68} name="Transit Score" />
           </div>
-          <div className="bg-background-dk border-zinc-800 border rounded-2xl py-2">
+          <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
             <ProgressDial percentage={77} name="Economic Score" />
           </div>
         </div>
@@ -48,14 +46,20 @@ function Sidebar({ data, selectedRoute, setSelectedRoute }) {
         <MiniTable />
 
         {/* Routes Section */}
-        <div
-          className="px-2 pb-2 my-2 bg-background-dk border-zinc-800 border rounded-2xl custom-scrollbar custom-scrollbar-container overflow-y-auto max-h-[calc(100vh-200px)]">
-          <RouteList data={data} selectedRoute={selectedRoute} setSelectedRoute={setSelectedRoute} />
+        <div className="custom-scrollbar-container my-2 max-h-[calc(100vh-200px)] overflow-y-auto rounded-2xl border border-zinc-800 bg-background-dk px-2 pb-2 custom-scrollbar">
+          <RouteList
+            data={data}
+            selectedRoute={selectedRoute}
+            setSelectedRoute={setSelectedRoute}
+          />
         </div>
 
         {/* Buttons at the Bottom */}
-        <ImageButton text="Optimize" imageSrc="/assets/icons/speed.png"
-                     onClick={() => console.log("New button clicked")} />
+        <ImageButton
+          text="Optimize"
+          imageSrc="/assets/icons/speed.png"
+          onClick={() => console.log('New button clicked')}
+        />
         <div className="flex justify-around pt-2">
           <Link href="/" className="w-full pr-1" passHref>
             <ImageButton text="Home" imageSrc="/assets/icons/home.png" altText="Home icon" />
@@ -65,7 +69,7 @@ function Sidebar({ data, selectedRoute, setSelectedRoute }) {
               text="New"
               imageSrc="/assets/icons/earth.png"
               altText="Earth Icon"
-              onClick={() => console.log("New button clicked")}
+              onClick={() => console.log('New button clicked')}
             />
           </Link>
         </div>

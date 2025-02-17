@@ -28,7 +28,7 @@ function ReactGlobe() {
   }, []);
 
   return (
-    <div className="flex justify-center align-middle  ">
+    <div className="flex justify-center align-middle">
       <Globe
         ref={globeRef}
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" // Custom Earth texture

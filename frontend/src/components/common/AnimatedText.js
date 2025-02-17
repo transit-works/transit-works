@@ -20,7 +20,7 @@ function AnimatedText({ text }) {
 
   return (
     <motion.h1
-      className="font-logo text-9xl text-transparent bg-gradient-to-r from-indigo-600 to-purple-500 bg-clip-text relative bubble-shadow"
+      className="bubble-shadow relative bg-gradient-to-r from-indigo-600 to-purple-500 bg-clip-text font-logo text-9xl text-transparent"
       initial="initial"
       animate="animate"
       variants={textVariants}

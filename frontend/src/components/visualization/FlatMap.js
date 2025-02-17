@@ -26,7 +26,7 @@ export default function FlatMap({ events = false }) {
       'Germany',
       'Netherlands',
     ],
-    []
+    [],
   );
 
   const colors = {
@@ -51,7 +51,7 @@ export default function FlatMap({ events = false }) {
       { name: 'Amsterdam', coordinates: [4.9041, 52.3676], country: 'Netherlands' },
       { name: 'Madrid', coordinates: [-3.7038, 40.4168], country: 'Spain' },
     ],
-    []
+    [],
   );
 
   // Fetch world topology data
@@ -102,12 +102,12 @@ export default function FlatMap({ events = false }) {
   return (
     <div className="flex flex-col items-center">
       {/* Chips */}
-      <div className="flex flex-wrap justify-center gap-2 px-6 mb-4">
+      <div className="mb-4 flex flex-wrap justify-center gap-2 px-6">
         {cityCoordinates.map((city) => (
           <button
             key={city.name}
             onClick={() => handleCityClick(city)}
-            className={`px-4 py-2 rounded-full shadow-lg ${
+            className={`rounded-full px-4 py-2 shadow-lg ${
               selectedCity?.name === city.name ? 'bg-red-600 text-white' : 'bg-zinc-800 text-white'
             } hover:bg-gray-600`}
           >
@@ -117,7 +117,7 @@ export default function FlatMap({ events = false }) {
       </div>
 
       {/* Map */}
-      <svg width={width} height={height} className="m-36 mt-0 pointer-events-none">
+      <svg width={width} height={height} className="pointer-events-none m-36 mt-0">
         <rect x={0} y={0} width={width} height={height} fill={background} rx={14} />
         <Mercator data={world.features} scale={scale} translate={[centerX, centerY + 50]}>
           {(mercator) => (
@@ -147,7 +147,7 @@ export default function FlatMap({ events = false }) {
                     stroke="#000000"
                     strokeWidth={1}
                     onClick={() => handleCityClick(city)}
-                    className="cursor-pointer pointer-events-auto"
+                    className="pointer-events-auto cursor-pointer"
                   />
                 );
               })}
@@ -157,25 +157,24 @@ export default function FlatMap({ events = false }) {
       </svg>
 
       {/* Browse button */}
-      <div className="flex justify-center mt-4">
+      <div className="mt-4 flex justify-center">
         <button
           onClick={() => alert('Browse functionality coming soon!')}
-          className="bg-primary text-text font-body px-8 py-3 rounded shadow-lg hover:text-black hover:bg-white pointer-events-auto"
+          className="pointer-events-auto rounded bg-primary px-8 py-3 font-body text-text shadow-lg hover:bg-white hover:text-black"
         >
           Browse All
         </button>
       </div>
 
-
       {/* Popup */}
       {selectedCity && (
         <div
           ref={popupRef}
-          className="fixed top-1/2 left-2/3 w-1/6 h-1/3 bg-background-dk bg-opacity-30 backdrop-blur-lg p-5 rounded-lg shadow-lg z-10"
+          className="fixed left-2/3 top-1/2 z-10 h-1/3 w-1/6 rounded-lg bg-background-dk bg-opacity-30 p-5 shadow-lg backdrop-blur-lg"
         >
           <button
             onClick={() => setSelectedCity(null)}
-            className="absolute top-2 right-2 text-white text-lg font-bold"
+            className="absolute right-2 top-2 text-lg font-bold text-white"
           >
             &times;
           </button>

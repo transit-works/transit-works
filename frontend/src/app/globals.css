@@ -16,11 +16,7 @@
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
+  background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb)))
     rgb(var(--background-start-rgb));
 }
 
@@ -72,9 +68,10 @@ body {
 
 @layer utilities {
   .bubble-shadow {
-    text-shadow: 0 4px 6px rgba(0, 0, 0, 0.1),
-    0 8px 12px rgba(0, 0, 0, 0.11),
-    0 12px 20px rgba(0, 0, 0, 0.12);
+    text-shadow:
+      0 4px 6px rgba(0, 0, 0, 0.1),
+      0 8px 12px rgba(0, 0, 0, 0.11),
+      0 12px 20px rgba(0, 0, 0, 0.12);
   }
 }
 
