@@ -1,3 +1,4 @@
+use env_logger::init;
 use geo::{Distance, Haversine, Length, LineString, Point};
 use rand::{distributions::WeightedIndex, prelude::Distribution};
 use std::{
@@ -98,6 +99,7 @@ impl ACO {
         current: Arc<TransitStop>,
         end: Arc<TransitStop>,
         visited: &HashSet<String>,
+        route: Vec<Arc<TransitStop>>,
         od: &GridNetwork,
         road: &RoadNetwork,
         transit: &TransitNetwork,
@@ -160,10 +162,11 @@ impl ACO {
             let pheromone = pheromone
                 .get(&(from.clone(), to))
                 .unwrap_or(&INIT_PHEROMONE);
-            let heuristic = self.calculate_heuristic(current.clone(), stop.clone(), od, road);
+            let heuristic = self.calculate_heuristic(current.clone(), stop.clone(), route.clone(), od, road);
             assert_valid_f64(*pheromone, "pheromone");
             assert_valid_f64(heuristic, "heuristic");
             let probability = pheromone.powf(self.alpha) * heuristic.powf(self.beta);
+            log::debug!("probability : {}", probability);
             if probability == 0.0 {
                 continue;
             }
@@ -255,7 +258,7 @@ impl ACO {
             let (cx, cy) = curr.geom.x_y();
             let cid = curr.stop_id.clone();
             if let Some(next) =
-                self.select_next_stop(curr, end.clone(), &visited, od, road, transit, pheromone)
+                self.select_next_stop(curr, end.clone(), &visited, stops.clone(), od, road, transit, pheromone)
             {
                 let (nx, ny) = next.geom.x_y();
                 let (ex, ey) = end.geom.x_y();
@@ -338,6 +341,10 @@ impl ACO {
         for w in route.outbound_stops.windows(2) {
             let (fx, fy) = w[0].geom.x_y();
             let (tx, ty) = w[1].geom.x_y();
+
+            // if geo_util::haversine(fx, fy, tx, ty) <= 100.0{
+            //     continue;
+            // }
             passenger_demand +=
                 od.demand_between_coords(fx, fy, tx, ty) + od.demand_between_coords(tx, ty, fx, fy);
             length_route += w[0].road_distance(&w[1], road).0;
@@ -353,8 +360,8 @@ impl ACO {
         let nonlinear_coefficient = length_route / straight_line_distance;
 
         (
-            (passenger_demand + P) / (length_route * nonlinear_coefficient.min(1.5) + P),
-            nonlinear_coefficient.min(1.5),
+            (passenger_demand + P) / (length_route * nonlinear_coefficient + P),
+            nonlinear_coefficient,
         )
     }
 
@@ -376,6 +383,7 @@ impl ACO {
         &mut self,
         from: Arc<TransitStop>,
         to: Arc<TransitStop>,
+        stops: Vec<Arc<TransitStop>>,
         od: &GridNetwork,
         road: &RoadNetwork,
     ) -> f64 {
@@ -385,20 +393,35 @@ impl ACO {
         {
             return *heuristic;
         }
-        let (fx, fy) = from.geom.x_y();
-        let (tx, ty) = to.geom.x_y();
+        //let (fx, fy) = from.geom.x_y();
+        //let (tx, ty) = to.geom.x_y();
         // TODO should consider other existing routes and avoid canibalizing demand
         // figure out how to find number of routes that use this stop
-        let demand =
-            od.demand_between_coords(fx, fy, tx, ty) + od.demand_between_coords(tx, ty, fx, fy);
-        let (distance_f_t, _) = from.road_distance(&to, road);
-        if distance_f_t == 0.0 {
-            return 0.0;
+
+        let mut heuristic = 0.0;
+        for stop in &stops {
+            let (fx, fy) = stops[0].geom.x_y();
+            let (tx, ty) = stop.geom.x_y();
+            let demand = od.demand_between_coords(fx, fy, tx, ty) + od.demand_between_coords(tx, ty, fx, fy) + P;
+            assert_valid_f64(demand, "demand");
+            let length_of_route = stop.road_distance(&to, road).0 + to.road_distance(stop, road).0;
+            if length_of_route == 0.0{
+                return 0.0;
+            }
+
+            heuristic += demand/length_of_route;
         }
-        assert_valid_f64(demand, "demand");
+
+        // let demand =
+        //     od.demand_between_coords(fx, fy, tx, ty) + od.demand_between_coords(tx, ty, fx, fy);
+        //let (distance_f_t, _) = from.road_distance(&to, road);
+        // if distance_f_t == 0.0 {
+        //     return 0.0;
+        // }
+        //assert_valid_f64(demand, "demand");
         // P is a constant to prevent 0 heuristic and division by 0
         // (demand + P) / (2.0 * distance_f_t + P)
-        let heuristic = (demand + P) / (2.0 * distance_f_t);
+        //let heuristic = (demand + P) / (2.0 * distance_f_t);
         self.heuristic_cache
             .insert((from.stop_id.clone(), to.stop_id.clone()), heuristic);
         heuristic
@@ -417,6 +440,7 @@ impl ACO {
         let init_eval = ACO::evaluate_route(od, road, route);
         let gen_best_eval = best_eval;
         log::debug!("    Initial route len : {}", route.outbound_stops.len());
+        log::debug!("inital evaluation : {}", init_eval.0);
         for aco_max_gen_i in 0..self.aco_max_gen {
             log::debug!("    Gen {}", aco_max_gen_i);
             // Update pheromone for route
@@ -432,8 +456,8 @@ impl ACO {
                     &pheromone,
                 ) {
                     let new_eval = ACO::evaluate_route(od, road, &new_route);
+                    //log::debug!("new route evaluated to : {}", new_eval.0);
                     if new_eval.0 > best_eval.0 {
-                        log::debug!("i found a better route");
                         best_eval = new_eval;
                         best_route = new_route;
                         log::debug!("    New best route len : {}", best_route.outbound_stops.len());
@@ -447,6 +471,7 @@ impl ACO {
         if gen_best_eval.0 < best_eval.0 {
             Some((best_route, best_eval.0))
         } else {
+            log::debug!("Returned original route because not better route was found");
             Some((route.clone(), init_eval.0))
         }
     }
