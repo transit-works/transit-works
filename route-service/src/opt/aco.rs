@@ -10,7 +10,7 @@ use crate::layers::{
     geo_util,
     grid::GridNetwork,
     road_network::RoadNetwork,
-    transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
+    transit_network::{RTreeNode, TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
 };
 
 const MAX_ROUTE_LEN: usize = 100;
@@ -19,7 +19,9 @@ const LEN_PENALTY: f64 = 0.1;
 const LOOP_PENALTY: f64 = 0.2;
 const NONLINEAR_PENALTY: f64 = 0.3;
 const INIT_PHEROMONE: f64 = 0.1;
-const P: f64 = 10.0;
+const P: f64 = 0.01;
+const LATITUDE_DEGREE_METERS: f64 = 110574.0;
+const LONGITUDE_DEGREE_METERS: f64 = 111320.0;
 
 pub struct ACO {
     // parameters
@@ -50,9 +52,9 @@ impl ACO {
     }
 
     pub fn init() -> Self {
-        let aco_num_ant = 10;
-        let aco_max_gen = 5;
-        let max_gen = 1;
+        let aco_num_ant = 20;
+        let aco_max_gen = 10;
+        let max_gen = 4;
         let alpha = 2.0;
         let beta = 3.0;
         let rho = 0.1;
@@ -101,11 +103,11 @@ impl ACO {
         transit: &TransitNetwork,
         pheromone: &HashMap<(String, String), f64>,
     ) -> Option<Arc<TransitStop>> {
-        let distance_to_end = Haversine::distance(
-            Point::new(current.geom.x(), current.geom.y()),
-            Point::new(end.geom.x(), end.geom.y()),
-        );
-        // if the distance to the end is less than 200m, return the end
+
+        let distance_to_end = current.road_distance(&end, road).0;
+
+        //log::debug!("distance to end : {}", distance_to_end);
+        //if the distance to the end is less than 200m, return the end
         if distance_to_end < 200.0 {
             return Some(end.clone());
         }
@@ -113,27 +115,43 @@ impl ACO {
         let mut choices = Vec::new();
         let mut weights = Vec::new();
 
-        // all stops in 200m radius
-        let envelope = geo_util::compute_envelope_rect(
-            current.geom.y(),
-            current.geom.x(),
-            end.geom.y(),
-            end.geom.x(),
-            200.0,
-        );
-        let nearby_stops = transit.outbound_stops.locate_in_envelope(&envelope);
+        let lat = 200.0 / LATITUDE_DEGREE_METERS;
+        let lon = 200.0 / (LONGITUDE_DEGREE_METERS * lat.to_radians().cos());
+        let radius = lat.max(lon);
 
-        let stops_within_radius = transit
-            .outbound_stops
-            .locate_in_envelope(&envelope)
-            .into_iter()
-            .count();
+        //let nearby_stops = transit.outbound_stops.locate_within_distance([current.geom.x(), current.geom.y()], radius);
 
-        log::trace!("        Found {} stops", stops_within_radius);
+        let env = geo_util::compute_envelope(current.geom.y(), current.geom.x(), 1000.0);
+        let nearby_stops = transit.outbound_stops.locate_in_envelope(&env);
+
+        let direction_vector = [end.geom.x() - current.geom.x(), end.geom.y() - current.geom.y()];
+        let direction_norm = (direction_vector[0].powi(2) + direction_vector[1].powi(2)).sqrt();
+        let direction_unit = [
+            direction_vector[0] / direction_norm,
+            direction_vector[1] / direction_norm
+        ];
+
+
+        let filtered : Vec<RTreeNode>= nearby_stops.into_iter().filter(|s| {
+            let new_vec = [s.stop.geom.x() - current.geom.x(), s.stop.geom.y() - current.geom.y()];
+            let norm = (new_vec[0].powi(2) + new_vec[1].powi(2)).sqrt();
+
+            let unit = [new_vec[0] / norm,  new_vec[1] / norm];
+            let dot_product = direction_unit[0] * unit[0] + direction_unit[1] * unit[1];
+            let angle_rad = dot_product.acos();
+            let angle_deg = angle_rad.to_degrees();
+
+            //let d = current.road_distance(&s.stop, road);
+            angle_deg <= 45.0 //&& d.0 >= 100.0// need to add min distance check
+        })
+        .cloned()
+        .collect();
+
+    log::trace!("filtered stops found : {}", filtered.len());
 
         // compute probability of visiting each stop
         let from = current.stop_id.clone();
-        for nearby_stop in nearby_stops.into_iter() {
+        for nearby_stop in filtered.into_iter() {
             let stop = &nearby_stop.stop;
             if visited.contains(&stop.stop_id) {
                 continue;
@@ -154,7 +172,8 @@ impl ACO {
             assert_valid_f64(probability, "probability");
         }
         if weights.is_empty() {
-            return None;
+            //return None
+            return Some(end.clone());
         }
         let dist = WeightedIndex::new(&weights).unwrap();
         let idx = dist.sample(&mut rng);
@@ -334,8 +353,8 @@ impl ACO {
         let nonlinear_coefficient = length_route / straight_line_distance;
 
         (
-            (passenger_demand + P) / (length_route * nonlinear_coefficient + P),
-            nonlinear_coefficient,
+            (passenger_demand + P) / (length_route * nonlinear_coefficient.min(1.5) + P),
+            nonlinear_coefficient.min(1.5),
         )
     }
 
@@ -379,7 +398,7 @@ impl ACO {
         assert_valid_f64(demand, "demand");
         // P is a constant to prevent 0 heuristic and division by 0
         // (demand + P) / (2.0 * distance_f_t + P)
-        let heuristic = (demand + P) / (2.0 * distance_f_t + P);
+        let heuristic = (demand + P) / (2.0 * distance_f_t);
         self.heuristic_cache
             .insert((from.stop_id.clone(), to.stop_id.clone()), heuristic);
         heuristic
@@ -396,6 +415,7 @@ impl ACO {
         let mut best_route = route.clone();
         let mut best_eval = ACO::evaluate_route(od, road, route);
         let gen_best_eval = best_eval;
+        log::debug!("    Initial route len : {}", route.outbound_stops.len());
         for aco_max_gen_i in 0..self.aco_max_gen {
             log::debug!("    Gen {}", aco_max_gen_i);
             // Update pheromone for route
@@ -414,6 +434,7 @@ impl ACO {
                     if new_eval.0 > best_eval.0 {
                         best_eval = new_eval;
                         best_route = new_route;
+                        log::debug!("    New best route len : {}", best_route.outbound_stops.len());
                     }
                 } else {
                     log::debug!("        Failed to build new route");
