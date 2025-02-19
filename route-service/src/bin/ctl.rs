@@ -99,7 +99,7 @@ fn main() {
     let target_route = transit
         .routes
         .iter()
-        .filter(|r| r.route_id == "73485")
+        .filter(|r| r.route_id == "73522")
         .next()
         .unwrap();
 

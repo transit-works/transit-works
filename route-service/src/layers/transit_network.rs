@@ -261,7 +261,7 @@ fn map_transit_stops_to_road_network_node_index(
     road: &RoadNetwork,
 ) -> HashMap<String, NodeIndex> {
     let mut stop_to_node = HashMap::new();
-    let mut stop_to_node_tmp = HashMap::new();
+    //let mut stop_to_node_tmp = HashMap::new();
     // initialize the first stop
     let first_stop = &trip.stop_times.first().unwrap().stop;
     let first_node = road.find_nearest_node(
@@ -298,7 +298,8 @@ fn map_transit_stops_to_road_network_node_index(
         let (n1, n2, n3) = (
             *stop_to_node
                 .get(&s1.stop_id)
-                .unwrap_or_else(|| stop_to_node_tmp.get(&s1.stop_id).unwrap()),
+                //.unwrap_or_else(|| stop_to_node_tmp.get(&s1.stop_id).unwrap()),
+                .unwrap(),
             road.find_nearest_node(s2_x, s2_y).unwrap(),
             road.find_nearest_node(s3_x, s3_y).unwrap(),
         );
@@ -308,60 +309,60 @@ fn map_transit_stops_to_road_network_node_index(
         let line2_3 = geo_util::haversine(s2_x, s2_y, s3_x, s3_y);
         let nl1_2 = dist1_2 / line1_2;
         let nl2_3 = dist2_3 / line2_3;
-        if nl1_2 < 1.1 && nl2_3 < 1.1 {
+        //if nl1_2 < 1.1 && nl2_3 < 1.1 {
             // good enough
-            stop_to_node.insert(s2.stop_id.clone(), n2);
-        } else {
-            // need to maybe move s2 and s3
-            let c2 = road.find_nearest_nodes(s2_x, s2_y, 50.0);
-            let c3 = road.find_nearest_nodes(s3_x, s3_y, 50.0);
-            let mut best_nl = f64::INFINITY;
-            let mut best_n2 = n2;
-            let mut best_n3 = n3;
-            for n2 in &c2 {
-                for n3 in &c3 {
-                    let dist1_2 = road.get_road_distance(n1, *n2).0;
-                    let dist2_3 = road.get_road_distance(*n2, *n3).0;
-                    let line1_2 = geo_util::haversine(s1_x, s1_y, s2_x, s2_y);
-                    let line2_3 = geo_util::haversine(s2_x, s2_y, s3_x, s3_y);
-                    let nl1_2 = dist1_2 / line1_2;
-                    let nl2_3 = dist2_3 / line2_3;
-                    if nl1_2 < 1.1 && nl2_3 < 1.1 {
-                        best_n2 = *n2;
-                        best_n3 = *n3;
-                        best_nl = (nl1_2 + nl2_3) / 2.0;
-                        break;
-                    } else if (nl1_2 + nl2_3) / 2.0 < best_nl {
-                        best_n2 = *n2;
-                        best_n3 = *n3;
-                        best_nl = (nl1_2 + nl2_3) / 2.0;
-                    }
-                }
-                if best_nl < 1.1 {
-                    break;
-                }
-            }
+        stop_to_node.insert(s2.stop_id.clone(), n2);
+        // } else {
+        //     // need to maybe move s2 and s3
+        //     let c2 = road.find_nearest_nodes(s2_x, s2_y, 50.0);
+        //     let c3 = road.find_nearest_nodes(s3_x, s3_y, 50.0);
+        //     let mut best_nl = f64::INFINITY;
+        //     let mut best_n2 = n2;
+        //     let mut best_n3 = n3;
+        //     for n2 in &c2 {
+        //         for n3 in &c3 {
+        //             let dist1_2 = road.get_road_distance(n1, *n2).0;
+        //             let dist2_3 = road.get_road_distance(*n2, *n3).0;
+        //             let line1_2 = geo_util::haversine(s1_x, s1_y, s2_x, s2_y);
+        //             let line2_3 = geo_util::haversine(s2_x, s2_y, s3_x, s3_y);
+        //             let nl1_2 = dist1_2 / line1_2;
+        //             let nl2_3 = dist2_3 / line2_3;
+        //             if nl1_2 < 1.1 && nl2_3 < 1.1 {
+        //                 best_n2 = *n2;
+        //                 best_n3 = *n3;
+        //                 best_nl = (nl1_2 + nl2_3) / 2.0;
+        //                 break;
+        //             } else if (nl1_2 + nl2_3) / 2.0 < best_nl {
+        //                 best_n2 = *n2;
+        //                 best_n3 = *n3;
+        //                 best_nl = (nl1_2 + nl2_3) / 2.0;
+        //             }
+        //         }
+        //         if best_nl < 1.1 {
+        //             break;
+        //         }
+        //     }
             // if the nonlinearity is really bad with s2, but s1 and s3 are linear
             // then maybe something is wrong with the road network
-            if best_nl > 2.0
-                && road.get_road_distance(n1, best_n3).0
-                    / geo_util::haversine(s1_x, s1_y, s3_x, s3_y)
-                    < 1.05
-            {
-                // if 1->2->3 is pretty much a straight line, maybe skip 2
-                let line1_3 = LineString::from(vec![(s1_x, s1_y), (s2_x, s2_y), (s3_x, s3_y)]);
-                let dist123 = line1_3.length::<Haversine>();
-                let dist1_3 = geo_util::haversine(s1_x, s1_y, s3_x, s3_y);
-                let nl123 = dist123 / dist1_3;
-                if nl123 < 1.01 {
-                    // just pretend s2 doesn't exist, map to s1
-                    stop_to_node_tmp.insert(s2.stop_id.clone(), n1);
-                    continue;
-                }
-            }
-            // best we can do
-            stop_to_node.insert(s2.stop_id.clone(), best_n2);
-        }
+        //     if best_nl > 2.0
+        //         && road.get_road_distance(n1, best_n3).0
+        //             / geo_util::haversine(s1_x, s1_y, s3_x, s3_y)
+        //             < 1.05
+        //     {
+        //         // if 1->2->3 is pretty much a straight line, maybe skip 2
+        //         let line1_3 = LineString::from(vec![(s1_x, s1_y), (s2_x, s2_y), (s3_x, s3_y)]);
+        //         let dist123 = line1_3.length::<Haversine>();
+        //         let dist1_3 = geo_util::haversine(s1_x, s1_y, s3_x, s3_y);
+        //         let nl123 = dist123 / dist1_3;
+        //         if nl123 < 1.01 {
+        //             // just pretend s2 doesn't exist, map to s1
+        //             stop_to_node_tmp.insert(s2.stop_id.clone(), n1);
+        //             continue;
+        //         }
+        //     }
+        //     // best we can do
+        //     stop_to_node.insert(s2.stop_id.clone(), best_n2);
+        // }
     }
     stop_to_node
 }
