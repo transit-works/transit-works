@@ -141,8 +141,8 @@ impl ACO {
             let angle_rad = dot_product.acos();
             let angle_deg = angle_rad.to_degrees();
 
-            //let d = current.road_distance(&s.stop, road);
-            angle_deg <= 45.0 //&& d.0 >= 100.0// need to add min distance check
+            let d = current.road_distance(&s.stop, road);
+            angle_deg <= 45.0 && d.0 >= 100.0// need to add min distance check
         })
         .cloned()
         .collect();
@@ -414,6 +414,7 @@ impl ACO {
         let mut pheromone = HashMap::new();
         let mut best_route = route.clone();
         let mut best_eval = ACO::evaluate_route(od, road, route);
+        let init_eval = ACO::evaluate_route(od, road, route);
         let gen_best_eval = best_eval;
         log::debug!("    Initial route len : {}", route.outbound_stops.len());
         for aco_max_gen_i in 0..self.aco_max_gen {
@@ -432,6 +433,7 @@ impl ACO {
                 ) {
                     let new_eval = ACO::evaluate_route(od, road, &new_route);
                     if new_eval.0 > best_eval.0 {
+                        log::debug!("i found a better route");
                         best_eval = new_eval;
                         best_route = new_route;
                         log::debug!("    New best route len : {}", best_route.outbound_stops.len());
@@ -445,7 +447,7 @@ impl ACO {
         if gen_best_eval.0 < best_eval.0 {
             Some((best_route, best_eval.0))
         } else {
-            None
+            Some((route.clone(), init_eval.0))
         }
     }
 
