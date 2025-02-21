@@ -16,6 +16,7 @@ class City:
     edges: gpd.GeoDataFrame
     pois: gpd.GeoDataFrame
     landuse: gpd.GeoDataFrame
+    buildings: gpd.GeoDataFrame
 
 class Mode(enum.IntEnum):
     BIKE = 1
@@ -35,16 +36,38 @@ class Landuse(enum.Enum):
     INDUSTRIAL = 'industrial'
     RESIDENTIAL = 'residential'
 
+class Building(enum.Enum):
+    APARTMENTS = 'apartments'
+    BARRACKS = 'barracks'
+    BUNGALOW = 'bungalow'
+    DETACHED = 'detached'
+    DORMITORY = 'dormitory'
+    HOTEL = 'hotel'
+    HOUSE = 'house'
+    SEMIDETACHED_HOUSE = 'semidetached_house'
+
+# Rough estimate of the number of people living in each building type
+BUILDING_DENSITY = {
+    Building.APARTMENTS.value: 400,
+    Building.BARRACKS.value: 200,
+    Building.BUNGALOW.value: 4,
+    Building.DETACHED.value: 4,
+    Building.DORMITORY.value: 400,
+    Building.HOTEL.value: 200,
+    Building.HOUSE.value: 4,
+    Building.SEMIDETACHED_HOUSE.value: 4,
+}
+
 # Distance decay parameter for gravity model (0.8-2.0)
 GRAVITY_BETA = 0.5
 
-# Importance of each landuse type in attractiveness calculation at different times of day
+# Weight of each landuse type in attractiveness calculation at different times of day
 LANDUSE_WEIGHTS = {
     Landuse.COMMERCIAL.value: {
         TimePeriod.MORNING: 0.5,
         TimePeriod.MORNING_RUSH_HOUR: 1.0,
         TimePeriod.MIDDAY: 0.7,
-        TimePeriod.EVENING_RUSH_HOUR: 1.0,
+        TimePeriod.EVENING_RUSH_HOUR: 0.5,
         TimePeriod.NIGHT: 0.5,
     },
     Landuse.RETAIL.value: {
@@ -70,8 +93,17 @@ LANDUSE_WEIGHTS = {
     },
 }
 
-# Importance of POI vs landuse in attractiveness calculation (0.0-1.0)
-POIS_WEIGHT = 0.7
+# Weight of POI score in attractiveness calculation at different times of day
+POI_WEIGHTS = {
+    TimePeriod.MORNING: 0.5,
+    TimePeriod.MORNING_RUSH_HOUR: 0.7,
+    TimePeriod.MIDDAY: 1.0,
+    TimePeriod.EVENING_RUSH_HOUR: 1.0,
+    TimePeriod.NIGHT: 0.7,
+}
+
+# Relative importance of POI vs landuse in attractiveness calculation (0.0-1.0)
+POIS_WEIGHT = 0.5
 
 # Mode choice
 MODE_CHOICE = {
@@ -82,21 +114,38 @@ MODE_CHOICE = {
 
 def run_gravity_model(zones: gpd.GeoDataFrame, distances: list[list[float]]) -> list[list[dict[TimePeriod, float]]]:
     demand_matrix = [[{} for _ in range(len(zones))] for _ in range(len(zones))]
+    total_attractiveness_by_time = {tp: zones['attractiveness'].apply(lambda x: x[tp]).sum() for tp in TimePeriod}
     for _, zone1 in zones.iterrows():
         for _, zone2 in zones.iterrows():
             idx1, idx2 = zone1['zone_id'], zone2['zone_id']
             if idx1 == idx2: continue
+            if demand_matrix[idx1][idx2]: continue
             attractiveness_by_time1 = zone1['attractiveness']
             attractiveness_by_time2 = zone2['attractiveness']
             distance = distances[idx1][idx2]
+            impedance = 1 / (distance ** GRAVITY_BETA)
             for time_period in TimePeriod:
                 attractiveness1 = attractiveness_by_time1[time_period]
                 attractiveness2 = attractiveness_by_time2[time_period]
-                trips = attractiveness1 * attractiveness2 / distance ** GRAVITY_BETA
+                total_attractiveness = total_attractiveness_by_time[time_period]
+                trips = attractiveness1 * attractiveness2 * impedance / total_attractiveness
                 demand_matrix[idx1][idx2][time_period] = trips
+                demand_matrix[idx2][idx1][time_period] = trips
     return demand_matrix
 
 def calculate_zone_attractiveness(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    # determine max number of POIs in a single zone
+    max_pois = 0
+    for _, zone in zones.iterrows():
+        geom = zone['geometry']
+        try:
+            pois = city.pois.clip(geom)
+        except Exception:
+            continue
+        pois_count = pois['amenity'].value_counts().sum()
+        max_pois = max(max_pois, pois_count)
+
+    # calculate attractiveness for each zone
     zones['attractiveness'] = 0
     zone_attractiveness = {}
     for _, zone in zones.iterrows():
@@ -108,11 +157,25 @@ def calculate_zone_attractiveness(city: City, zones: gpd.GeoDataFrame) -> gpd.Ge
         except Exception:
             zone_attractiveness[zone_id] = {time_period: 0 for time_period in TimePeriod}
             continue
-        pois_score = pois['amenity'].value_counts().sum()
+        pois_share = pois['amenity'].value_counts().sum() / max_pois * 100.0
+
+        # determine the proportion of each landuse type by area in the zone
+        area_by_type = {x.value: 0 for x in Landuse}
+        for _, land in landuse.iterrows():
+            land_area = land['geometry'].area
+            land_type = land['landuse']
+            area_by_type[land_type] += land_area
+        total_area = zone['geometry'].area
+        area_by_type = {k: v / total_area for k, v in area_by_type.items()}
+
         attractiveness_by_time = {}
         for time_period in TimePeriod:
-            landuse_score = landuse['landuse'].map(LANDUSE_WEIGHTS).apply(lambda x: x[time_period]).sum()
-            attractiveness_by_time[time_period] = landuse_score * (1 - POIS_WEIGHT) + pois_score * POIS_WEIGHT
+            landuse_score = sum([
+                100.0 * area_by_type[land_type] * LANDUSE_WEIGHTS[land_type][time_period]
+                for land_type in area_by_type
+            ])
+            poi_score = pois_share * POI_WEIGHTS[time_period]
+            attractiveness_by_time[time_period] = landuse_score * (1 - POIS_WEIGHT) + poi_score * POIS_WEIGHT
         zone_attractiveness[zone_id] = attractiveness_by_time
     zones['attractiveness'] = zones['zone_id'].map(zone_attractiveness)
     return zones
@@ -136,7 +199,9 @@ def calculate_network_distance(city: City, zones: gpd.GeoDataFrame) -> list[list
     distances = [[0 for _ in range(len(zones))] for _ in range(len(zones))]
     for i, zone1 in zones.iterrows():
         for j, zone2 in zones.iterrows():
-            # print(f"Calculating distance between zones {i} and {j}")
+            if i == j: continue
+            if distances[i][j] != 0: continue
+            print(f"Calculating distance between zones {i} and {j}")
             geom1, geom2 = zone1['geometry'], zone2['geometry']
             # node1 = ox.nearest_nodes(graph, geom1.centroid.x, geom1.centroid.y)
             # node2 = ox.nearest_nodes(graph, geom2.centroid.x, geom2.centroid.y)
@@ -146,6 +211,7 @@ def calculate_network_distance(city: City, zones: gpd.GeoDataFrame) -> list[list
             coord1 = geom1.centroid.y, geom1.centroid.x
             coord2 = geom2.centroid.y, geom2.centroid.x
             distances[idx1][idx2] = haversine(coord1, coord2)
+            distances[idx2][idx1] = distances[idx1][idx2]
     return distances
 
 def divide_into_zones(city: City, num_rows: int, num_cols: int) -> gpd.GeoDataFrame:
@@ -169,17 +235,22 @@ def divide_into_zones(city: City, num_rows: int, num_cols: int) -> gpd.GeoDataFr
     zones = gpd.GeoDataFrame(zones)
     return zones
 
-def load_data_from_pbf(file_path: str) -> City:
+def load_data_from_files(file_path: str, nodes_file, edges_file) -> City:
     osm = po.OSM(file_path)
-    nodes, edges = osm.get_network(nodes=True, network_type='driving')
-    # Structure the gdf for OSMNx compatibility
-    edges.set_index(['u', 'v', 'id'], inplace=True)
-    nodes.set_index('id', inplace=True)
-    nodes['x'] = nodes['lon']
-    nodes['y'] = nodes['lat']
+    nodes = gpd.read_file(nodes_file)
+    edges = gpd.read_file(edges_file)
+    edges.set_index(['u', 'v', 'key'], inplace=True)
+    nodes.set_index('osmid', inplace=True)
     pois = osm.get_pois(custom_filter={'amenity': True})
     landuse = osm.get_landuse(custom_filter={'landuse': [x.value for x in Landuse]})
-    return City(nodes, edges, pois, landuse)
+    buildings = osm.get_buildings(custom_filter={'building': [x.value for x in Building]})
+    return City(
+        nodes=nodes,
+        edges=edges,
+        pois=pois,
+        landuse=landuse,
+        buildings=buildings,
+    )
 
 def load_db(
     conn: sqlite3.Connection,
@@ -214,11 +285,15 @@ def main():
 
     print("Loading city data...")
     start = time.time()
-    city = load_data_from_pbf('city_data/toronto/data/Toronto.osm.pbf')
+    city = load_data_from_files(
+        'city_data/toronto/data/Toronto.osm.pbf',
+        'city_data/toronto/data/nodes.gpkg',
+        'city_data/toronto/data/edges.gpkg',
+    )
     print(f"Data loaded in {time.time() - start:.2f} seconds")
 
     print("Dividing city into zones...")
-    zones = divide_into_zones(city, 100, 100)
+    zones = divide_into_zones(city, 20, 20)
 
     print("Calculating zone attractiveness...")
     start = time.time()
