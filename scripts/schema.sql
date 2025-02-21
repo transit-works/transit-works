@@ -32,6 +32,11 @@ CREATE TABLE demand (
     destid INTEGER,
     dist_km REAL,
     volume REAL,
+    volume_morning REAL,
+    volume_am_rush REAL,
+    volume_midday REAL,
+    volume_pm_rush REAL,
+    volume_night REAL,
     FOREIGN KEY(origid) REFERENCES zone(zoneid),
     FOREIGN KEY(destid) REFERENCES zone(zoneid)
 );

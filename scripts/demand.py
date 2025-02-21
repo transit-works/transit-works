@@ -1,4 +1,5 @@
 import enum
+import sqlite3
 import dataclasses
 
 import osmnx as ox
@@ -135,7 +136,7 @@ def calculate_network_distance(city: City, zones: gpd.GeoDataFrame) -> list[list
     distances = [[0 for _ in range(len(zones))] for _ in range(len(zones))]
     for i, zone1 in zones.iterrows():
         for j, zone2 in zones.iterrows():
-            print(f"Calculating distance between zones {i} and {j}")
+            # print(f"Calculating distance between zones {i} and {j}")
             geom1, geom2 = zone1['geometry'], zone2['geometry']
             # node1 = ox.nearest_nodes(graph, geom1.centroid.x, geom1.centroid.y)
             # node2 = ox.nearest_nodes(graph, geom2.centroid.x, geom2.centroid.y)
@@ -180,6 +181,34 @@ def load_data_from_pbf(file_path: str) -> City:
     landuse = osm.get_landuse(custom_filter={'landuse': [x.value for x in Landuse]})
     return City(nodes, edges, pois, landuse)
 
+def load_db(
+    conn: sqlite3.Connection,
+    zones: gpd.GeoDataFrame,
+    distances: list[list[float]],
+    demand_matrix: list[list[dict[TimePeriod, float]]],
+):
+    conn.executemany('INSERT INTO zone VALUES (?, ?, ?)', [
+        (idx, geom, attractiveness)
+        for idx, (geom, attractiveness) in zones[['geometry', 'attractiveness']].iterrows()
+    ])
+    conn.commit()
+    conn.executemany('INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+        (
+            idx1, 
+            idx2, 
+            distances[idx1][idx2], 
+            max(demand_matrix[idx1][idx2].values()), 
+            demand_matrix[idx1][idx2][TimePeriod.MORNING],
+            demand_matrix[idx1][idx2][TimePeriod.MORNING_RUSH_HOUR],
+            demand_matrix[idx1][idx2][TimePeriod.MIDDAY],
+            demand_matrix[idx1][idx2][TimePeriod.EVENING_RUSH_HOUR],
+            demand_matrix[idx1][idx2][TimePeriod.NIGHT],
+        )
+        for idx1, _ in zones.iterrows()
+        for idx2, _ in zones.iterrows()
+    ])
+    conn.commit()
+
 def main():
     import time
 
@@ -206,13 +235,12 @@ def main():
     demand_matrix = run_gravity_model(zones, distances)
     print(f"Gravity model ran in {time.time() - start:.2f} seconds")
 
-    print("Done")
-    for time_period in TimePeriod:
-        print(f"Time period: {time_period}")
-        for i, row in enumerate(demand_matrix):
-            for j, demand in enumerate(row):
-                print(f"Zone {i} -> Zone {j}: {demand[time_period]}")
-        print("===========")
+    print("Loading data into database...")
+    conn = sqlite3.connect('city_db/toronto2.db')
+    load_db(conn, zones, distances, demand_matrix)
+    conn.close()
+
+    print("Done!")
 
 if __name__ == '__main__':
     main()
