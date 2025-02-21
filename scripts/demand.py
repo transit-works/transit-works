@@ -47,7 +47,7 @@ class Building(enum.Enum):
     SEMIDETACHED_HOUSE = 'semidetached_house'
 
 # Rough estimate of the number of people living in each building type
-BUILDING_DENSITY = {
+BUILDING_OCCUPANCY = {
     Building.APARTMENTS.value: 400,
     Building.BARRACKS.value: 200,
     Building.BUNGALOW.value: 4,
@@ -61,8 +61,8 @@ BUILDING_DENSITY = {
 # Distance decay parameter for gravity model (0.8-2.0)
 GRAVITY_BETA = 0.5
 
-# Weight of each landuse type in attractiveness calculation at different times of day
-LANDUSE_WEIGHTS = {
+# Weight of each landuse type in attraction calculation at different times of day
+LAND_WEIGHTS = {
     Landuse.COMMERCIAL.value: {
         TimePeriod.MORNING: 0.5,
         TimePeriod.MORNING_RUSH_HOUR: 1.0,
@@ -93,17 +93,11 @@ LANDUSE_WEIGHTS = {
     },
 }
 
-# Weight of POI score in attractiveness calculation at different times of day
-POI_WEIGHTS = {
-    TimePeriod.MORNING: 0.5,
-    TimePeriod.MORNING_RUSH_HOUR: 0.7,
-    TimePeriod.MIDDAY: 1.0,
-    TimePeriod.EVENING_RUSH_HOUR: 1.0,
-    TimePeriod.NIGHT: 0.7,
-}
-
-# Relative importance of POI vs landuse in attractiveness calculation (0.0-1.0)
-POIS_WEIGHT = 0.5
+# Relative importance of population vs poi vs landuse in attraction calculation (must sum to 1.0)
+SCORE_POIS_WEIGHT = 0.3
+SCORE_POPN_WEIGHT = 0.3
+SCORE_LAND_WEIGHT = 0.4
+assert SCORE_POIS_WEIGHT + SCORE_POPN_WEIGHT + SCORE_LAND_WEIGHT == 1.0
 
 # Mode choice
 MODE_CHOICE = {
@@ -112,53 +106,48 @@ MODE_CHOICE = {
     Mode.TRANSIT: 0.4,
 }
 
+# https://www.princeton.edu/~alaink/Orf467F12/The%20Gravity%20Model.pdf
 def run_gravity_model(zones: gpd.GeoDataFrame, distances: list[list[float]]) -> list[list[dict[TimePeriod, float]]]:
     demand_matrix = [[{} for _ in range(len(zones))] for _ in range(len(zones))]
-    total_attractiveness_by_time = {tp: zones['attractiveness'].apply(lambda x: x[tp]).sum() for tp in TimePeriod}
-    for _, zone1 in zones.iterrows():
-        for _, zone2 in zones.iterrows():
-            idx1, idx2 = zone1['zone_id'], zone2['zone_id']
-            if idx1 == idx2: continue
-            if demand_matrix[idx1][idx2]: continue
-            attractiveness_by_time1 = zone1['attractiveness']
-            attractiveness_by_time2 = zone2['attractiveness']
-            distance = distances[idx1][idx2]
-            impedance = 1 / (distance ** GRAVITY_BETA)
-            for time_period in TimePeriod:
-                attractiveness1 = attractiveness_by_time1[time_period]
-                attractiveness2 = attractiveness_by_time2[time_period]
-                total_attractiveness = total_attractiveness_by_time[time_period]
-                trips = attractiveness1 * attractiveness2 * impedance / total_attractiveness
-                demand_matrix[idx1][idx2][time_period] = trips
-                demand_matrix[idx2][idx1][time_period] = trips
+    for time_period in TimePeriod:
+        for _, zone1 in zones.iterrows():
+            idx1 = zone1['zone_id']
+            trips_denominator = 0
+            for _, zone2 in zones.iterrows():
+                idx2 = zone2['zone_id']
+                if idx1 == idx2: continue
+                production1 = zone1['production'][time_period]
+                attraction2 = zone2['attraction'][time_period]
+                distance = distances[idx1][idx2]
+                impedance = 1 / (distance ** GRAVITY_BETA)
+                trips_denominator += attraction2 * impedance
+                trips_numerator = production1 * attraction2 * impedance
+                demand_matrix[idx1][idx2][time_period] = trips_numerator
+            # normalize demand
+            for _, zone2 in zones.iterrows():
+                idx2 = zone2['zone_id']
+                demand_matrix[idx1][idx2][time_period] /= trips_denominator
     return demand_matrix
 
-def calculate_zone_attractiveness(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    # determine max number of POIs in a single zone
-    max_pois = 0
+def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    zone_population: dict[int, float] = {}
+    zone_area: dict[int, dict[str, float]] = {}
+    zone_pois: dict[int, int] = {}
     for _, zone in zones.iterrows():
         geom = zone['geometry']
-        try:
-            pois = city.pois.clip(geom)
-        except Exception:
-            continue
-        pois_count = pois['amenity'].value_counts().sum()
-        max_pois = max(max_pois, pois_count)
-
-    # calculate attractiveness for each zone
-    zones['attractiveness'] = 0
-    zone_attractiveness = {}
-    for _, zone in zones.iterrows():
-        geom = zone['geometry']
-        zone_id = zone['zone_id']
         try:
             pois = city.pois.clip(geom)
             landuse = city.landuse.clip(geom)
+            buildings = city.buildings.clip(geom)
         except Exception:
-            zone_attractiveness[zone_id] = {time_period: 0 for time_period in TimePeriod}
             continue
-        pois_share = pois['amenity'].value_counts().sum() / max_pois * 100.0
 
+        # determine the population of the zone based on the number of people living in buildings
+        population = 0
+        for _, building in buildings.iterrows():
+            building_type = building['building']
+            population += BUILDING_OCCUPANCY.get(building_type, 0)
+        
         # determine the proportion of each landuse type by area in the zone
         area_by_type = {x.value: 0 for x in Landuse}
         for _, land in landuse.iterrows():
@@ -166,27 +155,104 @@ def calculate_zone_attractiveness(city: City, zones: gpd.GeoDataFrame) -> gpd.Ge
             land_type = land['landuse']
             area_by_type[land_type] += land_area
         total_area = zone['geometry'].area
-        area_by_type = {k: v / total_area for k, v in area_by_type.items()}
+        area_by_type = {k: v / total_area * 100.0 for k, v in area_by_type.items()}
 
-        attractiveness_by_time = {}
+        # determine the number of POIs in the zone
+        pois_count = pois['amenity'].value_counts().sum()
+
+        zone_id = zone['zone_id']
+        zone_population[zone_id] = population
+        zone_area[zone_id] = area_by_type
+        zone_pois[zone_id] = pois_count
+        print('Zone', zone_id, 'population:', population)
+    zones['population'] = zones['zone_id'].map(zone_population)
+    zones['area'] = zones['zone_id'].map(zone_area)
+    zones['pois'] = zones['zone_id'].map(zone_pois)
+    return zones
+
+def calculate_zone_attraction(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    max_pois = zones['pois'].max()
+    max_popn = zones['population'].max()
+    # calculate attraction for each zone
+    zone_attraction = {}
+    for _, zone in zones.iterrows():
+        zone_id = zone['zone_id']
+        if 'pois' not in zone or 'area' not in zone or 'population' not in zone:
+            zone_attraction[zone_id] = {time_period: 0 for time_period in TimePeriod}
+            continue
+        area_by_type = zone['area']
+        popn = zone['population']
+        pois = zone['pois']
+        poi_score = pois / max_pois * 100.0
+        pop_score = popn / max_popn * 100.0
+
+        attraction_by_time = {}
         for time_period in TimePeriod:
             landuse_score = sum([
-                100.0 * area_by_type[land_type] * LANDUSE_WEIGHTS[land_type][time_period]
+                area_by_type[land_type] * LAND_WEIGHTS[land_type][time_period]
                 for land_type in area_by_type
             ])
-            poi_score = pois_share * POI_WEIGHTS[time_period]
-            attractiveness_by_time[time_period] = landuse_score * (1 - POIS_WEIGHT) + poi_score * POIS_WEIGHT
-        zone_attractiveness[zone_id] = attractiveness_by_time
-    zones['attractiveness'] = zones['zone_id'].map(zone_attractiveness)
+            attraction_by_time[time_period] = (
+                SCORE_POIS_WEIGHT * poi_score +
+                SCORE_POPN_WEIGHT * pop_score +
+                SCORE_LAND_WEIGHT * landuse_score
+            )
+        zone_attraction[zone_id] = attraction_by_time
+    zones['attraction'] = zones['zone_id'].map(zone_attraction)
+    return zones
+
+def calculate_zone_production(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    max_pois = zones['pois'].max()
+    max_popn = zones['population'].max()
+    zone_production = {
+        id: {tp: zone['population'] / max_popn * 100.0 + zone['pois'] / max_pois * 100.0}
+        for id, zone in zones.iterrows()
+        for tp in TimePeriod
+    }
+    zones['production'] = zones['zone_id'].map(zone_production)
+    return zones
+
+def normalize_zone_production_and_attraction(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    # sum of all production should be equal to sum of all attraction
+    for time_period in TimePeriod:
+        ttl_production = zones['production'].apply(lambda x: x[time_period]).sum()
+        ttl_attraction = zones['attraction'].apply(lambda x: x[time_period]).sum()
+        zones['production'] = zones['production'].apply(lambda x: x[time_period] / ttl_production * 1000.0)
+        zones['attraction'] = zones['attraction'].apply(lambda x: x[time_period] / ttl_attraction * 1000.0)
+        # check the sum
+        ttl_production = zones['production'].apply(lambda x: x[time_period]).sum()
+        ttl_attraction = zones['attraction'].apply(lambda x: x[time_period]).sum()
+        assert abs(ttl_production - ttl_attraction) < 1e-6
     return zones
 
 def calculate_network_distance(city: City, zones: gpd.GeoDataFrame) -> list[list[float]]:
-    # graph = ox.graph_from_gdfs(city.nodes, city.edges)
-    # graph = ox.project_graph(graph)
-    # def euclidean_distance(u, v):
-    #     u_x, u_y = graph.nodes[u]['x'], graph.nodes[u]['y']
-    #     v_x, v_y = graph.nodes[v]['x'], graph.nodes[v]['y']
-    #     return ((u_x - v_x)**2 + (u_y - v_y)**2)**0.5
+    graph = ox.graph_from_gdfs(city.nodes, city.edges)
+    graph = ox.project_graph(graph)
+    def h_haversine(u, v):
+        R = 6378137
+        u_lat, u_lon = radians(graph.nodes[u]['y']), radians(graph.nodes[u]['x'])
+        v_lat, v_lon = radians(graph.nodes[v]['y']), radians(graph.nodes[v]['x'])
+        dlat = v_lat - u_lat
+        dlon = v_lon - u_lon
+        a = sin(dlat / 2)**2 + cos(u_lat) * cos(v_lat) * sin(dlon / 2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return R * c
+    distances = [[0 for _ in range(len(zones))] for _ in range(len(zones))]
+    for i, zone1 in zones.iterrows():
+        for j, zone2 in zones.iterrows():
+            if i == j: continue
+            if distances[i][j] != 0: continue
+            geom1, geom2 = zone1['geometry'], zone2['geometry']
+            node1 = ox.nearest_nodes(graph, geom1.centroid.x, geom1.centroid.y)
+            node2 = ox.nearest_nodes(graph, geom2.centroid.x, geom2.centroid.y)
+            dist_m = nx.astar_path_length(graph, node1, node2, heuristic=h_haversine, weight='length') 
+            idx1, idx2 = zone1['zone_id'], zone2['zone_id']
+            distances[idx1][idx2] = dist_m / 1000.0
+            distances[idx2][idx1] = distances[idx1][idx2]
+            print(f"  Distance between zones {idx1} and {idx2} is {distances[idx1][idx2]} km")
+    return distances
+
+def calculate_zone_distance(zones: gpd.GeoDataFrame) -> list[list[float]]:
     def haversine(coord1, coord2):
         R = 6371
         lat1, lon1 = radians(coord1[0]), radians(coord1[1])
@@ -201,17 +267,13 @@ def calculate_network_distance(city: City, zones: gpd.GeoDataFrame) -> list[list
         for j, zone2 in zones.iterrows():
             if i == j: continue
             if distances[i][j] != 0: continue
-            print(f"Calculating distance between zones {i} and {j}")
             geom1, geom2 = zone1['geometry'], zone2['geometry']
-            # node1 = ox.nearest_nodes(graph, geom1.centroid.x, geom1.centroid.y)
-            # node2 = ox.nearest_nodes(graph, geom2.centroid.x, geom2.centroid.y)
             idx1, idx2 = zone1['zone_id'], zone2['zone_id']
-            # distances[idx1][idx2] = nx.astar_path_length(graph, node1, node2, heuristic=euclidean_distance, weight='length')
-            # distances[idx1][idx2] = euclidean_distance(node1, node2)
             coord1 = geom1.centroid.y, geom1.centroid.x
             coord2 = geom2.centroid.y, geom2.centroid.x
             distances[idx1][idx2] = haversine(coord1, coord2)
             distances[idx2][idx1] = distances[idx1][idx2]
+            print(f"  Distance between zones {idx1} and {idx2} is {distances[idx1][idx2]} km")
     return distances
 
 def divide_into_zones(city: City, num_rows: int, num_cols: int) -> gpd.GeoDataFrame:
@@ -259,8 +321,8 @@ def load_db(
     demand_matrix: list[list[dict[TimePeriod, float]]],
 ):
     conn.executemany('INSERT INTO zone VALUES (?, ?, ?)', [
-        (idx, geom, attractiveness)
-        for idx, (geom, attractiveness) in zones[['geometry', 'attractiveness']].iterrows()
+        (idx, geom, attraction)
+        for idx, (geom, attraction) in zones[['geometry', 'attraction']].iterrows()
     ])
     conn.commit()
     conn.executemany('INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
@@ -295,15 +357,30 @@ def main():
     print("Dividing city into zones...")
     zones = divide_into_zones(city, 20, 20)
 
-    print("Calculating zone attractiveness...")
+    print("Populating zone attributes...")
     start = time.time()
-    zones = calculate_zone_attractiveness(city, zones)
-    print(f"Zone attractiveness calculated in {time.time() - start:.2f} seconds")
+    zones = populate_zone_attributes(city, zones)
+    print(f"Zone attributes populated in {time.time() - start:.2f} seconds")
 
-    print("Calculating network distances...")
+    print("Calculating zone attraction...")
     start = time.time()
-    distances = calculate_network_distance(city, zones)
-    print(f"Network distances calculated in {time.time() - start:.2f} seconds")
+    zones = calculate_zone_attraction(zones)
+    print(f"Zone attraction calculated in {time.time() - start:.2f} seconds")
+
+    print("Calculating zone production...")
+    start = time.time()
+    zones = calculate_zone_production(zones)
+    print(f"Zone production calculated in {time.time() - start:.2f} seconds")
+
+    print("Normalizing zone production and attraction...")
+    start = time.time()
+    zones = normalize_zone_production_and_attraction(zones)
+    print(f"Zone production and attraction normalized in {time.time() - start:.2f} seconds")
+
+    print("Calculating zone distances...")
+    start = time.time()
+    distances = calculate_zone_distance(zones)
+    print(f"Zone distances calculated in {time.time() - start:.2f} seconds")
 
     print("Running gravity model...")
     start = time.time()
