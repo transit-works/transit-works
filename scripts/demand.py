@@ -4,7 +4,10 @@ import dataclasses
 import osmnx as ox
 import pyrosm as po
 import shapely as shp
+import networkx as nx
 import geopandas as gpd
+
+from math import radians, sin, cos, sqrt, atan2
 
 @dataclasses.dataclass
 class City:
@@ -94,30 +97,54 @@ def run_gravity_model(zones: gpd.GeoDataFrame, distances: list[list[float]]) -> 
 
 def calculate_zone_attractiveness(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     zones['attractiveness'] = 0
-    for i, zone in zones.iterrows():
+    zone_attractiveness = {}
+    for _, zone in zones.iterrows():
         geom = zone['geometry']
-        if not geom.is_valid: geom = geom.make_valid()
-        geom_gdf = gpd.GeoDataFrame(geometry=[geom], crs=zones.crs)
-        pois = city.pois.clip(geom_gdf)
-        landuse = city.landuse.clip(geom_gdf)
+        zone_id = zone['zone_id']
+        try:
+            pois = city.pois.clip(geom)
+            landuse = city.landuse.clip(geom)
+        except Exception:
+            zone_attractiveness[zone_id] = {time_period: 0 for time_period in TimePeriod}
+            continue
         pois_score = pois['amenity'].value_counts().sum()
         attractiveness_by_time = {}
         for time_period in TimePeriod:
-            landuse_score = landuse['landuse'].apply(lambda x: LANDUSE_WEIGHTS.get(x, 0)[time_period]).sum()
+            landuse_score = landuse['landuse'].map(LANDUSE_WEIGHTS).apply(lambda x: x[time_period]).sum()
             attractiveness_by_time[time_period] = landuse_score * (1 - POIS_WEIGHT) + pois_score * POIS_WEIGHT
-        zones.at[i, 'attractiveness'] = attractiveness_by_time
+        zone_attractiveness[zone_id] = attractiveness_by_time
+    zones['attractiveness'] = zones['zone_id'].map(zone_attractiveness)
     return zones
 
 def calculate_network_distance(city: City, zones: gpd.GeoDataFrame) -> list[list[float]]:
-    graph = ox.graph_from_gdfs(city.nodes, city.edges)
+    # graph = ox.graph_from_gdfs(city.nodes, city.edges)
+    # graph = ox.project_graph(graph)
+    # def euclidean_distance(u, v):
+    #     u_x, u_y = graph.nodes[u]['x'], graph.nodes[u]['y']
+    #     v_x, v_y = graph.nodes[v]['x'], graph.nodes[v]['y']
+    #     return ((u_x - v_x)**2 + (u_y - v_y)**2)**0.5
+    def haversine(coord1, coord2):
+        R = 6371
+        lat1, lon1 = radians(coord1[0]), radians(coord1[1])
+        lat2, lon2 = radians(coord2[0]), radians(coord2[1])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return R * c
     distances = [[0 for _ in range(len(zones))] for _ in range(len(zones))]
-    for _, zone1 in zones.iterrows():
-        for _, zone2 in zones.iterrows():
+    for i, zone1 in zones.iterrows():
+        for j, zone2 in zones.iterrows():
+            print(f"Calculating distance between zones {i} and {j}")
             geom1, geom2 = zone1['geometry'], zone2['geometry']
-            node1 = ox.get_nearest_node(graph, (geom1.centroid.y, geom1.centroid.x))
-            node2 = ox.get_nearest_node(graph, (geom2.centroid.y, geom2.centroid.x))
+            # node1 = ox.nearest_nodes(graph, geom1.centroid.x, geom1.centroid.y)
+            # node2 = ox.nearest_nodes(graph, geom2.centroid.x, geom2.centroid.y)
             idx1, idx2 = zone1['zone_id'], zone2['zone_id']
-            distances[idx1][idx2] = ox.distance.shortest_path_length(graph, node1, node2, weight='length')
+            # distances[idx1][idx2] = nx.astar_path_length(graph, node1, node2, heuristic=euclidean_distance, weight='length')
+            # distances[idx1][idx2] = euclidean_distance(node1, node2)
+            coord1 = geom1.centroid.y, geom1.centroid.x
+            coord2 = geom2.centroid.y, geom2.centroid.x
+            distances[idx1][idx2] = haversine(coord1, coord2)
     return distances
 
 def divide_into_zones(city: City, num_rows: int, num_cols: int) -> gpd.GeoDataFrame:
@@ -144,6 +171,11 @@ def divide_into_zones(city: City, num_rows: int, num_cols: int) -> gpd.GeoDataFr
 def load_data_from_pbf(file_path: str) -> City:
     osm = po.OSM(file_path)
     nodes, edges = osm.get_network(nodes=True, network_type='driving')
+    # Structure the gdf for OSMNx compatibility
+    edges.set_index(['u', 'v', 'id'], inplace=True)
+    nodes.set_index('id', inplace=True)
+    nodes['x'] = nodes['lon']
+    nodes['y'] = nodes['lat']
     pois = osm.get_pois(custom_filter={'amenity': True})
     landuse = osm.get_landuse(custom_filter={'landuse': [x.value for x in Landuse]})
     return City(nodes, edges, pois, landuse)
@@ -157,7 +189,7 @@ def main():
     print(f"Data loaded in {time.time() - start:.2f} seconds")
 
     print("Dividing city into zones...")
-    zones = divide_into_zones(city, 10, 10)
+    zones = divide_into_zones(city, 100, 100)
 
     print("Calculating zone attractiveness...")
     start = time.time()
