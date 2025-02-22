@@ -28,7 +28,7 @@ class TimePeriod(enum.IntEnum):
     AM_RUSH = 2
     MID_DAY = 3
     PM_RUSH = 4
-    NIGHT = 5
+    EVENING = 5
 
 class Landuse(enum.Enum):
     COMMERCIAL = 'commercial'
@@ -52,7 +52,7 @@ TRIPS_GENERATED = {
     TimePeriod.AM_RUSH: 150_000.0,
     TimePeriod.MID_DAY: 60_0000.0,
     TimePeriod.PM_RUSH: 150_000.0,
-    TimePeriod.NIGHT: 20_000.0,
+    TimePeriod.EVENING: 20_000.0,
 }
 
 # Rough estimate of the number of people living in each building type
@@ -77,28 +77,28 @@ LAND_WEIGHTS = {
         TimePeriod.AM_RUSH: 1.0,
         TimePeriod.MID_DAY: 0.7,
         TimePeriod.PM_RUSH: 0.5,
-        TimePeriod.NIGHT: 0.5,
+        TimePeriod.EVENING: 0.5,
     },
     Landuse.RETAIL.value: {
         TimePeriod.MORNING: 0.6,
         TimePeriod.AM_RUSH: 1.0,
         TimePeriod.MID_DAY: 1.0,
         TimePeriod.PM_RUSH: 1.0,
-        TimePeriod.NIGHT: 0.6,
+        TimePeriod.EVENING: 0.6,
     },
     Landuse.INDUSTRIAL.value: {
         TimePeriod.MORNING: 0.5,
         TimePeriod.AM_RUSH: 1.0,
         TimePeriod.MID_DAY: 1.0,
         TimePeriod.PM_RUSH: 1.0,
-        TimePeriod.NIGHT: 0.5,
+        TimePeriod.EVENING: 0.5,
     },
     Landuse.RESIDENTIAL.value: {
         TimePeriod.MORNING: 0.5,
         TimePeriod.AM_RUSH: 0.5,
         TimePeriod.MID_DAY: 0.7,
         TimePeriod.PM_RUSH: 1.0,
-        TimePeriod.NIGHT: 0.7,
+        TimePeriod.EVENING: 0.7,
     },
 }
 
@@ -348,7 +348,7 @@ def load_db(
             demand_matrix[idx1][idx2][TimePeriod.AM_RUSH],
             demand_matrix[idx1][idx2][TimePeriod.MID_DAY],
             demand_matrix[idx1][idx2][TimePeriod.PM_RUSH],
-            demand_matrix[idx1][idx2][TimePeriod.NIGHT],
+            demand_matrix[idx1][idx2][TimePeriod.EVENING],
         )
         for idx1, _ in zones.iterrows()
         for idx2, _ in zones.iterrows()

@@ -36,7 +36,7 @@ CREATE TABLE demand (
     volume_am_rush REAL,
     volume_mid_day REAL,
     volume_pm_rush REAL,
-    volume_night REAL,
+    volume_evening REAL,
     FOREIGN KEY(origid) REFERENCES zone(zoneid),
     FOREIGN KEY(destid) REFERENCES zone(zoneid)
 );
