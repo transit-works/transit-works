@@ -59,7 +59,7 @@ impl TransitNetwork {
             let mut inbound_stops = vec![];
             let mut outbound_stops = vec![];
             for trip in [trip1, trip2] {
-                let stop_to_node = map_transit_stops_to_road_network_node_index(trip, road);
+                let stop_to_osmid = map_transit_stops_to_osmid(trip, road);
                 // Classify route as "outbound" or "inbound"
                 let (insert_stops, insert_stops_tree) = if trip_is_outbound(trip) {
                     (&mut outbound_stops, &mut outbound_stops_tree)
@@ -86,7 +86,7 @@ impl TransitNetwork {
                                     stop_times.stop.stop_lon.unwrap_or_default(),
                                     stop_times.stop.stop_lat.unwrap_or_default(),
                                 ),
-                                node_index: stop_to_node.get(&stop_times.stop_id).cloned(),
+                                osmid: stop_to_osmid.get(&stop_times.stop_id).cloned(),
                             });
                             stops_map.insert(stop_times.stop_id.clone(), Arc::clone(&new_stop));
                             let rtree_node = RTreeNode {
@@ -256,10 +256,10 @@ impl TransitNetwork {
 ///
 /// # Returns
 /// A hashmap mapping stop IDs to road network node indices
-fn map_transit_stops_to_road_network_node_index(
+fn map_transit_stops_to_osmid(
     trip: &Trip,
     road: &RoadNetwork,
-) -> HashMap<String, NodeIndex> {
+) -> HashMap<String, u64> {
     let mut stop_to_node = HashMap::new();
     let mut stop_to_node_tmp = HashMap::new();
     // initialize the first stop
@@ -363,7 +363,13 @@ fn map_transit_stops_to_road_network_node_index(
             stop_to_node.insert(s2.stop_id.clone(), best_n2);
         }
     }
+    // get osmid for each node index
     stop_to_node
+        .iter()
+        .map(|(stop_id, node_index)| {
+            (stop_id.to_string(), road.get_osmid_by_node_index(*node_index))
+        })
+        .collect()
 }
 
 /// Pick the longest trip in each direction
@@ -503,12 +509,20 @@ fn is_intercity(trip: &Trip, road: &RoadNetwork) -> bool {
 pub struct TransitStop {
     pub stop_id: String,
     pub geom: Point,
-    node_index: Option<NodeIndex>, // nearby road network node index, if one exists
+    osmid: Option<u64>, // nearby road network osmid, if one exists
 }
 
 impl TransitStop {
+    fn get_node_index(&self, road: &RoadNetwork) -> Option<NodeIndex> {
+        if let Some(osmid) = self.osmid {
+            road.get_node_index_by_osmid(osmid)
+        } else {
+            None
+        }
+    }
+
     pub fn road_distance(&self, other: &TransitStop, road: &RoadNetwork) -> (f64, Vec<NodeIndex>) {
-        if let (Some(n1), Some(n2)) = (self.node_index, other.node_index) {
+        if let (Some(n1), Some(n2)) = (self.get_node_index(road), other.get_node_index(road)) {
             // If stops have an appropriate road node mapping, then use the road distance
             road.get_road_distance(n1, n2)
         } else {
