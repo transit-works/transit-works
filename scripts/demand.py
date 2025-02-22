@@ -25,9 +25,9 @@ class Mode(enum.IntEnum):
 
 class TimePeriod(enum.IntEnum):
     MORNING = 1
-    MORNING_RUSH_HOUR = 2
-    MIDDAY = 3
-    EVENING_RUSH_HOUR = 4
+    AM_RUSH = 2
+    MID_DAY = 3
+    PM_RUSH = 4
     NIGHT = 5
 
 class Landuse(enum.Enum):
@@ -49,9 +49,9 @@ class Building(enum.Enum):
 # Trips generated in the city every hour for each time period
 TRIPS_GENERATED = {
     TimePeriod.MORNING: 20_000.0,
-    TimePeriod.MORNING_RUSH_HOUR: 150_000.0,
-    TimePeriod.MIDDAY: 60_0000.0,
-    TimePeriod.EVENING_RUSH_HOUR: 150_000.0,
+    TimePeriod.AM_RUSH: 150_000.0,
+    TimePeriod.MID_DAY: 60_0000.0,
+    TimePeriod.PM_RUSH: 150_000.0,
     TimePeriod.NIGHT: 20_000.0,
 }
 
@@ -74,30 +74,30 @@ GRAVITY_BETA = 0.5
 LAND_WEIGHTS = {
     Landuse.COMMERCIAL.value: {
         TimePeriod.MORNING: 0.5,
-        TimePeriod.MORNING_RUSH_HOUR: 1.0,
-        TimePeriod.MIDDAY: 0.7,
-        TimePeriod.EVENING_RUSH_HOUR: 0.5,
+        TimePeriod.AM_RUSH: 1.0,
+        TimePeriod.MID_DAY: 0.7,
+        TimePeriod.PM_RUSH: 0.5,
         TimePeriod.NIGHT: 0.5,
     },
     Landuse.RETAIL.value: {
         TimePeriod.MORNING: 0.6,
-        TimePeriod.MORNING_RUSH_HOUR: 1.0,
-        TimePeriod.MIDDAY: 1.0,
-        TimePeriod.EVENING_RUSH_HOUR: 1.0,
+        TimePeriod.AM_RUSH: 1.0,
+        TimePeriod.MID_DAY: 1.0,
+        TimePeriod.PM_RUSH: 1.0,
         TimePeriod.NIGHT: 0.6,
     },
     Landuse.INDUSTRIAL.value: {
         TimePeriod.MORNING: 0.5,
-        TimePeriod.MORNING_RUSH_HOUR: 1.0,
-        TimePeriod.MIDDAY: 1.0,
-        TimePeriod.EVENING_RUSH_HOUR: 1.0,
+        TimePeriod.AM_RUSH: 1.0,
+        TimePeriod.MID_DAY: 1.0,
+        TimePeriod.PM_RUSH: 1.0,
         TimePeriod.NIGHT: 0.5,
     },
     Landuse.RESIDENTIAL.value: {
         TimePeriod.MORNING: 0.5,
-        TimePeriod.MORNING_RUSH_HOUR: 0.5,
-        TimePeriod.MIDDAY: 0.7,
-        TimePeriod.EVENING_RUSH_HOUR: 1.0,
+        TimePeriod.AM_RUSH: 0.5,
+        TimePeriod.MID_DAY: 0.7,
+        TimePeriod.PM_RUSH: 1.0,
         TimePeriod.NIGHT: 0.7,
     },
 }
@@ -348,9 +348,9 @@ def load_db(
             distances[idx1][idx2], 
             max(demand_matrix[idx1][idx2].values()), 
             demand_matrix[idx1][idx2][TimePeriod.MORNING],
-            demand_matrix[idx1][idx2][TimePeriod.MORNING_RUSH_HOUR],
-            demand_matrix[idx1][idx2][TimePeriod.MIDDAY],
-            demand_matrix[idx1][idx2][TimePeriod.EVENING_RUSH_HOUR],
+            demand_matrix[idx1][idx2][TimePeriod.AM_RUSH],
+            demand_matrix[idx1][idx2][TimePeriod.MID_DAY],
+            demand_matrix[idx1][idx2][TimePeriod.PM_RUSH],
             demand_matrix[idx1][idx2][TimePeriod.NIGHT],
         )
         for idx1, _ in zones.iterrows()
