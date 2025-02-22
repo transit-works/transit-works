@@ -108,15 +108,11 @@ SCORE_POPN_WEIGHT = 0.3
 SCORE_LAND_WEIGHT = 0.4
 assert SCORE_POIS_WEIGHT + SCORE_POPN_WEIGHT + SCORE_LAND_WEIGHT == 1.0
 
-# Mode choice
-MODE_CHOICE = {
-    Mode.BIKE: 0.2,
-    Mode.CAR: 0.4,
-    Mode.TRANSIT: 0.4,
-}
-
 # https://www.princeton.edu/~alaink/Orf467F12/The%20Gravity%20Model.pdf
-def run_gravity_model(zones: gpd.GeoDataFrame, distances: list[list[float]]) -> list[list[dict[TimePeriod, float]]]:
+def gravity_model_demand_matrix(
+        zones: gpd.GeoDataFrame, 
+        distances: list[list[float]]
+) -> list[list[dict[TimePeriod, float]]]:
     demand_matrix = [[{t: 0 for t in TimePeriod} for _ in range(len(zones))] for _ in range(len(zones))]
     for time_period in TimePeriod:
         print('Calculating demand for time period', time_period)
@@ -336,11 +332,12 @@ def load_db(
     distances: list[list[float]],
     demand_matrix: list[list[dict[TimePeriod, float]]],
 ):
+    conn.execute('DELETE FROM zone;')
+    conn.execute('DELETE FROM demand;')
     conn.executemany('INSERT INTO zone VALUES (?, ?, ?)', [
         (idx, geom[0].centroid.wkt, geom[0].wkt)
         for idx, geom in zones[['geometry']].iterrows()
     ])
-    conn.commit()
     conn.executemany('INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
         (
             idx1, 
@@ -358,20 +355,27 @@ def load_db(
     ])
     conn.commit()
 
-def main():
+def run_gravity_model(
+    city_file: str,
+    nodes_file: str,
+    edges_file: str,
+    num_rows: int,
+    num_cols: int,
+    conn: sqlite3.Connection,
+):
     import time
 
     print("Loading city data...")
     start = time.time()
     city = load_data_from_files(
-        'city_data/toronto/data/Toronto.osm.pbf',
-        'city_data/toronto/data/nodes.gpkg',
-        'city_data/toronto/data/edges.gpkg',
+        city_file,
+        nodes_file,
+        edges_file,
     )
     print(f"Data loaded in {time.time() - start:.2f} seconds")
 
     print("Dividing city into zones...")
-    zones = divide_into_zones(city, 20, 20)
+    zones = divide_into_zones(city, num_rows, num_cols)
 
     print("Populating zone attributes...")
     start = time.time()
@@ -400,17 +404,26 @@ def main():
 
     print("Running gravity model...")
     start = time.time()
-    demand_matrix = run_gravity_model(zones, distances)
+    demand_matrix = gravity_model_demand_matrix(zones, distances)
     print(f"Gravity model ran in {time.time() - start:.2f} seconds")
 
     print("Loading data into database...")
+    load_db(conn, zones, distances, demand_matrix)
+
+    print("Done!")
+
+def main():
     conn = sqlite3.connect('city_db/toronto2.db')
     conn.enable_load_extension(True)
     conn.load_extension('mod_spatialite')
-    load_db(conn, zones, distances, demand_matrix)
-    conn.close()
-
-    print("Done!")
+    run_gravity_model(
+        'city_data/toronto/data/Toronto.osm.pbf',
+        'city_data/toronto/data/nodes.gpkg',
+        'city_data/toronto/data/edges.gpkg',
+        20,
+        20,
+        conn,
+    )
 
 if __name__ == '__main__':
     main()
