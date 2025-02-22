@@ -46,6 +46,15 @@ class Building(enum.Enum):
     HOUSE = 'house'
     SEMIDETACHED_HOUSE = 'semidetached_house'
 
+# Trips generated in the city every hour for each time period
+TRIPS_GENERATED = {
+    TimePeriod.MORNING: 20_000.0,
+    TimePeriod.MORNING_RUSH_HOUR: 150_000.0,
+    TimePeriod.MIDDAY: 60_0000.0,
+    TimePeriod.EVENING_RUSH_HOUR: 150_000.0,
+    TimePeriod.NIGHT: 20_000.0,
+}
+
 # Rough estimate of the number of people living in each building type
 BUILDING_OCCUPANCY = {
     Building.APARTMENTS.value: 400,
@@ -108,9 +117,11 @@ MODE_CHOICE = {
 
 # https://www.princeton.edu/~alaink/Orf467F12/The%20Gravity%20Model.pdf
 def run_gravity_model(zones: gpd.GeoDataFrame, distances: list[list[float]]) -> list[list[dict[TimePeriod, float]]]:
-    demand_matrix = [[{} for _ in range(len(zones))] for _ in range(len(zones))]
+    demand_matrix = [[{t: 0 for t in TimePeriod} for _ in range(len(zones))] for _ in range(len(zones))]
     for time_period in TimePeriod:
+        print('Calculating demand for time period', time_period)
         for _, zone1 in zones.iterrows():
+            print('  Calculating demand for zone', zone1['zone_id'])
             idx1 = zone1['zone_id']
             trips_denominator = 0
             for _, zone2 in zones.iterrows():
@@ -131,15 +142,19 @@ def run_gravity_model(zones: gpd.GeoDataFrame, distances: list[list[float]]) -> 
 
 def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     zone_population: dict[int, float] = {}
-    zone_area: dict[int, dict[str, float]] = {}
+    zone_land: dict[int, dict[str, float]] = {}
     zone_pois: dict[int, int] = {}
     for _, zone in zones.iterrows():
         geom = zone['geometry']
+        zone_id = zone['zone_id']
         try:
             pois = city.pois.clip(geom)
             landuse = city.landuse.clip(geom)
             buildings = city.buildings.clip(geom)
         except Exception:
+            zone_population[zone_id] = 0
+            zone_land[zone_id] = {x.value: 0 for x in Landuse}
+            zone_pois[zone_id] = 0
             continue
 
         # determine the population of the zone based on the number of people living in buildings
@@ -160,13 +175,12 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
         # determine the number of POIs in the zone
         pois_count = pois['amenity'].value_counts().sum()
 
-        zone_id = zone['zone_id']
         zone_population[zone_id] = population
-        zone_area[zone_id] = area_by_type
+        zone_land[zone_id] = area_by_type
         zone_pois[zone_id] = pois_count
         print('Zone', zone_id, 'population:', population)
     zones['population'] = zones['zone_id'].map(zone_population)
-    zones['area'] = zones['zone_id'].map(zone_area)
+    zones['land'] = zones['zone_id'].map(zone_land)
     zones['pois'] = zones['zone_id'].map(zone_pois)
     return zones
 
@@ -177,10 +191,10 @@ def calculate_zone_attraction(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     zone_attraction = {}
     for _, zone in zones.iterrows():
         zone_id = zone['zone_id']
-        if 'pois' not in zone or 'area' not in zone or 'population' not in zone:
+        if 'pois' not in zone or 'land' not in zone or 'population' not in zone:
             zone_attraction[zone_id] = {time_period: 0 for time_period in TimePeriod}
             continue
-        area_by_type = zone['area']
+        area_by_type = zone['land']
         popn = zone['population']
         pois = zone['pois']
         poi_score = pois / max_pois * 100.0
@@ -204,11 +218,12 @@ def calculate_zone_attraction(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 def calculate_zone_production(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     max_pois = zones['pois'].max()
     max_popn = zones['population'].max()
-    zone_production = {
-        id: {tp: zone['population'] / max_popn * 100.0 + zone['pois'] / max_pois * 100.0}
-        for id, zone in zones.iterrows()
-        for tp in TimePeriod
-    }
+    zone_production = {}
+    for _, zone in zones.iterrows():
+        zone_id = zone['zone_id']
+        zone_popn = zone['population']
+        zone_pois = zone['pois']
+        zone_production[zone_id] = {time_period: zone_popn / max_popn * 100.0 + zone_pois / max_pois * 100.0 for time_period in TimePeriod}
     zones['production'] = zones['zone_id'].map(zone_production)
     return zones
 
@@ -217,8 +232,9 @@ def normalize_zone_production_and_attraction(zones: gpd.GeoDataFrame) -> gpd.Geo
     for time_period in TimePeriod:
         ttl_production = zones['production'].apply(lambda x: x[time_period]).sum()
         ttl_attraction = zones['attraction'].apply(lambda x: x[time_period]).sum()
-        zones['production'] = zones['production'].apply(lambda x: x[time_period] / ttl_production * 1000.0)
-        zones['attraction'] = zones['attraction'].apply(lambda x: x[time_period] / ttl_attraction * 1000.0)
+        trips_per_hour = TRIPS_GENERATED[time_period]
+        zones['production'] = zones['production'].apply(lambda x: x.update({time_period: x[time_period] / ttl_production * trips_per_hour}) or x)
+        zones['attraction'] = zones['attraction'].apply(lambda x: x.update({time_period: x[time_period] / ttl_attraction * trips_per_hour}) or x)
         # check the sum
         ttl_production = zones['production'].apply(lambda x: x[time_period]).sum()
         ttl_attraction = zones['attraction'].apply(lambda x: x[time_period]).sum()
@@ -321,8 +337,8 @@ def load_db(
     demand_matrix: list[list[dict[TimePeriod, float]]],
 ):
     conn.executemany('INSERT INTO zone VALUES (?, ?, ?)', [
-        (idx, geom, attraction)
-        for idx, (geom, attraction) in zones[['geometry', 'attraction']].iterrows()
+        (idx, geom[0].centroid.wkt, geom[0].wkt)
+        for idx, geom in zones[['geometry']].iterrows()
     ])
     conn.commit()
     conn.executemany('INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
@@ -389,6 +405,8 @@ def main():
 
     print("Loading data into database...")
     conn = sqlite3.connect('city_db/toronto2.db')
+    conn.enable_load_extension(True)
+    conn.load_extension('mod_spatialite')
     load_db(conn, zones, distances, demand_matrix)
     conn.close()
 
