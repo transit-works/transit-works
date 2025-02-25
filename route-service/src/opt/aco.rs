@@ -1,6 +1,6 @@
 use env_logger::init;
 use geo::{Distance, Haversine, Length, LineString, Point};
-use rand::{distributions::WeightedIndex, prelude::Distribution};
+use rand::{distributions::WeightedIndex, prelude::Distribution, SeedableRng};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -114,6 +114,7 @@ impl ACO {
             return Some(end.clone());
         }
         let mut rng = rand::thread_rng();
+        //let mut rng = rand::rngs::StdRng::seed_from_u64(100);
         let mut choices = Vec::new();
         let mut weights = Vec::new();
 
@@ -166,7 +167,8 @@ impl ACO {
             assert_valid_f64(*pheromone, "pheromone");
             assert_valid_f64(heuristic, "heuristic");
             let probability = pheromone.powf(self.alpha) * heuristic.powf(self.beta);
-            log::debug!("probability : {}", probability);
+            log::trace!("probability : {}", probability);
+            log::trace!("pheromone value : {}", pheromone);
             if probability == 0.0 {
                 continue;
             }
@@ -179,7 +181,12 @@ impl ACO {
             return Some(end.clone());
         }
         let dist = WeightedIndex::new(&weights).unwrap();
-        let idx = dist.sample(&mut rng);
+        //let idx = dist.sample(&mut rng);
+        let idx = weights.iter()
+        .enumerate()
+        .max_by(|&(_, a), &(_, b)| a.partial_cmp(&b).unwrap()) // Handle f64 safely
+        .map(|(i, _)| i)
+        .unwrap();
         if idx < choices.len() {
             Some(choices[idx].clone())
         } else {
@@ -191,7 +198,7 @@ impl ACO {
         &mut self,
         od: &GridNetwork,
         road: &RoadNetwork,
-        route: &TransitRoute,
+        routes: &Vec<TransitRoute>,
         pheromone: &mut HashMap<(String, String), f64>,
     ) {
         // Decay all the pheromones
@@ -199,12 +206,21 @@ impl ACO {
             *v *= 1.0 - self.rho;
         }
         // Deposit pheromone on routes
-        let deposit = ACO::evaluate_route(od, road, route).0 / self.q;
-        // add or set the pheromone to deposit
-        for w in route.outbound_stops.windows(2) {
-            *pheromone
-                .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
-                .or_insert(INIT_PHEROMONE) += deposit;
+        let mut tmp_pheromone = 0.0;
+        //add or set the pheromone to deposit
+        for i in 0..routes.len(){
+            tmp_pheromone += ACO::evaluate_route(od, road, &routes[i]).0 / self.q;
+        }
+
+        for i in 0..routes.len(){
+            for w in routes[i].outbound_stops.windows(2){
+                let old_pheromone = pheromone.get(&(w[0].stop_id.clone(), w[1].stop_id.clone()));
+                if !old_pheromone.is_none(){
+                    *pheromone
+                    .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
+                    .or_insert(INIT_PHEROMONE) = self.rho * old_pheromone.unwrap() + tmp_pheromone;
+                }
+            }
         }
     }
 
@@ -442,9 +458,10 @@ impl ACO {
         log::debug!("    Initial route len : {}", route.outbound_stops.len());
         log::debug!("inital evaluation : {}", init_eval.0);
         for aco_max_gen_i in 0..self.aco_max_gen {
+            let mut ant_routes : Vec<TransitRoute> = Vec::new();
             log::debug!("    Gen {}", aco_max_gen_i);
             // Update pheromone for route
-            self.update_route_pheromone(od, road, &best_route, &mut pheromone);
+            //self.update_route_pheromone(od, road, &best_route, &mut pheromone);
             for aco_num_ant_i in 0..self.aco_num_ant {
                 log::debug!("      Ant {}", aco_num_ant_i);
                 if let Some(new_route) = self.adjust_route(
@@ -455,6 +472,7 @@ impl ACO {
                     &vec![best_route.clone()],
                     &pheromone,
                 ) {
+                    ant_routes.push(new_route.clone());
                     let new_eval = ACO::evaluate_route(od, road, &new_route);
                     //log::debug!("new route evaluated to : {}", new_eval.0);
                     if new_eval.0 > best_eval.0 {
@@ -466,6 +484,7 @@ impl ACO {
                     log::debug!("        Failed to build new route");
                 }
             }
+            self.update_route_pheromone(od, road, &ant_routes, &mut pheromone);
             self.maybe_punish_route(&best_route, best_eval.1, &mut pheromone);
         }
         if gen_best_eval.0 < best_eval.0 {
