@@ -55,6 +55,20 @@ class City:
         self.gtfs_dir = f'{CACHE_DIR}/{key_name}/gtfs'
         self.g2d_dir = f'{CACHE_DIR}/{key_name}/g2d'
         self.db_path = f'{CITY_DIR}/{key_name}.db'
+    
+    @property
+    def city_file(self):
+        file = next(f for f in os.listdir(self.data_dir) if f.endswith('.osm.pbf'))
+        file = f'{self.data_dir}/{file}'
+        return file
+
+    @property
+    def nodes_file(self):
+        return f'{self.data_dir}/nodes.gpkg'
+
+    @property
+    def edges_file(self):
+        return f'{self.data_dir}/edges.gpkg'
 
 CITY_MAP = {
     'toronto': City(
@@ -64,38 +78,30 @@ CITY_MAP = {
     )
 }
 
-def load_libspatialite(conn: sqlite3.Connection):
+def load_libspatialite(conn: sqlite3.Connection, init: bool = True):
     print('Loading libspatialite')
     conn.enable_load_extension(True)
     conn.load_extension('mod_spatialite')
-    conn.execute('SELECT InitSpatialMetadata(1);')
+    if init: conn.execute('SELECT InitSpatialMetadata(1);')
 
 def get_data_from_OSM(city: City):
     import osmnx as ox
     import pyrosm as po
-    import osm2gmns as og
-
-    nodes_file = f'{city.data_dir}/nodes.gpkg'
-    edges_file = f'{city.data_dir}/edges.gpkg'
-
-    # Download the drive network
-    print('Downloading OSM road network data')
-    graph = ox.graph_from_place(city.osm_name, network_type='drive', simplify=False)
-
     # Get nodes.gpkg and edges.gpkg
-    print('Extracting GDFS data')
-    nodes, edges = ox.graph_to_gdfs(graph)
-    nodes.to_file(nodes_file, driver='GPKG')
-    edges.to_file(edges_file, driver='GPKG')
+    if not os.path.exists(city.nodes_file) or not os.path.exists(city.edges_file):
+        # Download the drive network
+        print('Downloading OSM road network data')
+        graph = ox.graph_from_place(city.osm_name, network_type='drive', simplify=False)
+        # Extract the nodes and edges files
+        print('Extracting GPKG data')
+        nodes, edges = ox.graph_to_gdfs(graph)
+        nodes.to_file(city.nodes_file, driver='GPKG')
+        edges.to_file(city.edges_file, driver='GPKG')
 
     # Download the .osm.pbf file from pyrosm
-    print('Getting .osm.pbf from pyrosm')
-    fp = po.get_data(city.key_name, directory=city.data_dir)
-
-    # takes like 30 minutes
-    print('Converting to GMNS')
-    net = og.getNetFromFile(fp, network_types=('auto',), POI=True, POI_sampling_ratio=0.1)
-    og.outputNetToCSV(net, output_folder=city.gmns_dir)
+    if not os.path.exists(city.city_file):
+        print('Getting .osm.pbf from pyrosm')
+        _ = po.get_data(city.key_name, directory=city.data_dir)
 
 def add_nodes_edges_osmnx(
     city: City,
@@ -113,15 +119,13 @@ def add_nodes_edges_osmnx(
 
     print('Reading nodes...')
     with sqlite3.connect(nodes_file) as nodes_conn:
-        nodes_conn.enable_load_extension(True)
-        nodes_conn.execute('''SELECT load_extension('mod_spatialite');''')
+        load_libspatialite(nodes_conn, init=False)
         nodes_conn.execute('SELECT EnableGpkgMode();')
         nodes_df = pd.read_sql('SELECT fid, ST_AsText(geom) as geom, osmid, y, x FROM nodes', nodes_conn)
 
     print('Reading edges...')
     with sqlite3.connect(edges_file) as edges_conn:
-        edges_conn.enable_load_extension(True)
-        edges_conn.execute('''SELECT load_extension('mod_spatialite');''')
+        load_libspatialite(edges_conn, init=False)
         edges_conn.execute('SELECT EnableGpkgMode();')
         edges_df = pd.read_sql('SELECT fid, ST_AsText(geom) as geom, u, v, key, osmid FROM edges', edges_conn)
 
@@ -136,7 +140,14 @@ def add_travel_demand_grid2demand(
     conn: sqlite3.Connection,
 ):
     import pandas as pd
+    import osm2gmns as og
     import grid2demand as gd
+
+    # takes like 30 minutes
+    if not os.path.exists(f'{city.gmns_dir}/node.csv') or not os.path.exists(f'{city.gmns_dir}/poi.csv'):
+        print('Converting to GMNS')
+        net = og.getNetFromFile(city.city_file, network_types=('auto',), POI=True, POI_sampling_ratio=0.1)
+        og.outputNetToCSV(net, output_folder=city.gmns_dir)
 
     # grid2demand
     print('Getting demand matrix')
@@ -156,8 +167,22 @@ def add_travel_demand_grid2demand(
     demand.rename(columns={'o_zone_id': 'origid', 'd_zone_id': 'destid'}, inplace=True)
 
     print('Inserting rows')
-    zone[['zoneid', 'center', 'geom']].to_sql('zone', conn, if_exists='append', index=False)
-    demand[['origid', 'destid', 'dist_km', 'volume']].to_sql('demand', conn, if_exists='append', index=False)
+    zone[['zoneid', 'center', 'geom']].to_sql('zone', conn, if_exists='replace', index=False)
+    demand[['origid', 'destid', 'dist_km', 'volume']].to_sql('demand', conn, if_exists='replace', index=False)
+
+def add_travel_demand_gravity_model(
+    city: City,
+    conn: sqlite3.Connection,
+):
+    from gravity_model import run_gravity_model
+    run_gravity_model(
+        city_file=city.city_file,
+        nodes_file=city.nodes_file,
+        edges_file=city.edges_file,
+        num_rows=20,
+        num_cols=20,
+        conn=conn,
+    )
 
 def add_gtfs_data(
     city: City,
@@ -210,7 +235,7 @@ def main():
     print('2/4: ADDING NODES AND EDGES')
     add_nodes_edges_osmnx(city, conn)
     print('3/4: ADDING TRAVEL DEMAND')
-    add_travel_demand_grid2demand(city, conn)
+    add_travel_demand_gravity_model(city, conn)
     print('4/4: ADDING GTFS DATA')
     add_gtfs_data(city, conn)
 

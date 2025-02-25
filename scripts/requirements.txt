@@ -30,6 +30,7 @@ python-rapidjson==1.20
 pytz==2024.2
 pyufunc==0.3.7
 requests==2.32.3
+scipy==1.15.2
 setuptools==75.6.0
 shapely==2.0.6
 six==1.17.0

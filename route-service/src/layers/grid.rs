@@ -25,7 +25,10 @@ impl GridNetwork {
     pub fn load(dbname: &str) -> Result<GridNetwork> {
         let conn = Connection::open(dbname)?;
 
-        let links = read_links(&conn)?;
+        let links = read_links2(&conn).unwrap_or_else(|_| {
+            log::error!("Failed to read links with time data, falling back to reading links without time data");
+            read_links(&conn).unwrap()
+        });
         let zones = read_zones(&conn)?;
 
         let mut rtree = RTree::<RTreeNode>::new();
@@ -74,11 +77,22 @@ impl GridNetwork {
     }
 }
 
+#[derive(Deserialize, Serialize, Hash, Eq, PartialEq)]
+pub enum TimePeriod {
+    Morning,
+    AmRush,
+    MidDay,
+    PmRush,
+    Evening,
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct Link {
     pub origid: u32,
     pub destid: u32,
     pub weight: f64,
+    #[serde(default)]
+    pub weight_by_time: HashMap<TimePeriod, f64>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -139,6 +153,41 @@ fn read_links(conn: &Connection) -> Result<Vec<Link>> {
             origid: row.get(0)?,
             destid: row.get(1)?,
             weight: row.get(2)?,
+            weight_by_time: HashMap::new(),
+        })
+    })?;
+    Ok(Vec::from_iter(link_iter.map(|x| x.unwrap())))
+}
+
+fn read_links2(conn: &Connection) -> Result<Vec<Link>> {
+    let mut stmt = conn.prepare(
+        "
+SELECT \
+    origid, \
+    destid, \
+    volume, \
+    volume_morning, \
+    volume_am_rush, \
+    volume_mid_day, \
+    volume_pm_rush, \
+    volume_evening \
+FROM \
+    demand",
+    )?;
+    let link_iter = stmt.query_map(params![], |row| {
+        Ok(Link {
+            origid: row.get(0)?,
+            destid: row.get(1)?,
+            weight: row.get(2)?,
+            weight_by_time: [
+                (TimePeriod::Morning, row.get(3)?),
+                (TimePeriod::AmRush, row.get(4)?),
+                (TimePeriod::MidDay, row.get(5)?),
+                (TimePeriod::PmRush, row.get(6)?),
+                (TimePeriod::Evening, row.get(7)?),
+            ]
+            .into_iter()
+            .collect(),
         })
     })?;
     Ok(Vec::from_iter(link_iter.map(|x| x.unwrap())))
