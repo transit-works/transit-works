@@ -256,10 +256,7 @@ impl TransitNetwork {
 ///
 /// # Returns
 /// A hashmap mapping stop IDs to road network node indices
-fn map_transit_stops_to_osmid(
-    trip: &Trip,
-    road: &RoadNetwork,
-) -> HashMap<String, u64> {
+fn map_transit_stops_to_osmid(trip: &Trip, road: &RoadNetwork) -> HashMap<String, u64> {
     let mut stop_to_node = HashMap::new();
     let mut stop_to_node_tmp = HashMap::new();
     // initialize the first stop
@@ -367,7 +364,10 @@ fn map_transit_stops_to_osmid(
     stop_to_node
         .iter()
         .map(|(stop_id, node_index)| {
-            (stop_id.to_string(), road.get_osmid_by_node_index(*node_index))
+            (
+                stop_id.to_string(),
+                road.get_osmid_by_node_index(*node_index),
+            )
         })
         .collect()
 }
