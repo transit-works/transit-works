@@ -1,7 +1,9 @@
+import os
 import enum
 import sqlite3
 import dataclasses
 
+# Libraries for OSM data processing
 import osmnx as ox
 import pyrosm as po
 import shapely as shp
@@ -10,6 +12,15 @@ import geopandas as gpd
 
 from math import radians, sin, cos, sqrt, atan2
 
+# Libraries for visualization
+import numpy as np
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+
+from matplotlib.lines import Line2D
+from matplotlib.collections import LineCollection
+
 @dataclasses.dataclass
 class City:
     nodes: gpd.GeoDataFrame
@@ -17,11 +28,6 @@ class City:
     pois: gpd.GeoDataFrame
     landuse: gpd.GeoDataFrame
     buildings: gpd.GeoDataFrame
-
-class Mode(enum.IntEnum):
-    BIKE = 1
-    CAR = 2
-    TRANSIT = 3
 
 class TimePeriod(enum.IntEnum):
     MORNING = 1
@@ -355,6 +361,197 @@ def load_db(
     ])
     conn.commit()
 
+def visualize_demand(
+    city: City,
+    zones: gpd.GeoDataFrame,
+    demand_matrix: list[list[dict[TimePeriod, float]]],
+    time_period: TimePeriod,
+    output_file: str = 'demand_visualization.png',
+):
+    """
+    Visualize the O-D grid demand matrix on the map of the city.
+    
+    Parameters:
+        city: The city data
+        zones: GeoDataFrame of zones
+        demand_matrix: The calculated demand matrix
+        time_period: Which time period to visualize
+        output_file: Path to save the visualization
+    """
+    print("Starting visualization...")
+    
+    # Use non-interactive backend to prevent opening windows
+    plt.switch_backend('agg')
+    
+    print("Creating figure...")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+    
+    # Plot base map in both axes
+    print("Plotting base map...")
+    city.edges.plot(ax=ax1, color='gray', linewidth=0.5, alpha=0.5)
+    city.edges.plot(ax=ax2, color='gray', linewidth=0.5, alpha=0.5)
+    
+    # Draw the zone boundaries
+    print("Drawing zone boundaries...")
+    zones.boundary.plot(ax=ax1, color='black', linewidth=0.7)
+    zones.boundary.plot(ax=ax2, color='black', linewidth=0.7)
+    
+    # Visualization 1: Population density
+    print("Creating population density visualization...")
+    if 'population' in zones.columns:
+        # Normalize population for color mapping
+        pop_values = zones['population'].values
+        max_pop = pop_values.max()
+        print(f"Max population: {max_pop}")
+        if max_pop > 0:  # Avoid division by zero
+            norm = colors.Normalize(vmin=0, vmax=max_pop)
+            cmap = cm.get_cmap('YlOrRd')
+            
+            # Plot zones with color based on population
+            for i, (idx, zone) in enumerate(zones.iterrows()):
+                if i % 10 == 0:  # Print progress every 10 zones
+                    print(f"  Processing zone {i}/{len(zones)}")
+                color = cmap(norm(zone['population']))
+                try:
+                    ax1.fill(zone.geometry.exterior.xy[0], zone.geometry.exterior.xy[1], 
+                            color=color, alpha=0.7)
+                except Exception as e:
+                    print(f"  Error plotting zone {idx}: {str(e)}")
+                    # Try a more robust approach for complex geometries
+                    try:
+                        ax1.fill(*zone.geometry.exterior.xy, color=color, alpha=0.7)
+                    except:
+                        print(f"  Skipping zone {idx} visualization")
+            
+            # Add colorbar for population density
+            print("Adding population density colorbar...")
+            sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax1, shrink=0.8)
+            cbar.set_label('Population', rotation=270, labelpad=20)
+
+    # Title for population density map
+    ax1.set_title(f'Population Density', fontsize=15)
+    
+    # Visualization 2: Demand between zones
+    print("Creating demand flow visualization...")
+    # Find all demands for normalization
+    all_demands = []
+    for i in range(len(zones)):
+        for j in range(len(zones)):
+            if i != j:  # Skip self-trips
+                demand = demand_matrix[i][j][time_period]
+                if demand > 0:  # Only consider non-zero demands
+                    all_demands.append(demand)
+    
+    if all_demands:
+        min_demand = min(all_demands)
+        max_demand = max(all_demands)
+        print(f"Demand range: {min_demand:.2f} to {max_demand:.2f}")
+        
+        # Normalize line width
+        min_width = 0.5
+        max_width = 4.0
+        
+        # Calculate centroids for all zones
+        print("Calculating zone centroids...")
+        zone_centroids = {}
+        for idx, zone in zones.iterrows():
+            try:
+                zone_centroids[zone['zone_id']] = (
+                    zone.geometry.centroid.x,
+                    zone.geometry.centroid.y
+                )
+            except Exception as e:
+                print(f"  Error calculating centroid for zone {idx}: {str(e)}")
+                # Use representative point as fallback
+                try:
+                    rep_point = zone.geometry.representative_point()
+                    zone_centroids[zone['zone_id']] = (rep_point.x, rep_point.y)
+                except:
+                    print(f"  Skipping zone {idx}")
+        
+        # Create lines between centroids with width proportional to demand
+        print("Creating demand flow lines...")
+        lines = []
+        line_widths = []
+        
+        # Calculate percentile threshold for showing top 25% of trips
+        threshold = np.percentile(all_demands, 75)
+        print(f"Showing trips with demand > {threshold:.2f} (75th percentile)")
+        
+        connection_count = 0
+        for i, zone1 in zones.iterrows():
+            for j, zone2 in zones.iterrows():
+                if zone1['zone_id'] != zone2['zone_id']:  # Skip self-trips
+                    try:
+                        demand = demand_matrix[zone1['zone_id']][zone2['zone_id']][time_period]
+                        if demand > 0 and demand > threshold:  # Only draw lines for significant demand
+                            x1, y1 = zone_centroids[zone1['zone_id']]
+                            x2, y2 = zone_centroids[zone2['zone_id']]
+                            
+                            # Calculate line width based on demand
+                            if max_demand > min_demand:  # Avoid division by zero
+                                width = min_width + (max_width - min_width) * (demand - min_demand) / (max_demand - min_demand)
+                            else:
+                                width = min_width
+                                
+                            lines.append([(x1, y1), (x2, y2)])
+                            line_widths.append(width)
+                            connection_count += 1
+                    except Exception as e:
+                        print(f"  Error processing connection {zone1['zone_id']} -> {zone2['zone_id']}: {str(e)}")
+        
+        print(f"Drawing {connection_count} connections...")
+        # Create line collection
+        if lines:  # Only create if there are lines to draw
+            lc = LineCollection(lines, linewidths=line_widths, color='blue', alpha=0.6)
+            ax2.add_collection(lc)
+            
+            # Create legend for demand lines
+            legend_elements = [
+                Line2D([0], [0], color='blue', linewidth=min_width, label=f'Low Demand ({min_demand:.1f})'),
+                Line2D([0], [0], color='blue', linewidth=(min_width + max_width) / 2, label='Medium Demand'),
+                Line2D([0], [0], color='blue', linewidth=max_width, label=f'High Demand ({max_demand:.1f})')
+            ]
+            ax2.legend(handles=legend_elements, loc='upper right')
+        else:
+            print("No significant demand flows to visualize")
+
+    # Title for demand visualization
+    ax2.set_title(f'Demand Flow - {time_period.name}', fontsize=15)
+    
+    # Set limits for both axes
+    print("Setting plot limits...")
+    bounds = zones.total_bounds
+    ax1.set_xlim(bounds[0], bounds[2])
+    ax1.set_ylim(bounds[1], bounds[3])
+    ax2.set_xlim(bounds[0], bounds[2])
+    ax2.set_ylim(bounds[1], bounds[3])
+    
+    # Remove axes ticks for cleaner look
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    
+    # Main title
+    plt.suptitle(f'City Demand Analysis - {time_period.name}', fontsize=18)
+    
+    # Save figure
+    print(f"Saving visualization to {output_file}...")
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.9)
+    
+    # Make sure the directory exists
+    os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else '.', exist_ok=True)
+    
+    # Save with explicit dpi
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    
+    print(f"Visualization complete! Saved to {output_file}")
+
 def run_gravity_model(
     city_file: str,
     nodes_file: str,
@@ -406,6 +603,14 @@ def run_gravity_model(
     start = time.time()
     demand_matrix = gravity_model_demand_matrix(zones, distances)
     print(f"Gravity model ran in {time.time() - start:.2f} seconds")
+
+    print("Visualizing demand matrix...")
+    try:
+        visualize_demand(city, zones, demand_matrix, TimePeriod.AM_RUSH, output_file=f'city_data/demand_visualization_{num_rows}x{num_cols}.png')
+    except Exception as e:
+        print(f"Error during visualization: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
     print("Loading data into database...")
     load_db(conn, zones, distances, demand_matrix)
