@@ -1,7 +1,9 @@
+import os
 import enum
 import sqlite3
 import dataclasses
 
+# Libraries for OSM data processing
 import osmnx as ox
 import pyrosm as po
 import shapely as shp
@@ -10,6 +12,15 @@ import geopandas as gpd
 
 from math import radians, sin, cos, sqrt, atan2
 
+# Libraries for visualization
+import numpy as np
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+
+from matplotlib.lines import Line2D
+from matplotlib.collections import LineCollection
+
 @dataclasses.dataclass
 class City:
     nodes: gpd.GeoDataFrame
@@ -17,11 +28,6 @@ class City:
     pois: gpd.GeoDataFrame
     landuse: gpd.GeoDataFrame
     buildings: gpd.GeoDataFrame
-
-class Mode(enum.IntEnum):
-    BIKE = 1
-    CAR = 2
-    TRANSIT = 3
 
 class TimePeriod(enum.IntEnum):
     MORNING = 1
@@ -140,9 +146,64 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
     zone_population: dict[int, float] = {}
     zone_land: dict[int, dict[str, float]] = {}
     zone_pois: dict[int, int] = {}
+    
+    # First check which zones have road nodes in them
+    zones_with_nodes = {}
+    print("Checking zones for road nodes...")
+    print(f"Nodes CRS: {city.nodes.crs}, Zones CRS: {zones.crs}")
+    
+    # Create a GeoDataFrame of nodes with the proper CRS
+    nodes_gdf = gpd.GeoDataFrame(
+        geometry=gpd.GeoSeries(city.nodes.geometry), 
+        crs=city.nodes.crs
+    )
+    
+    # Ensure zones has a CRS
+    if zones.crs is None:
+        print("Warning: Zones GeoDataFrame has no CRS. Setting to same as nodes.")
+        zones.set_crs(city.nodes.crs, inplace=True)
+    
     for _, zone in zones.iterrows():
         geom = zone['geometry']
         zone_id = zone['zone_id']
+        try:
+            # Create a GeoDataFrame for this zone with the same CRS as nodes
+            zone_gdf = gpd.GeoDataFrame(
+                geometry=gpd.GeoSeries([geom]), 
+                crs=zones.crs
+            )
+            
+            # Make sure both have the same CRS before joining
+            if zone_gdf.crs != nodes_gdf.crs:
+                print(f"  Converting zone CRS from {zone_gdf.crs} to {nodes_gdf.crs}")
+                zone_gdf = zone_gdf.to_crs(nodes_gdf.crs)
+                
+            # Spatial join to find nodes within this zone
+            nodes_in_zone = gpd.sjoin(
+                nodes_gdf,
+                zone_gdf,
+                how="inner", 
+                predicate="within"
+            )
+            zones_with_nodes[zone_id] = len(nodes_in_zone) > 0
+            if not zones_with_nodes[zone_id]:
+                print(f"Zone {zone_id} has no road nodes, setting attributes to 0")
+        except Exception as e:
+            print(f"Error checking nodes in zone {zone_id}: {str(e)}")
+            zones_with_nodes[zone_id] = False
+    
+    # Now process each zone
+    for _, zone in zones.iterrows():
+        geom = zone['geometry']
+        zone_id = zone['zone_id']
+        
+        # If this zone has no road nodes, set all attributes to 0
+        if not zones_with_nodes.get(zone_id, False):
+            zone_population[zone_id] = 0
+            zone_land[zone_id] = {x.value: 0 for x in Landuse}
+            zone_pois[zone_id] = 0
+            continue
+        
         try:
             pois = city.pois.clip(geom)
             landuse = city.landuse.clip(geom)
@@ -175,6 +236,7 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
         zone_land[zone_id] = area_by_type
         zone_pois[zone_id] = pois_count
         print('Zone', zone_id, 'population:', population)
+        
     zones['population'] = zones['zone_id'].map(zone_population)
     zones['land'] = zones['zone_id'].map(zone_land)
     zones['pois'] = zones['zone_id'].map(zone_pois)
@@ -306,7 +368,9 @@ def divide_into_zones(city: City, num_rows: int, num_cols: int) -> gpd.GeoDataFr
                 'geometry': shp.geometry.box(x1, y1, x2, y2),
                 'zone_id': i * num_cols + j
             })
-    zones = gpd.GeoDataFrame(zones)
+    # Create GeoDataFrame with the same CRS as the city nodes
+    zones = gpd.GeoDataFrame(zones, crs=city.nodes.crs)
+    print(f"Created zones with CRS: {zones.crs}")
     return zones
 
 def load_data_from_files(file_path: str, nodes_file, edges_file) -> City:
@@ -354,6 +418,207 @@ def load_db(
         for idx2, _ in zones.iterrows()
     ])
     conn.commit()
+
+def visualize_demand(
+    city: City,
+    zones: gpd.GeoDataFrame,
+    demand_matrix: list[list[dict[TimePeriod, float]]],
+    time_period: TimePeriod,
+    output_file: str = 'demand_visualization.png',
+):
+    """
+    Visualize the O-D grid demand matrix on the map of the city.
+    
+    Parameters:
+        city: The city data
+        zones: GeoDataFrame of zones
+        demand_matrix: The calculated demand matrix
+        time_period: Which time period to visualize
+        output_file: Path to save the visualization
+    """
+    print("Starting visualization...")
+    
+    # Use non-interactive backend to prevent opening windows
+    plt.switch_backend('agg')
+    
+    print("Creating figure...")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+    
+    # Plot base map in both axes
+    print("Plotting base map...")
+    city.edges.plot(ax=ax1, color='gray', linewidth=0.5, alpha=0.5)
+    city.edges.plot(ax=ax2, color='gray', linewidth=0.5, alpha=0.5)
+    
+    # Draw the zone boundaries
+    print("Drawing zone boundaries...")
+    zones.boundary.plot(ax=ax1, color='black', linewidth=0.7)
+    zones.boundary.plot(ax=ax2, color='black', linewidth=0.7)
+    
+    # Visualization 1: Population density
+    print("Creating population density visualization...")
+    if 'population' in zones.columns:
+        # Normalize population for color mapping
+        pop_values = zones['population'].values
+        max_pop = pop_values.max()
+        print(f"Max population: {max_pop}")
+        if max_pop > 0:  # Avoid division by zero
+            norm = colors.Normalize(vmin=0, vmax=max_pop)
+            cmap = cm.get_cmap('YlOrRd')
+            
+            # Plot zones with color based on population
+            for i, (idx, zone) in enumerate(zones.iterrows()):
+                if i % 10 == 0:  # Print progress every 10 zones
+                    print(f"  Processing zone {i}/{len(zones)}")
+                color = cmap(norm(zone['population']))
+                try:
+                    ax1.fill(zone.geometry.exterior.xy[0], zone.geometry.exterior.xy[1], 
+                            color=color, alpha=0.7)
+                except Exception as e:
+                    print(f"  Error plotting zone {idx}: {str(e)}")
+                    # Try a more robust approach for complex geometries
+                    try:
+                        ax1.fill(*zone.geometry.exterior.xy, color=color, alpha=0.7)
+                    except:
+                        print(f"  Skipping zone {idx} visualization")
+            
+            # Add colorbar for population density
+            print("Adding population density colorbar...")
+            sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax1, shrink=0.8)
+            cbar.set_label('Population', rotation=270, labelpad=20)
+
+    # Title for population density map
+    ax1.set_title(f'Population Density', fontsize=15)
+    
+    # Visualization 2: Demand between zones
+    print("Creating demand flow visualization...")
+    # Find all demands for normalization
+    all_demands = []
+    for i in range(len(zones)):
+        for j in range(len(zones)):
+            if i != j:  # Skip self-trips
+                demand = demand_matrix[i][j][time_period]
+                if demand > 0:  # Only consider non-zero demands
+                    all_demands.append(demand)
+    
+    if all_demands:
+        min_demand = min(all_demands)
+        max_demand = max(all_demands)
+        print(f"Demand range: {min_demand:.2f} to {max_demand:.2f}")
+        
+        # Set up color mapping for demand
+        demand_cmap = cm.get_cmap('plasma')
+        norm = colors.Normalize(vmin=min_demand, vmax=max_demand)
+        
+        # Constant line width for all connections
+        line_width = 1.5
+        
+        # Calculate centroids for all zones
+        print("Calculating zone centroids...")
+        zone_centroids = {}
+        for idx, zone in zones.iterrows():
+            try:
+                zone_centroids[zone['zone_id']] = (
+                    zone.geometry.centroid.x,
+                    zone.geometry.centroid.y
+                )
+            except Exception as e:
+                print(f"  Error calculating centroid for zone {idx}: {str(e)}")
+                # Use representative point as fallback
+                try:
+                    rep_point = zone.geometry.representative_point()
+                    zone_centroids[zone['zone_id']] = (rep_point.x, rep_point.y)
+                except:
+                    print(f"  Skipping zone {idx}")
+        
+        # Create lines between centroids with color based on demand
+        print("Creating demand flow lines...")
+        lines = []
+        line_colors = []
+        
+        # Calculate percentile threshold for showing top 25% of trips
+        threshold = np.percentile(all_demands, 95)
+        print(f"Showing trips with demand > {threshold:.2f} (95th percentile)")
+        
+        connection_count = 0
+        for i, zone1 in zones.iterrows():
+            for j, zone2 in zones.iterrows():
+                if zone1['zone_id'] != zone2['zone_id']:  # Skip self-trips
+                    try:
+                        demand = demand_matrix[zone1['zone_id']][zone2['zone_id']][time_period]
+                        if demand > 0 and demand > threshold:  # Only draw lines for significant demand
+                            x1, y1 = zone_centroids[zone1['zone_id']]
+                            x2, y2 = zone_centroids[zone2['zone_id']]
+                            
+                            # Get color for this demand value
+                            color = demand_cmap(norm(demand))
+                                
+                            lines.append([(x1, y1), (x2, y2)])
+                            line_colors.append(color)
+                            connection_count += 1
+                    except Exception as e:
+                        print(f"  Error processing connection {zone1['zone_id']} -> {zone2['zone_id']}: {str(e)}")
+        
+        print(f"Drawing {connection_count} connections...")
+        # Create line collection
+        if lines:  # Only create if there are lines to draw
+            lc = LineCollection(lines, colors=line_colors, linewidths=line_width, alpha=0.7)
+            ax2.add_collection(lc)
+            
+            # Create colorbar for demand
+            sm = cm.ScalarMappable(norm=norm, cmap=demand_cmap)
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax2, shrink=0.8)
+            cbar.set_label('Demand', rotation=270, labelpad=20)
+            
+            # Add example lines to show demand levels in legend
+            low_demand = min_demand
+            med_demand = (min_demand + max_demand) / 2
+            high_demand = max_demand
+            
+            legend_elements = [
+                Line2D([0], [0], color=demand_cmap(norm(low_demand)), lw=line_width, label=f'Low Demand ({low_demand:.1f})'),
+                Line2D([0], [0], color=demand_cmap(norm(med_demand)), lw=line_width, label=f'Medium Demand ({med_demand:.1f})'),
+                Line2D([0], [0], color=demand_cmap(norm(high_demand)), lw=line_width, label=f'High Demand ({high_demand:.1f})')
+            ]
+            ax2.legend(handles=legend_elements, loc='upper right')
+        else:
+            print("No significant demand flows to visualize")
+
+    # Title for demand visualization
+    ax2.set_title(f'Demand Flow - {time_period.name}', fontsize=15)
+    
+    # Set limits for both axes
+    print("Setting plot limits...")
+    bounds = zones.total_bounds
+    ax1.set_xlim(bounds[0], bounds[2])
+    ax1.set_ylim(bounds[1], bounds[3])
+    ax2.set_xlim(bounds[0], bounds[2])
+    ax2.set_ylim(bounds[1], bounds[3])
+    
+    # Remove axes ticks for cleaner look
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    
+    # Main title
+    plt.suptitle(f'City Demand Analysis - {time_period.name}', fontsize=18)
+    
+    # Save figure
+    print(f"Saving visualization to {output_file}...")
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.9)
+    
+    # Make sure the directory exists
+    os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else '.', exist_ok=True)
+    
+    # Save with explicit dpi
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    
+    print(f"Visualization complete! Saved to {output_file}")
 
 def run_gravity_model(
     city_file: str,
@@ -406,6 +671,14 @@ def run_gravity_model(
     start = time.time()
     demand_matrix = gravity_model_demand_matrix(zones, distances)
     print(f"Gravity model ran in {time.time() - start:.2f} seconds")
+
+    print("Visualizing demand matrix...")
+    try:
+        visualize_demand(city, zones, demand_matrix, TimePeriod.AM_RUSH, output_file=f'city_data/demand_visualization_{num_rows}x{num_cols}.png')
+    except Exception as e:
+        print(f"Error during visualization: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
     print("Loading data into database...")
     load_db(conn, zones, distances, demand_matrix)
