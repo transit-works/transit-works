@@ -146,9 +146,64 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
     zone_population: dict[int, float] = {}
     zone_land: dict[int, dict[str, float]] = {}
     zone_pois: dict[int, int] = {}
+    
+    # First check which zones have road nodes in them
+    zones_with_nodes = {}
+    print("Checking zones for road nodes...")
+    print(f"Nodes CRS: {city.nodes.crs}, Zones CRS: {zones.crs}")
+    
+    # Create a GeoDataFrame of nodes with the proper CRS
+    nodes_gdf = gpd.GeoDataFrame(
+        geometry=gpd.GeoSeries(city.nodes.geometry), 
+        crs=city.nodes.crs
+    )
+    
+    # Ensure zones has a CRS
+    if zones.crs is None:
+        print("Warning: Zones GeoDataFrame has no CRS. Setting to same as nodes.")
+        zones.set_crs(city.nodes.crs, inplace=True)
+    
     for _, zone in zones.iterrows():
         geom = zone['geometry']
         zone_id = zone['zone_id']
+        try:
+            # Create a GeoDataFrame for this zone with the same CRS as nodes
+            zone_gdf = gpd.GeoDataFrame(
+                geometry=gpd.GeoSeries([geom]), 
+                crs=zones.crs
+            )
+            
+            # Make sure both have the same CRS before joining
+            if zone_gdf.crs != nodes_gdf.crs:
+                print(f"  Converting zone CRS from {zone_gdf.crs} to {nodes_gdf.crs}")
+                zone_gdf = zone_gdf.to_crs(nodes_gdf.crs)
+                
+            # Spatial join to find nodes within this zone
+            nodes_in_zone = gpd.sjoin(
+                nodes_gdf,
+                zone_gdf,
+                how="inner", 
+                predicate="within"
+            )
+            zones_with_nodes[zone_id] = len(nodes_in_zone) > 0
+            if not zones_with_nodes[zone_id]:
+                print(f"Zone {zone_id} has no road nodes, setting attributes to 0")
+        except Exception as e:
+            print(f"Error checking nodes in zone {zone_id}: {str(e)}")
+            zones_with_nodes[zone_id] = False
+    
+    # Now process each zone
+    for _, zone in zones.iterrows():
+        geom = zone['geometry']
+        zone_id = zone['zone_id']
+        
+        # If this zone has no road nodes, set all attributes to 0
+        if not zones_with_nodes.get(zone_id, False):
+            zone_population[zone_id] = 0
+            zone_land[zone_id] = {x.value: 0 for x in Landuse}
+            zone_pois[zone_id] = 0
+            continue
+        
         try:
             pois = city.pois.clip(geom)
             landuse = city.landuse.clip(geom)
@@ -181,6 +236,7 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
         zone_land[zone_id] = area_by_type
         zone_pois[zone_id] = pois_count
         print('Zone', zone_id, 'population:', population)
+        
     zones['population'] = zones['zone_id'].map(zone_population)
     zones['land'] = zones['zone_id'].map(zone_land)
     zones['pois'] = zones['zone_id'].map(zone_pois)
@@ -312,7 +368,9 @@ def divide_into_zones(city: City, num_rows: int, num_cols: int) -> gpd.GeoDataFr
                 'geometry': shp.geometry.box(x1, y1, x2, y2),
                 'zone_id': i * num_cols + j
             })
-    zones = gpd.GeoDataFrame(zones)
+    # Create GeoDataFrame with the same CRS as the city nodes
+    zones = gpd.GeoDataFrame(zones, crs=city.nodes.crs)
+    print(f"Created zones with CRS: {zones.crs}")
     return zones
 
 def load_data_from_files(file_path: str, nodes_file, edges_file) -> City:
@@ -449,9 +507,12 @@ def visualize_demand(
         max_demand = max(all_demands)
         print(f"Demand range: {min_demand:.2f} to {max_demand:.2f}")
         
-        # Normalize line width
-        min_width = 0.5
-        max_width = 4.0
+        # Set up color mapping for demand
+        demand_cmap = cm.get_cmap('plasma')
+        norm = colors.Normalize(vmin=min_demand, vmax=max_demand)
+        
+        # Constant line width for all connections
+        line_width = 1.5
         
         # Calculate centroids for all zones
         print("Calculating zone centroids...")
@@ -471,14 +532,14 @@ def visualize_demand(
                 except:
                     print(f"  Skipping zone {idx}")
         
-        # Create lines between centroids with width proportional to demand
+        # Create lines between centroids with color based on demand
         print("Creating demand flow lines...")
         lines = []
-        line_widths = []
+        line_colors = []
         
         # Calculate percentile threshold for showing top 25% of trips
-        threshold = np.percentile(all_demands, 75)
-        print(f"Showing trips with demand > {threshold:.2f} (75th percentile)")
+        threshold = np.percentile(all_demands, 95)
+        print(f"Showing trips with demand > {threshold:.2f} (95th percentile)")
         
         connection_count = 0
         for i, zone1 in zones.iterrows():
@@ -490,14 +551,11 @@ def visualize_demand(
                             x1, y1 = zone_centroids[zone1['zone_id']]
                             x2, y2 = zone_centroids[zone2['zone_id']]
                             
-                            # Calculate line width based on demand
-                            if max_demand > min_demand:  # Avoid division by zero
-                                width = min_width + (max_width - min_width) * (demand - min_demand) / (max_demand - min_demand)
-                            else:
-                                width = min_width
+                            # Get color for this demand value
+                            color = demand_cmap(norm(demand))
                                 
                             lines.append([(x1, y1), (x2, y2)])
-                            line_widths.append(width)
+                            line_colors.append(color)
                             connection_count += 1
                     except Exception as e:
                         print(f"  Error processing connection {zone1['zone_id']} -> {zone2['zone_id']}: {str(e)}")
@@ -505,14 +563,24 @@ def visualize_demand(
         print(f"Drawing {connection_count} connections...")
         # Create line collection
         if lines:  # Only create if there are lines to draw
-            lc = LineCollection(lines, linewidths=line_widths, color='blue', alpha=0.6)
+            lc = LineCollection(lines, colors=line_colors, linewidths=line_width, alpha=0.7)
             ax2.add_collection(lc)
             
-            # Create legend for demand lines
+            # Create colorbar for demand
+            sm = cm.ScalarMappable(norm=norm, cmap=demand_cmap)
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax2, shrink=0.8)
+            cbar.set_label('Demand', rotation=270, labelpad=20)
+            
+            # Add example lines to show demand levels in legend
+            low_demand = min_demand
+            med_demand = (min_demand + max_demand) / 2
+            high_demand = max_demand
+            
             legend_elements = [
-                Line2D([0], [0], color='blue', linewidth=min_width, label=f'Low Demand ({min_demand:.1f})'),
-                Line2D([0], [0], color='blue', linewidth=(min_width + max_width) / 2, label='Medium Demand'),
-                Line2D([0], [0], color='blue', linewidth=max_width, label=f'High Demand ({max_demand:.1f})')
+                Line2D([0], [0], color=demand_cmap(norm(low_demand)), lw=line_width, label=f'Low Demand ({low_demand:.1f})'),
+                Line2D([0], [0], color=demand_cmap(norm(med_demand)), lw=line_width, label=f'Medium Demand ({med_demand:.1f})'),
+                Line2D([0], [0], color=demand_cmap(norm(high_demand)), lw=line_width, label=f'High Demand ({high_demand:.1f})')
             ]
             ax2.legend(handles=legend_elements, loc='upper right')
         else:
