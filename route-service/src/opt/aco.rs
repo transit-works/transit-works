@@ -10,19 +10,24 @@ use std::{
 use crate::layers::{
     geo_util,
     grid::GridNetwork,
-    road_network::RoadNetwork,
+    road_network::{Node, RoadNetwork},
     transit_network::{RTreeNode, TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
 };
+
+use petgraph::graph::NodeIndex;
 
 const MAX_ROUTE_LEN: usize = 100;
 const MIN_ROUTE_LEN: usize = 10;
 const LEN_PENALTY: f64 = 0.1;
 const LOOP_PENALTY: f64 = 0.2;
 const NONLINEAR_PENALTY: f64 = 0.3;
+const REPEATED_PENALTY: f64 = 0.3;
 const INIT_PHEROMONE: f64 = 0.1;
 const P: f64 = 0.01;
 const LATITUDE_DEGREE_METERS: f64 = 110574.0;
 const LONGITUDE_DEGREE_METERS: f64 = 111320.0;
+const MAX_PHEROMONE: f64 = 0.3;
+const MIN_PHEROMONE: f64 = 0.01;
 
 pub struct ACO {
     // parameters
@@ -118,11 +123,9 @@ impl ACO {
         let mut choices = Vec::new();
         let mut weights = Vec::new();
 
-        let lat = 200.0 / LATITUDE_DEGREE_METERS;
-        let lon = 200.0 / (LONGITUDE_DEGREE_METERS * lat.to_radians().cos());
-        let radius = lat.max(lon);
-
-        //let nearby_stops = transit.outbound_stops.locate_within_distance([current.geom.x(), current.geom.y()], radius);
+        // let lat = 200.0 / LATITUDE_DEGREE_METERS;
+        // let lon = 200.0 / (LONGITUDE_DEGREE_METERS * lat.to_radians().cos());
+        // let radius = lat.max(lon);
 
         let env = geo_util::compute_envelope(current.geom.y(), current.geom.x(), 1000.0);
         let nearby_stops = transit.outbound_stops.locate_in_envelope(&env);
@@ -133,7 +136,6 @@ impl ACO {
             direction_vector[0] / direction_norm,
             direction_vector[1] / direction_norm
         ];
-
 
         let filtered : Vec<RTreeNode>= nearby_stops.into_iter().filter(|s| {
             let new_vec = [s.stop.geom.x() - current.geom.x(), s.stop.geom.y() - current.geom.y()];
@@ -181,14 +183,9 @@ impl ACO {
             return Some(end.clone());
         }
         let dist = WeightedIndex::new(&weights).unwrap();
-        //let idx = dist.sample(&mut rng);
-        let idx = weights.iter()
-        .enumerate()
-        .max_by(|&(_, a), &(_, b)| a.partial_cmp(&b).unwrap()) // Handle f64 safely
-        .map(|(i, _)| i)
-        .unwrap();
+        let idx = dist.sample(&mut rng);
         if idx < choices.len() {
-            Some(choices[idx].clone())
+             Some(choices[idx].clone())
         } else {
             None
         }
@@ -204,6 +201,9 @@ impl ACO {
         // Decay all the pheromones
         for (_, v) in pheromone.iter_mut() {
             *v *= 1.0 - self.rho;
+            if *v < MIN_PHEROMONE{
+                *v = MIN_PHEROMONE;
+            }
         }
         // Deposit pheromone on routes
         let mut tmp_pheromone = 0.0;
@@ -214,12 +214,19 @@ impl ACO {
 
         for i in 0..routes.len(){
             for w in routes[i].outbound_stops.windows(2){
-                let old_pheromone = pheromone.get(&(w[0].stop_id.clone(), w[1].stop_id.clone()));
-                if !old_pheromone.is_none(){
-                    *pheromone
-                    .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
-                    .or_insert(INIT_PHEROMONE) = self.rho * old_pheromone.unwrap() + tmp_pheromone;
+                let old_pheromone = pheromone.get(&(w[0].stop_id.clone(), w[1].stop_id.clone())).unwrap_or(&INIT_PHEROMONE);
+                let mut to_be_added = self.rho * old_pheromone + tmp_pheromone;
+                
+                if to_be_added > MAX_PHEROMONE{
+                    to_be_added = MAX_PHEROMONE;
                 }
+                else if to_be_added < MIN_PHEROMONE{
+                    to_be_added = MIN_PHEROMONE;
+                }
+
+                *pheromone
+                .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
+                .or_insert(INIT_PHEROMONE) = to_be_added;
             }
         }
     }
@@ -228,10 +235,11 @@ impl ACO {
         &mut self,
         route: &TransitRoute,
         nonlinearity: f64,
+        num_repeated_nodes : usize,
         pheromone: &mut HashMap<(String, String), f64>,
     ) {
         let mut penalty = 0.0;
-        if route.outbound_stops.len() < MIN_ROUTE_LEN {
+        if route.outbound_stops.len() < MIN_ROUTE_LEN  && route.outbound_stops.len() > MAX_ROUTE_LEN{
             penalty += LEN_PENALTY;
         }
         let mut encountered = HashSet::new();
@@ -245,11 +253,25 @@ impl ACO {
         if nonlinearity > 1.5 {
             penalty += NONLINEAR_PENALTY;
         }
+
+        if num_repeated_nodes > 0{
+            penalty += REPEATED_PENALTY;
+            log::trace!("punished for num_repeated_nodes : {}", num_repeated_nodes);
+        }
         if penalty > 0.0 {
             for w in route.outbound_stops.windows(2) {
+
                 *pheromone
                     .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
                     .or_insert(INIT_PHEROMONE) *= 1.0 - penalty;
+
+                let current_value = pheromone.get(&(w[0].stop_id.clone(), w[1].stop_id.clone())).unwrap_or(&INIT_PHEROMONE);
+
+                if current_value < &MIN_PHEROMONE{
+                    *pheromone
+                    .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
+                    .or_insert(INIT_PHEROMONE) = MIN_PHEROMONE;
+                }
             }
         }
     }
@@ -351,9 +373,11 @@ impl ACO {
     /// A tuple of the evaluation of the route and the nonlinearity coefficient
     ///
     /// The evaluation is the passenger demand divided by the length of the route times the nonlinearity coefficient
-    fn evaluate_route(od: &GridNetwork, road: &RoadNetwork, route: &TransitRoute) -> (f64, f64) {
+    fn evaluate_route(od: &GridNetwork, road: &RoadNetwork, route: &TransitRoute) -> (f64, f64, usize) {
         let mut length_route = 0.0;
         let mut passenger_demand = 0.0;
+        let mut num_repeated_nodes = 0;
+        let mut visited_nodes = Vec::new();
         for w in route.outbound_stops.windows(2) {
             let (fx, fy) = w[0].geom.x_y();
             let (tx, ty) = w[1].geom.x_y();
@@ -363,7 +387,21 @@ impl ACO {
             // }
             passenger_demand +=
                 od.demand_between_coords(fx, fy, tx, ty) + od.demand_between_coords(tx, ty, fx, fy);
-            length_route += w[0].road_distance(&w[1], road).0;
+            let rd = w[0].road_distance(&w[1], road);
+            length_route += rd.0;
+
+            let nodes = rd.1;
+            let mut count = 0;
+            for i in 0..nodes.len(){
+                if i != 0 || i != nodes.len() - 1{
+                    if !visited_nodes.contains(&nodes[i]){
+                        visited_nodes.push(nodes[i]);
+                        count += 1;
+                    }
+                }
+            }
+
+            num_repeated_nodes += nodes.len() - count;
         }
 
         let first = route.outbound_stops.first().unwrap();
@@ -378,6 +416,7 @@ impl ACO {
         (
             (passenger_demand + P) / (length_route * nonlinear_coefficient + P),
             nonlinear_coefficient,
+            num_repeated_nodes,
         )
     }
 
@@ -450,46 +489,55 @@ impl ACO {
         transit: &TransitNetwork,
         route: &TransitRoute,
     ) -> Option<(TransitRoute, f64)> {
-        let mut pheromone = HashMap::new();
+        let init_eval = ACO::evaluate_route(od, road, route);
+        log::debug!("inital evaluation : {}", init_eval.0);
         let mut best_route = route.clone();
         let mut best_eval = ACO::evaluate_route(od, road, route);
-        let init_eval = ACO::evaluate_route(od, road, route);
-        let gen_best_eval = best_eval;
-        log::debug!("    Initial route len : {}", route.outbound_stops.len());
-        log::debug!("inital evaluation : {}", init_eval.0);
-        for aco_max_gen_i in 0..self.aco_max_gen {
-            let mut ant_routes : Vec<TransitRoute> = Vec::new();
-            log::debug!("    Gen {}", aco_max_gen_i);
-            // Update pheromone for route
-            //self.update_route_pheromone(od, road, &best_route, &mut pheromone);
-            for aco_num_ant_i in 0..self.aco_num_ant {
-                log::debug!("      Ant {}", aco_num_ant_i);
-                if let Some(new_route) = self.adjust_route(
-                    &best_route,
-                    od,
-                    road,
-                    transit,
-                    &vec![best_route.clone()],
-                    &pheromone,
-                ) {
-                    ant_routes.push(new_route.clone());
-                    let new_eval = ACO::evaluate_route(od, road, &new_route);
-                    //log::debug!("new route evaluated to : {}", new_eval.0);
-                    if new_eval.0 > best_eval.0 {
-                        best_eval = new_eval;
-                        best_route = new_route;
-                        log::debug!("    New best route len : {}", best_route.outbound_stops.len());
+        for i in 0..self.max_gen{
+            let mut pheromone = HashMap::new();
+            let mut gen_best_eval = best_eval;
+            let mut gen_best_route = best_route.clone();
+            log::debug!("    Initial route len : {}", route.outbound_stops.len());
+            for aco_max_gen_i in 0..self.aco_max_gen {
+                let mut ant_routes : Vec<TransitRoute> = Vec::new();
+                log::debug!("    Gen {}", aco_max_gen_i);
+                // Update pheromone for route
+                //self.update_route_pheromone(od, road, &best_route, &mut pheromone);
+                for aco_num_ant_i in 0..self.aco_num_ant {
+                    log::debug!("      Ant {}", aco_num_ant_i);
+                    if let Some(new_route) = self.adjust_route(
+                        &gen_best_route,
+                        od,
+                        road,
+                        transit,
+                        &vec![gen_best_route.clone()],
+                        &pheromone,
+                    ) {
+                        ant_routes.push(new_route.clone());
+                        let new_eval = ACO::evaluate_route(od, road, &new_route);
+                        //log::debug!("new route evaluated to : {}", new_eval.0);
+                        if new_eval.0 > gen_best_eval.0 {
+                            gen_best_eval = new_eval;
+                            gen_best_route = new_route;
+                            log::debug!("    New best route len : {}", gen_best_route.outbound_stops.len());
+                        }
+                    } else {
+                        log::debug!("        Failed to build new route");
                     }
-                } else {
-                    log::debug!("        Failed to build new route");
                 }
+                self.update_route_pheromone(od, road, &ant_routes, &mut pheromone);
+                self.maybe_punish_route(&gen_best_route, gen_best_eval.1, gen_best_eval.2, &mut pheromone);
             }
-            self.update_route_pheromone(od, road, &ant_routes, &mut pheromone);
-            self.maybe_punish_route(&best_route, best_eval.1, &mut pheromone);
+            if gen_best_eval.0 > best_eval.0 {
+                best_eval = gen_best_eval;
+                best_route = gen_best_route;
+            }
         }
-        if gen_best_eval.0 < best_eval.0 {
+
+        if init_eval.0 < best_eval.0  {
             Some((best_route, best_eval.0))
-        } else {
+        }
+        else{
             log::debug!("Returned original route because not better route was found");
             Some((route.clone(), init_eval.0))
         }

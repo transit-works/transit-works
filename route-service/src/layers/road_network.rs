@@ -4,7 +4,7 @@ use petgraph::{algo::astar, graph::NodeIndex, prelude::EdgeIndex, Directed, Grap
 use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, collections::HashSet};
 use wkt::Wkt;
 
 use super::geo_util;
