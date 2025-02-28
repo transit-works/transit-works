@@ -359,9 +359,24 @@ def load_db(
 ):
     conn.execute('DELETE FROM zone;')
     conn.execute('DELETE FROM demand;')
-    conn.executemany('INSERT INTO zone VALUES (?, ?, ?)', [
-        (idx, geom[0].centroid.wkt, geom[0].wkt)
-        for idx, geom in zones[['geometry']].iterrows()
+    conn.executemany('INSERT INTO zone VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+        (
+            idx, 
+            geom.centroid.wkt, 
+            geom.wkt,
+            population,
+            production[TimePeriod.MORNING],
+            production[TimePeriod.AM_RUSH],
+            production[TimePeriod.MID_DAY],
+            production[TimePeriod.PM_RUSH],
+            production[TimePeriod.EVENING],
+            attraction[TimePeriod.MORNING],
+            attraction[TimePeriod.AM_RUSH],
+            attraction[TimePeriod.MID_DAY],
+            attraction[TimePeriod.PM_RUSH],
+            attraction[TimePeriod.EVENING],
+        )
+        for idx, (geom, population, production, attraction) in zones[['geometry', 'population', 'production', 'attraction']].iterrows()
     ])
     conn.executemany('INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
         (

@@ -1,8 +1,10 @@
 use core::f64;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
+
+use serde::{Deserialize, Serialize};
 
 use crate::layers::{
-    grid::GridNetwork,
+    grid::{GridNetwork, Link, Zone},
     road_network::RoadNetwork,
     transit_network::{TransitNetwork, TransitStop},
 };
@@ -10,16 +12,16 @@ use crate::layers::{
 use super::consts;
 
 /// Evaluate the ridership of a route at each stop
-/// 
+///
 /// # Arguments
 /// - `route_stops`: Vector of transit stops along the route
 /// - `od`: Origin-Destination matrix data
-/// 
+///
 /// # Returns
-/// - Tuple of: 
+/// - Tuple of:
 ///   - Vector of ridership at each stop
 ///   - Average ridership per stop
-/// 
+///
 /// # Notes
 /// - Ridership is calculated by summing the demand between zones for all pairs of stops
 /// - Ridership is distributed equally over all stops in the same zone
@@ -94,10 +96,72 @@ pub fn ridership_over_route(
     (ridership, average_ridership / consts::BUS_CAPACITY as f64)
 }
 
+/// Struct to store demand between zones for all pairs of stops along a route
+#[derive(Serialize, Deserialize)]
+pub struct RouteDemandGridInfo {
+    pub zones: Vec<Zone>,
+    pub links: Vec<Vec<Link>>,
+    pub zones_to_stop_id: HashMap<u32, Vec<String>>,
+}
+
+/// Get the demand between zones for all pairs of stops along a route
+///
+/// # Arguments
+/// - `route_stops`: Vector of transit stops along the route
+/// - `od`: Origin-Destination matrix data
+///
+/// # Returns
+/// - Struct containing:
+///   - Vector of zones for each stop
+///   - Vector of vectors of demand between zones for each pair of stops
+pub fn get_route_demand_grid_info(
+    route_stops: &Vec<Arc<TransitStop>>,
+    od: &GridNetwork,
+) -> RouteDemandGridInfo {
+    let mut zones = vec![];
+    let mut links = vec![];
+    let mut vis_zones = vec![];
+    let mut zones_to_stop_id = HashMap::new();
+    for stop in route_stops {
+        let (x, y) = (stop.geom.x(), stop.geom.y());
+        let zone = od.find_nearest_zone(x, y).unwrap();
+        let zone_ref = od.get_zone(zone);
+        if vis_zones.contains(&zone_ref.zoneid) {
+            continue;
+        }
+        vis_zones.push(zone_ref.zoneid);
+        let mut zone_links = vec![];
+        for stop2 in route_stops {
+            let (x2, y2) = (stop2.geom.x(), stop2.geom.y());
+            let zone2 = od.find_nearest_zone(x2, y2).unwrap();
+            let demand = od.link_between_zones(zone, zone2).unwrap();
+            zone_links.push((*demand).clone());
+        }
+        zones.push(zone_ref.clone());
+        links.push(zone_links);
+        zones_to_stop_id
+            .entry(zone_ref.zoneid)
+            .or_insert_with(Vec::new)
+            .push(stop.stop_id.clone());
+    }
+    RouteDemandGridInfo {
+        zones: zones,
+        links: links,
+        zones_to_stop_id: zones_to_stop_id,
+    }
+}
+
+/// Get the population density data of all the zones along a route
+pub fn get_route_demand_population_info(route_stops: &Vec<Arc<TransitStop>>) {
+    // TODO: get OSM building pop density data available through Sqlite
+    panic!("Not implemented");
+}
+
 pub fn evaluate_transit_network(
     transit: &TransitNetwork,
     road: &RoadNetwork,
     od: &GridNetwork,
 ) -> f64 {
-    f64::NAN
+    // TODO: come up with some microsim approach to evaluate the entire transit network
+    panic!("Not implemented");
 }
