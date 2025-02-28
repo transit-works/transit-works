@@ -58,9 +58,12 @@ class City:
     
     @property
     def city_file(self):
-        file = next(f for f in os.listdir(self.data_dir) if f.endswith('.osm.pbf'))
-        file = f'{self.data_dir}/{file}'
-        return file
+        try:
+            file = next(f for f in os.listdir(self.data_dir) if f.endswith('.osm.pbf'))
+            file = f'{self.data_dir}/{file}'
+            return file
+        except:
+            return f'{self.data_dir}/{self.key_name}.osm.pbf'
 
     @property
     def nodes_file(self):
