@@ -37,7 +37,7 @@ export default function MultiBarChart({ width, height, events = false, margin = 
       const jsonData = await response.json();
 
       setData(jsonData);
-      setKeys(['Transit Score', 'Economic Score']);
+      setKeys(['transitScore', 'economicScore']);
     }
 
     fetchData();
@@ -45,7 +45,7 @@ export default function MultiBarChart({ width, height, events = false, margin = 
 
   if (!data.length) return null;
 
-  const getName = (d) => d.Name;
+  const getName = (d) => d.name;
 
   const xMax = width - margin.left - margin.right;
   const yMax = height - margin.top - margin.bottom;

@@ -1,6 +1,6 @@
 use geo::{algorithm::Length, Distance, Haversine};
 use geo_types::{LineString, Point};
-use petgraph::{algo::astar, graph::NodeIndex, prelude::EdgeIndex, Directed, Graph};
+use petgraph::{algo::astar, graph::NodeIndex, Directed, Graph};
 use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,8 @@ pub struct RoadNetwork {
     rtree_nodes: RTree<RTreeNode>,
     /// Allows for relational querying of intersection connectons (nodes) via roads (edges)
     graph: Graph<Node, Edge>,
+    /// osmid -> node index mapping
+    node_map: HashMap<u64, NodeIndex>,
 }
 
 impl RoadNetwork {
@@ -60,6 +62,7 @@ impl RoadNetwork {
         Ok(RoadNetwork {
             rtree_nodes: rtree_nodes,
             graph: graph,
+            node_map: node_map,
         })
     }
 
@@ -84,6 +87,14 @@ impl RoadNetwork {
             a_dist.partial_cmp(&b_dist).unwrap()
         });
         nearest_nodes
+    }
+
+    pub fn get_node_index_by_osmid(&self, osmid: u64) -> Option<NodeIndex> {
+        self.node_map.get(&osmid).cloned()
+    }
+
+    pub fn get_osmid_by_node_index(&self, node_index: NodeIndex) -> u64 {
+        self.graph[node_index].osmid
     }
 
     fn get_road_distance_coords(

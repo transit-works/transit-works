@@ -1,33 +1,36 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Mercator } from '@visx/geo';
+import countryCodes from './FlagData';
+import ProgressBar from './ProgressBar';
 import * as topojson from 'topojson-client';
+import Link from 'next/link';
+import ImageButton from '@/components/common/ImageButton';
 
 export const background = '#060606';
 
 export default function FlatMap({ events = false }) {
   const [world, setWorld] = useState(null);
+  const [cities, setCities] = useState([]);
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
   });
-
   const [selectedCity, setSelectedCity] = useState(null);
   const popupRef = useRef(null);
-
   const margin = 144;
 
-  const highlightedCountries = useMemo(
-    () => [
-      'Canada',
-      'United States',
-      'Singapore',
-      'United Kingdom',
-      'Spain',
-      'Germany',
-      'Netherlands',
-    ],
-    [],
-  );
+  // Fetch cities data from the public folder
+  useEffect(() => {
+    fetch('/data/city_stats.json')
+      .then((response) => response.json())
+      .then((data) => setCities(data))
+      .catch((error) => console.error('Error fetching city stats:', error));
+  }, []);
+
+  // Dynamically extract highlighted countries from the fetched city data
+  const highlightedCountries = useMemo(() => {
+    return [...new Set(cities.map((city) => city.country))];
+  }, [cities]);
 
   const colors = {
     brown: '#d1b99e',
@@ -37,22 +40,6 @@ export default function FlatMap({ events = false }) {
     chipActive: '#ca2848',
     chipDefault: '#393939',
   };
-
-  const cityCoordinates = useMemo(
-    () => [
-      { name: 'Toronto', coordinates: [-79.3832, 43.6532], country: 'Canada' },
-      { name: 'Vancouver', coordinates: [-123.1216, 49.2827], country: 'Canada' },
-      { name: 'New York', coordinates: [-74.006, 40.7128], country: 'United States' },
-      { name: 'San Francisco', coordinates: [-122.4194, 37.7749], country: 'United States' },
-      { name: 'Austin', coordinates: [-97.7431, 30.2672], country: 'United States' },
-      { name: 'Singapore', coordinates: [103.8198, 1.3521], country: 'Singapore' },
-      { name: 'London', coordinates: [-0.1278, 51.5074], country: 'United Kingdom' },
-      { name: 'Berlin', coordinates: [13.405, 52.52], country: 'Germany' },
-      { name: 'Amsterdam', coordinates: [4.9041, 52.3676], country: 'Netherlands' },
-      { name: 'Madrid', coordinates: [-3.7038, 40.4168], country: 'Spain' },
-    ],
-    [],
-  );
 
   // Fetch world topology data
   useEffect(() => {
@@ -97,13 +84,13 @@ export default function FlatMap({ events = false }) {
 
   const handleCityClick = useCallback((city) => setSelectedCity(city), []);
 
-  if (!world) return <div>Loading map...</div>;
+  if (!world || cities.length === 0) return <div>Loading map...</div>;
 
   return (
     <div className="flex flex-col items-center">
-      {/* Chips */}
+      {/* City Selection Chips */}
       <div className="mb-4 flex flex-wrap justify-center gap-2 px-6">
-        {cityCoordinates.map((city) => (
+        {cities.map((city) => (
           <button
             key={city.name}
             onClick={() => handleCityClick(city)}
@@ -122,7 +109,7 @@ export default function FlatMap({ events = false }) {
         <Mercator data={world.features} scale={scale} translate={[centerX, centerY + 50]}>
           {(mercator) => (
             <g>
-              {mercator.features.map(({ feature, path }, i) => (
+              {mercator.features.map(({ feature, path }) => (
                 <path
                   key={feature.properties.name}
                   d={path || ''}
@@ -135,7 +122,7 @@ export default function FlatMap({ events = false }) {
                   strokeWidth={0.5}
                 />
               ))}
-              {cityCoordinates.map((city) => {
+              {cities.map((city) => {
                 const [x, y] = mercator.projection(city.coordinates) || [];
                 return (
                   <circle
@@ -156,7 +143,7 @@ export default function FlatMap({ events = false }) {
         </Mercator>
       </svg>
 
-      {/* Browse button */}
+      {/* Browse Button */}
       <div className="mt-4 flex justify-center">
         <button
           onClick={() => alert('Browse functionality coming soon!')}
@@ -166,24 +153,69 @@ export default function FlatMap({ events = false }) {
         </button>
       </div>
 
-      {/* Popup */}
+      {/* Popup with City Details */}
       {selectedCity && (
         <div
           ref={popupRef}
-          className="fixed left-2/3 top-1/2 z-10 h-1/3 w-1/6 rounded-lg bg-background-dk bg-opacity-30 p-5 shadow-lg backdrop-blur-lg"
+          className="fixed left-2/3 top-1/2 z-10 h-2/5 w-1/6 rounded-lg bg-background-dk bg-opacity-30 p-5 pt-2 shadow-lg backdrop-blur-lg flex flex-col justify-between"
         >
-          <button
-            onClick={() => setSelectedCity(null)}
-            className="absolute right-2 top-2 text-lg font-bold text-white"
-          >
-            &times;
-          </button>
-          <h3 className="text-xl font-semibold">{selectedCity.name}</h3>
-          <p>Country: {selectedCity.country}</p>
-          <p>Latitude: {selectedCity.coordinates[1]}</p>
-          <p>Longitude: {selectedCity.coordinates[0]}</p>
+          <div>
+            {/* Close Button */}
+            <button
+              onClick={() => setSelectedCity(null)}
+              className="absolute right-2 top-2 text-lg font-bold text-white transition duration-300 ease-in-out transform hover:text-accent-1 hover:scale-105"
+            >
+              &times;
+            </button>
+
+          <div className="flex items-center mb-2 mt-6">
+            {countryCodes[selectedCity.country] && (
+              <img
+                src={`https://flagcdn.com/24x18/${countryCodes[selectedCity.country]}.png`}
+                  alt={`${selectedCity.country} flag`}
+                  className="w-5 h-auto object-contain mr-2"
+                />
+              )}
+              <h3 className="text-xl font-logo text-white">{selectedCity.name}</h3>
+            </div>
+            <p className="text-accent font-body text-[0.8rem]">
+              Population: {selectedCity.population.toLocaleString()}
+            </p>
+            <p className="text-accent font-body text-[0.8rem]">
+              Density: {selectedCity.population_density.toLocaleString()} ppl/km²
+            </p>
+
+            <div className="mt-2">
+              <ProgressBar
+                percentage={selectedCity.transitScore}
+                name="Transit Score"
+                startColor="#00bfff"
+                endColor="#0080ff"
+              />
+            </div>
+            <div className="mt-0">
+              <ProgressBar
+                percentage={selectedCity.economicScore}
+                name="Economic Score"
+                startColor="#7fff2aff"
+                endColor="#00d400ff"
+              />
+            </div>
+          </div>
+
+          {/* Arrow Button at the Bottom */}
+          <div className="w-full flex justify-end mt-3">
+            <Link href="/" passHref>
+              <button
+                className="bg-white mr-2 px-3 py-1 rounded-xl text-black font-body text-[0.8rem] transition duration-300 ease-in-out transform hover:bg-accent hover:text-white hover:scale-105">
+                Map &gt;
+              </button>
+            </Link>
+          </div>
         </div>
       )}
+
+
     </div>
   );
 }
