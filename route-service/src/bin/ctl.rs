@@ -31,13 +31,7 @@ fn main() {
     env_logger::init();
     let args = Args::parse();
 
-    let city = City::load(
-        "toronto",
-        &args.gtfs_path,
-        &args.db_path,
-        true,
-        false,
-    ).unwrap();
+    let city = City::load("toronto", &args.gtfs_path, &args.db_path, true, false).unwrap();
 
     output_geojson(&city.gtfs, &format!("{}/gtfs.geojson", args.output_dir));
 

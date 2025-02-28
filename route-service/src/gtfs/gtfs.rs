@@ -37,7 +37,10 @@ impl Serialize for Gtfs {
     where
         S: Serializer,
     {
-        let gtfs_dataset: GtfsDataSet = (*self).clone().try_into().map_err(serde::ser::Error::custom)?;
+        let gtfs_dataset: GtfsDataSet = (*self)
+            .clone()
+            .try_into()
+            .map_err(serde::ser::Error::custom)?;
         gtfs_dataset.serialize(serializer)
     }
 }
@@ -124,7 +127,8 @@ impl TryInto<GtfsDataSet> for Gtfs {
         // Reconstruct stops and extract transfers and pathways from each stop.
         let mut raw_transfers = Vec::new();
         let mut raw_pathways = Vec::new();
-        let raw_stops: Vec<Stop> = self.stops
+        let raw_stops: Vec<Stop> = self
+            .stops
             .into_values()
             .map(|arc_stop| {
                 // Clone the stop since the Arc is referenced in many places.
@@ -153,7 +157,8 @@ impl TryInto<GtfsDataSet> for Gtfs {
         let raw_fare_attributes: Vec<FareAttribute> = self.fare_attributes.into_values().collect();
         let raw_fare_rules: Vec<FareRule> = self.fare_rules.into_values().flatten().collect();
         let raw_calendar: Vec<Calendar> = self.calendar.into_values().collect();
-        let raw_calendar_dates: Vec<CalendarDate> = self.calendar_dates.into_values().flatten().collect();
+        let raw_calendar_dates: Vec<CalendarDate> =
+            self.calendar_dates.into_values().flatten().collect();
 
         Ok(GtfsDataSet {
             agencies: Ok(self.agencies),

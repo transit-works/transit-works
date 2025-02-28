@@ -310,7 +310,7 @@ fn map_transit_stops_to_road_network_node_index(
         let nl1_2 = dist1_2 / line1_2;
         let nl2_3 = dist2_3 / line2_3;
         //if nl1_2 < 1.1 && nl2_3 < 1.1 {
-            // good enough
+        // good enough
         stop_to_node.insert(s2.stop_id.clone(), n2);
         // } else {
         //     // need to maybe move s2 and s3
@@ -342,8 +342,8 @@ fn map_transit_stops_to_road_network_node_index(
         //             break;
         //         }
         //     }
-            // if the nonlinearity is really bad with s2, but s1 and s3 are linear
-            // then maybe something is wrong with the road network
+        // if the nonlinearity is really bad with s2, but s1 and s3 are linear
+        // then maybe something is wrong with the road network
         //     if best_nl > 2.0
         //         && road.get_road_distance(n1, best_n3).0
         //             / geo_util::haversine(s1_x, s1_y, s3_x, s3_y)
