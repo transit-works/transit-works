@@ -146,73 +146,21 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
     zone_population: dict[int, float] = {}
     zone_land: dict[int, dict[str, float]] = {}
     zone_pois: dict[int, int] = {}
-    
-    # First check which zones have road nodes in them
-    zones_with_nodes = {}
-    print("Checking zones for road nodes...")
-    print(f"Nodes CRS: {city.nodes.crs}, Zones CRS: {zones.crs}")
-    
-    # Create a GeoDataFrame of nodes with the proper CRS
-    nodes_gdf = gpd.GeoDataFrame(
-        geometry=gpd.GeoSeries(city.nodes.geometry), 
-        crs=city.nodes.crs
-    )
-    
-    # Ensure zones has a CRS
-    if zones.crs is None:
-        print("Warning: Zones GeoDataFrame has no CRS. Setting to same as nodes.")
-        zones.set_crs(city.nodes.crs, inplace=True)
-    
-    for _, zone in zones.iterrows():
-        geom = zone['geometry']
-        zone_id = zone['zone_id']
-        try:
-            # Create a GeoDataFrame for this zone with the same CRS as nodes
-            zone_gdf = gpd.GeoDataFrame(
-                geometry=gpd.GeoSeries([geom]), 
-                crs=zones.crs
-            )
-            
-            # Make sure both have the same CRS before joining
-            if zone_gdf.crs != nodes_gdf.crs:
-                print(f"  Converting zone CRS from {zone_gdf.crs} to {nodes_gdf.crs}")
-                zone_gdf = zone_gdf.to_crs(nodes_gdf.crs)
-                
-            # Spatial join to find nodes within this zone
-            nodes_in_zone = gpd.sjoin(
-                nodes_gdf,
-                zone_gdf,
-                how="inner", 
-                predicate="within"
-            )
-            zones_with_nodes[zone_id] = len(nodes_in_zone) > 0
-            if not zones_with_nodes[zone_id]:
-                print(f"Zone {zone_id} has no road nodes, setting attributes to 0")
-        except Exception as e:
-            print(f"Error checking nodes in zone {zone_id}: {str(e)}")
-            zones_with_nodes[zone_id] = False
-    
     # Now process each zone
     for _, zone in zones.iterrows():
         geom = zone['geometry']
         zone_id = zone['zone_id']
-        
-        # If this zone has no road nodes, set all attributes to 0
-        if not zones_with_nodes.get(zone_id, False):
+        # if the zone has no road nodes skip it
+        if city.nodes.intersects(geom).sum() == 0:
+            print('Zone', zone_id, 'has no road nodes')
             zone_population[zone_id] = 0
             zone_land[zone_id] = {x.value: 0 for x in Landuse}
             zone_pois[zone_id] = 0
             continue
-        
-        try:
-            pois = city.pois.clip(geom)
-            landuse = city.landuse.clip(geom)
-            buildings = city.buildings.clip(geom)
-        except Exception:
-            zone_population[zone_id] = 0
-            zone_land[zone_id] = {x.value: 0 for x in Landuse}
-            zone_pois[zone_id] = 0
-            continue
+
+        pois = city.pois.clip(geom)
+        landuse = city.landuse.clip(geom)
+        buildings = city.buildings.clip(geom)
 
         # determine the population of the zone based on the number of people living in buildings
         population = 0
@@ -382,6 +330,12 @@ def load_data_from_files(file_path: str, nodes_file, edges_file) -> City:
     pois = osm.get_pois(custom_filter={'amenity': True})
     landuse = osm.get_landuse(custom_filter={'landuse': [x.value for x in Landuse]})
     buildings = osm.get_buildings(custom_filter={'building': [x.value for x in Building]})
+
+    # repaire all the geometries
+    pois['geometry'] = pois['geometry'].apply(lambda x: x.buffer(0))
+    landuse['geometry'] = landuse['geometry'].apply(lambda x: x.buffer(0))
+    buildings['geoemetry'] = buildings['geometry'].apply(lambda x: x.buffer(0))
+
     return City(
         nodes=nodes,
         edges=edges,
