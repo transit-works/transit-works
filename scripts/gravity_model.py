@@ -332,9 +332,16 @@ def load_data_from_files(file_path: str, nodes_file, edges_file) -> City:
     buildings = osm.get_buildings(custom_filter={'building': [x.value for x in Building]})
 
     # repaire all the geometries
+    print("Repairing geometries...")
     pois['geometry'] = pois['geometry'].apply(lambda x: x.buffer(0))
     landuse['geometry'] = landuse['geometry'].apply(lambda x: x.buffer(0))
     buildings['geoemetry'] = buildings['geometry'].apply(lambda x: x.buffer(0))
+
+    # remove all invalid rows
+    print("Removing invalid rows...")
+    pois = pois[pois['geometry'].is_valid]
+    landuse = landuse[landuse['geometry'].is_valid]
+    buildings = buildings[buildings['geometry'].is_valid]
 
     return City(
         nodes=nodes,
