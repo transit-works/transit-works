@@ -5,6 +5,7 @@ use crate::opt::eval;
 use crate::server::cors::cors_middleware; // Import the CORS middleware
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use geo::Centroid;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Mutex;
@@ -150,10 +151,19 @@ async fn get_grid(data: web::Data<AppState>) -> impl Responder {
     let city_guard = data.city.lock().unwrap();
 
     if let Some(city) = &*city_guard {
-        // Extract grid network information
-        let city_grid_info = eval::get_city_grid_info(&city.grid);
+        // Create a simple array of zones with population and coordinates
+        let zones: Vec<serde_json::Value> = city.grid.graph.node_indices().map(|ni| {
+            let zone = city.grid.get_zone(ni);
+            serde_json::json!({
+                "POPULATION": zone.population,
+                "COORDINATES": match zone.polygon.centroid() {
+                    Some(centroid) => [centroid.x(), centroid.y()],
+                    None => [0.0, 0.0], // Default coordinates if centroid is None
+                }
+            })
+        }).collect();
 
-        HttpResponse::Ok().json(city_grid_info)
+        HttpResponse::Ok().json(zones)
     } else {
         HttpResponse::InternalServerError().json(serde_json::json!({
             "error": "City data not loaded"
