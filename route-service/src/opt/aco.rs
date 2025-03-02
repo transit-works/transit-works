@@ -1,7 +1,7 @@
 use env_logger::init;
 use geo::{Distance, Haversine, Length, LineString, Point};
-use rand::{distributions::WeightedIndex, prelude::Distribution, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{distributions::WeightedIndex, prelude::Distribution, SeedableRng};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -25,13 +25,13 @@ const MIN_ROUTE: usize = 2000;
 const MAX_ROUTE: usize = 10000;
 const LEN_PENALTY: f64 = 0.2;
 const LOOP_PENALTY: f64 = 0.5;
-const NONLINEAR_PENALTY: f64 = 0.5;
+const NONLINEAR_PENALTY: f64 = 1.0;
 const REPEATED_PENALTY: f64 = 0.3;
 const INIT_PHEROMONE: f64 = 0.1;
 const P: f64 = 0.01;
 const LATITUDE_DEGREE_METERS: f64 = 110574.0;
 const LONGITUDE_DEGREE_METERS: f64 = 111320.0;
-const MAX_PHEROMONE: f64 = 0.3;
+const MAX_PHEROMONE: f64 = 1.5;
 const MIN_PHEROMONE: f64 = 0.001;
 
 pub struct ACO {
@@ -123,8 +123,8 @@ impl ACO {
         if distance_to_end < 200.0 {
             return Some(end.clone());
         }
-        let mut rng = rand::thread_rng();
-        //let mut rng = StdRng::seed_from_u64(50);
+        //let mut rng = rand::thread_rng();
+        let mut rng = StdRng::seed_from_u64(42);
         let mut choices = Vec::new();
         let mut weights = Vec::new();
 
@@ -165,7 +165,7 @@ impl ACO {
                         s.stop.geom.x(),
                         s.stop.geom.y(),
                     );
-                    angle_deg <= 90.0 && d >= 100.0 && !visited.contains(&s.stop.stop_id)
+                    angle_deg <= 30.0 && d >= 100.0 && !visited.contains(&s.stop.stop_id)
                     // need to add min distance check
                 })
                 .cloned()
@@ -231,7 +231,7 @@ impl ACO {
         routes: &Vec<TransitRoute>,
         pheromone: &mut HashMap<(String, String), f64>,
     ) {
-        // Decay all the pheromones
+        //Decay all the pheromones
         for (_, v) in pheromone.iter_mut() {
             *v *= 1.0 - self.rho;
             if *v < MIN_PHEROMONE {
@@ -305,7 +305,7 @@ impl ACO {
                 for p in penalty.iter() {
                     *pheromone
                         .entry((w[0].stop_id.clone(), w[1].stop_id.clone()))
-                        .or_insert(INIT_PHEROMONE) *= 1.0 - p.min(1.0);
+                        .or_insert(INIT_PHEROMONE) *= 1.0 - p;
 
                     let current_value = pheromone
                         .get(&(w[0].stop_id.clone(), w[1].stop_id.clone()))
@@ -632,15 +632,16 @@ impl ACO {
 
             for i in 0..best_routes.len() {
                 log::debug!("  Route {}, id: {}", i, best_routes[i].route_id);
+                // Do not optimize non-bus routes
+                if best_routes[i].route_type != TransitRouteType::Bus {
+                    continue;
+                }
 
                 let eval = ACO::evaluate_route(od, road, &best_routes[i]).0;
                 for w in best_routes[i].outbound_stops.windows(2) {
                     pheromone.insert((w[0].stop_id.clone(), w[1].stop_id.clone()), eval / self.q);
                 }
-                // Do not optimize non-bus routes
-                if best_routes[i].route_type != TransitRouteType::Bus {
-                    continue;
-                }
+
                 if let Some((best_route, _)) =
                     self.optimize_route(od, road, transit, &best_routes[i], &mut pheromone)
                 {
