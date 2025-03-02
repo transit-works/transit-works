@@ -233,6 +233,10 @@ def calculate_zone_attraction(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
                 area_by_type[land_type] * LAND_WEIGHTS[land_type][time_period]
                 for land_type in area_by_type
             ])
+
+            if landuse_score == 0.0:
+                landuse_score = 5.0
+                
             attraction_by_time[time_period] = (
                 SCORE_POIS_WEIGHT * poi_score +
                 SCORE_POPN_WEIGHT * pop_score +
