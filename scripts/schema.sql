@@ -24,7 +24,18 @@ CREATE TABLE edges (
 CREATE TABLE zone (
     zoneid INTEGER PRIMARY KEY,
     center POINT,
-    geom POLYGON
+    geom POLYGON,
+    population REAL,
+    attraction_morning REAL,
+    attraction_am_rush REAL,
+    attraction_mid_day REAL,
+    attraction_pm_rush REAL,
+    attraction_evening REAL,
+    production_morning REAL,
+    production_am_rush REAL,
+    production_mid_day REAL,
+    production_pm_rush REAL,
+    production_evening REAL
 );
 
 CREATE TABLE demand (

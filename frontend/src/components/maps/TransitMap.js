@@ -42,7 +42,7 @@ const busMesh = new CylinderGeometry({
 
 const busScale = [8, 4, 8];
 
-function TransitMap({ data, selectedRoute, setSelectedRoute }) {
+function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimizedRoutes, resetOptimization }) {
   const [popupInfo, setPopupInfo] = useState(null);
   const [busPosition, setBusPosition] = useState(null);
   const [mapStyle, setMapStyle] = useState(STYLE_REGULAR);
@@ -285,9 +285,15 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
       stroked: true,
       filled: false,
       getLineColor: d => {
+        const routeId = d.properties.route_id;
+        
+        // Check if this route has been optimized (is in optimizedRoutes)
+        if (optimizedRoutes && optimizedRoutes.has(routeId)) {
+          return [46, 204, 113, 200]; // Green color for optimized routes
+        }
+        
         if (useRandomColors) {
           // Use the pre-generated random color for this route
-          const routeId = d.properties.route_id;
           return routeColorMap[routeId] || [200, 0, 80, 180]; // Fallback color
         }
         // Default color if random colors not enabled
@@ -356,12 +362,15 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
     const routeLayers = routesToShow.map((feature, index) => {
       const layerIndex = index % 10;
       const height = layerIndex * 250; // Height based on layer
+      const routeId = feature.properties.route_id;
       
       // Determine color based on current mode
       let color;
-      if (useRandomColors) {
+      // Check if this route has been optimized (is in optimizedRoutes)
+      if (optimizedRoutes && optimizedRoutes.has(routeId)) {
+        color = [46, 204, 113, 200]; // Green color for optimized route
+      } else if (useRandomColors) {
         // Use the pre-generated random color for this route
-        const routeId = feature.properties.route_id;
         color = routeColorMap[routeId] || [200, 0, 80, 180]; // Fallback color
       } else {
         // Use the original gradient logic
@@ -455,6 +464,27 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
     return (
       <div className="absolute bottom-12 right-0 w-72 bg-zinc-900/60 backdrop-blur-md text-white rounded-l-md shadow-lg p-4 z-10 transition-all duration-300">
         <h3 className="font-heading text-lg font-semibold pb-4">Map Options</h3>
+        
+        {/* Show optimized route indicator without reset button */}
+        {isOptimized && selectedRoute && optimizedRoutes.has(selectedRoute) && (
+          <div className="mb-3 py-2 px-3 bg-green-800/70 rounded-md">
+            <span className="text-sm">Viewing optimized route</span>
+          </div>
+        )}
+        
+        {/* Add Reset All Optimizations button if there are any optimized routes */}
+        {optimizedRoutes && optimizedRoutes.size > 0 && (
+          <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md flex justify-between items-center">
+            <span className="text-sm">{optimizedRoutes.size} optimized route{optimizedRoutes.size !== 1 ? 's' : ''}</span>
+            <button 
+              onClick={() => resetOptimization()}
+              className="text-xs bg-zinc-700 hover:bg-zinc-600 px-2 py-1 rounded"
+            >
+              Reset All
+            </button>
+          </div>
+        )}
+        
         <div className="flex flex-col gap-2">
           <div className="flex flex-row">
             <div className="relative w-1/2 mx-1 group">

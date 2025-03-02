@@ -135,11 +135,13 @@ fn get_route_coords(
     gtfs_data: &Gtfs,
     route_to_shape: &HashMap<String, String>,
 ) -> Vec<[f64; 2]> {
-    let shape_id = route_to_shape.get(&route.route_id).unwrap();
-
-    let route_shapes = gtfs_data.shapes.get(shape_id).unwrap();
-    route_shapes
-        .iter()
-        .map(|shape| [shape.shape_pt_lon, shape.shape_pt_lat])
-        .collect()
+    if let Some(shape_id) = route_to_shape.get(&route.route_id) {
+        let route_shapes = gtfs_data.shapes.get(shape_id).unwrap();
+        route_shapes
+            .iter()
+            .map(|shape| [shape.shape_pt_lon, shape.shape_pt_lat])
+            .collect()
+    } else {
+        vec![]
+    }
 }
