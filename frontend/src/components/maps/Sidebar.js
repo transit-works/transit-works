@@ -5,8 +5,20 @@ import RouteList from '@/components/transit/RouteList';
 import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
 import MiniTable from '@/components/visualization/MiniTable';
+import OptimizationProgress from '@/components/visualization/OptimizationProgress';
 
-function Sidebar({ data, selectedRoute, setSelectedRoute, onOptimize, isOptimizing, optimizationError }) {
+function Sidebar({ 
+  data, 
+  selectedRoute, 
+  setSelectedRoute, 
+  onOptimize, 
+  isOptimizing, 
+  optimizationError,
+  optimizationProgress,
+  currentEvaluation,
+  useLiveOptimization,
+  setUseLiveOptimization
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleSidebar = () => {
@@ -46,15 +58,39 @@ function Sidebar({ data, selectedRoute, setSelectedRoute, onOptimize, isOptimizi
         <MiniTable />
 
         {/* Routes Section */}
-        <div className="custom-scrollbar-container my-2 max-h-[calc(100vh-200px)] overflow-y-auto rounded-2xl border border-zinc-800 bg-background-dk px-2 pb-2 custom-scrollbar">
+        <div className="custom-scrollbar-container my-2 max-h-[calc(100vh-300px)] overflow-y-auto rounded-2xl border border-zinc-800 bg-background-dk px-2 pb-2 custom-scrollbar">
           <RouteList
             data={data}
             selectedRoute={selectedRoute}
             setSelectedRoute={setSelectedRoute}
           />
         </div>
+        
+        {/* Live Optimization Toggle */}
+        <div className="mt-2 mb-1 flex items-center justify-between px-2">
+          <span className="text-xs text-white">Live Optimization</span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={useLiveOptimization} 
+              onChange={() => setUseLiveOptimization(!useLiveOptimization)} 
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+          </label>
+        </div>
+        
+        {/* Optimization Progress Bar - Only show when optimizing */}
+        {isOptimizing && useLiveOptimization && (
+          <div className="mt-1 mb-2 px-2">
+            <OptimizationProgress 
+              progress={optimizationProgress} 
+              currentEvaluation={currentEvaluation}
+            />
+          </div>
+        )}
 
-        {/* Optimize Button - Updated with loading state */}
+        {/* Optimize Button */}
         <ImageButton
           text={isOptimizing ? "Optimizing..." : "Optimize"}
           imageSrc="/assets/icons/speed.png"
