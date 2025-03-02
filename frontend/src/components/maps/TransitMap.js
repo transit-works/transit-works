@@ -368,7 +368,6 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
         pickable: true,
         autoHighlight: true,
         onClick: (info) => {
-          // Use feature data directly since we know this is for a specific route
           if (info && info.object) {
             setSelectedRoute((prevSelectedRoute) =>
               prevSelectedRoute === feature.properties.route_id
