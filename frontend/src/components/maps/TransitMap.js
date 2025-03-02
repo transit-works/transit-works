@@ -437,7 +437,7 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
         id: 'population-heatmap',
         data: 'http://localhost:3000/tmp.json', // change to actual endpoint
         getPosition: d => d.COORDS, // change to d.COORDINATES
-        getWeight: d => d.SPACES, // chnage to d.POPULATION
+        getWeight: d => d.SPACES, // change to d.POPULATION
         radiusPixels: 275,
         intensity: 1.2,
         threshold: 0.05,
