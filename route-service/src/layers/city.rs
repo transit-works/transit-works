@@ -235,4 +235,19 @@ impl City {
         );
         Ok(city)
     }
+
+    /// Load transit network from cache
+    pub fn load_transit_from_cache(
+        city_name: &str,
+    ) -> Result<TransitNetwork, Error> {
+        let transit_cache_file = format!("{}/{}_transit.cached", CITY_CACHE_DIR, city_name);
+
+        if std::path::Path::new(&transit_cache_file).exists() {
+            log::debug!("Loading transit network from cache");
+            let transit = bincode::deserialize_from(std::fs::File::open(transit_cache_file)?)?;
+            Ok(transit)
+        } else {
+            Err(Error::CacheNotFound)
+        }
+    }
 }

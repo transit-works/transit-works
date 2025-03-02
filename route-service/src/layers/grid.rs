@@ -65,9 +65,17 @@ impl GridNetwork {
         Some(nearest.node_index)
     }
 
+    pub fn get_zone(&self, node_index: NodeIndex) -> &Zone {
+        &self.graph[node_index]
+    }
+
     pub fn demand_between_zones(&self, from: NodeIndex, to: NodeIndex) -> f64 {
         let link = self.graph.find_edge(from, to).unwrap();
         self.graph[link].weight
+    }
+
+    pub fn link_between_zones(&self, from: NodeIndex, to: NodeIndex) -> Option<&Link> {
+        self.graph.find_edge(from, to).map(|link| &self.graph[link])
     }
 
     pub fn demand_between_coords(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
@@ -77,7 +85,7 @@ impl GridNetwork {
     }
 }
 
-#[derive(Deserialize, Serialize, Hash, Eq, PartialEq)]
+#[derive(Clone, Deserialize, Serialize, Hash, Eq, PartialEq)]
 pub enum TimePeriod {
     Morning,
     AmRush,
@@ -86,7 +94,7 @@ pub enum TimePeriod {
     Evening,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Link {
     pub origid: u32,
     pub destid: u32,
@@ -95,10 +103,11 @@ pub struct Link {
     pub weight_by_time: HashMap<TimePeriod, f64>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Zone {
     pub zoneid: u32,
     pub polygon: Polygon<f64>,
+    population: u32,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -194,7 +203,7 @@ FROM \
 }
 
 fn read_zones(conn: &Connection) -> Result<Vec<Zone>> {
-    let mut stmt = conn.prepare("SELECT zoneid, geom FROM zone")?;
+    let mut stmt = conn.prepare("SELECT zoneid, geom, population FROM zone")?;
     let zone_iter = stmt.query_map(params![], |row| {
         let wkt_str: String = row.get(1)?;
         let wkt = Wkt::from_str(&wkt_str).unwrap();
@@ -202,6 +211,7 @@ fn read_zones(conn: &Connection) -> Result<Vec<Zone>> {
         Ok(Zone {
             zoneid: row.get(0)?,
             polygon: polygon,
+            population: row.get::<_, f64>(2)? as u32,
         })
     })?;
     Ok(Vec::from_iter(zone_iter.map(|x| x.unwrap())))
