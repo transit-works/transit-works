@@ -15,7 +15,7 @@ use super::geo_util;
 use super::road_network::RoadNetwork;
 
 // Layer 3 - Data structure describing the transit network
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct TransitNetwork {
     /// Set of all the transit routes in the network
     pub routes: Vec<TransitRoute>,
