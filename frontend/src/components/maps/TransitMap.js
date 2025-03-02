@@ -367,7 +367,21 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
         widthUnits: 'pixels',
         pickable: true,
         autoHighlight: true,
-        onClick,
+        onClick: (info) => {
+          // Use feature data directly since we know this is for a specific route
+          if (info && info.object) {
+            setSelectedRoute((prevSelectedRoute) =>
+              prevSelectedRoute === feature.properties.route_id
+                ? null
+                : feature.properties.route_id
+            );
+            setPopupInfo({
+              coordinates: info.coordinate,
+              properties: feature.properties,
+              type: 'LineString'
+            });
+          }
+        }
       });
     });
     
