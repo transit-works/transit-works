@@ -6,7 +6,7 @@ import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
 import MiniTable from '@/components/visualization/MiniTable';
 
-function Sidebar({ data, selectedRoute, setSelectedRoute }) {
+function Sidebar({ data, selectedRoute, setSelectedRoute, onOptimize, isOptimizing, optimizationError }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleSidebar = () => {
@@ -54,12 +54,21 @@ function Sidebar({ data, selectedRoute, setSelectedRoute }) {
           />
         </div>
 
-        {/* Buttons at the Bottom */}
+        {/* Optimize Button */}
         <ImageButton
-          text="Optimize"
+          text={isOptimizing ? "Optimizing..." : "Optimize"}
           imageSrc="/assets/icons/speed.png"
-          onClick={() => console.log('New button clicked')}
+          onClick={onOptimize}
+          disabled={!selectedRoute || isOptimizing}
         />
+        
+        {/* Show error message if optimization failed */}
+        {optimizationError && (
+          <div className="mt-1 text-xs text-red-500 text-center">
+            {optimizationError}
+          </div>
+        )}
+
         <div className="flex justify-around pt-2">
           <Link href="/" className="w-full pr-1" passHref>
             <ImageButton text="Home" imageSrc="/assets/icons/home.png" altText="Home icon" />

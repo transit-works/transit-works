@@ -41,6 +41,12 @@ fn main() {
     let gtfs = &city.gtfs;
     let mut transit = city.transit;
 
+    output_geojson(&gtfs, &format!("{}/gtfs.geojson", args.output_dir));
+
+    output_routes_geojson(&transit, &gtfs, &road, &format!("{}/before.geojson", args.output_dir));
+
+    return ();
+
     // Only consider non-bus routes
     // 73480 73530
     // transit.routes = transit

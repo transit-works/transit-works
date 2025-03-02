@@ -2,6 +2,7 @@ use crate::gtfs::geojson;
 use crate::layers::city::City;
 use crate::opt::aco::ACO;
 use crate::opt::eval;
+use crate::server::cors::cors_middleware; // Import the CORS middleware
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use serde::{Deserialize, Serialize};
@@ -170,7 +171,7 @@ pub async fn start_server(
 
     println!("Loading city data from {} and {}", gtfs_path, db_path);
     // Try loading the city data upfront
-    let city_result = City::load(
+    let city_result = City::load_with_cached_transit(
         "toronto", gtfs_path, db_path, true,  // set cache
         false, // don't invalidate cache
     );
@@ -183,6 +184,7 @@ pub async fn start_server(
     println!("Starting server on {}:{}", host, port);
     HttpServer::new(move || {
         App::new()
+            .wrap(cors_middleware()) // Apply CORS middleware to all routes
             .app_data(app_state.clone()) // Pass the state to all routes
             .service(get_data)
             .service(optimize_route)

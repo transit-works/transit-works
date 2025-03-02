@@ -386,6 +386,9 @@ fn pick_inbound_outbound_trips<'a>(
     route_id: &String,
     gtfs: &'a Gtfs,
 ) -> Option<(&'a Trip, &'a Trip)> {
+    if !gtfs.trips.contains_key(route_id) {
+        return None;
+    }
     // Get the longest trip in each direction
     let trip1 = gtfs
         .trips
