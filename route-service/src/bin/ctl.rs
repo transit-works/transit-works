@@ -124,17 +124,17 @@ fn main() {
         .routes
         .iter()
         .filter(|r| {
-            r.route_id == "73755"
-                || r.route_id == "73705"
-                || r.route_id == "73688"
-                || r.route_id == "73682"
-                || r.route_id == "73770"
+            r.route_id == "73784"
+            // || r.route_id == "73705"
+            // || r.route_id == "73688"
+            // || r.route_id == "73682"
+            // || r.route_id == "73770"
         })
         .collect::<Vec<_>>();
 
     println!("Running ACO!");
     let start = Instant::now();
-    let optimized_routes = aco.optimize_routes(&grid, &road, &transit, &target_routes);
+    let optimized_routes = aco.optimize_routes(&grid, &road, &mut transit.clone(), &target_routes);
     println!("  ACO finished in {:?}", start.elapsed());
 
     // merge optimized routes to transit network routes
