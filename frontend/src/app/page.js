@@ -39,13 +39,13 @@ export default function Home() {
           {/* Center Div */}
           <div className="flex justify-center">
             <div className="flex space-x-4 md:space-x-6">
-              <Link href="/features" className="p-5 font-body text-text hover:text-primary">
+              <Link href="#overview" className="p-5 font-body text-text hover:text-primary">
                 Overview
               </Link>
               <Link href="/support" className="p-5 font-body text-text hover:text-primary">
                 Documentation
               </Link>
-              <Link href="/pricing" className="p-5 font-body text-text hover:text-primary">
+              <Link href="/faq" className="p-5 font-body text-text hover:text-primary">
                 FAQs
               </Link>
             </div>
@@ -111,7 +111,7 @@ export default function Home() {
       <ParallaxLayer offset={2}>
         <div className="flex h-screen items-center justify-center">
           <div className="grid h-5/6 w-5/6 grid-cols-4 grid-rows-6 gap-4 p-4">
-            <div className="col-span-2 row-span-2 flex items-center justify-center rounded-xl bg-text-2">
+            <div id="overview" className="col-span-2 row-span-2 flex items-center justify-center rounded-xl bg-text-2">
               <h1 className="bg-gradient-to-r from-primary to-accent bg-clip-text font-logo text-9xl text-transparent">
                 Overview
               </h1>
