@@ -10,6 +10,8 @@ import { Matrix4 } from 'math.gl';
 import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './Map.css';
+import { PathLayer } from '@deck.gl/layers';
+import lerpColor from '../../utils/colorUtils';
 
 const INITIAL_VIEW_STATE = {
   latitude: 43.647667,
@@ -18,7 +20,8 @@ const INITIAL_VIEW_STATE = {
   bearing: 0,
 };
 
-const MAP_STYLE = '/styles/dark_matter.json';
+const STYLE_3D = '/styles/dark_matter_3d.json';
+const STYLE_REGULAR = '/styles/dark_matter.json';
 
 // Create the overlay for Deck.gl layers.
 function DeckGLOverlay(props) {
@@ -33,7 +36,7 @@ const busMesh = new CylinderGeometry({
   height: 1,
   nradial: 32,
   topCap: true,
-  bottomCap: true
+  bottomCap: true,
 });
 
 const busScale = [8, 4, 8];
@@ -41,6 +44,12 @@ const busScale = [8, 4, 8];
 function TransitMap({ data, selectedRoute, setSelectedRoute }) {
   const [popupInfo, setPopupInfo] = useState(null);
   const [busPosition, setBusPosition] = useState(null);
+  const [mapStyle, setMapStyle] = useState(STYLE_REGULAR);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [showBusRoutes, setShowBusRoutes] = useState(true);
+  const [show3DRoutes, setShow3DRoutes] = useState(false);
+  const [useRandomColors, setUseRandomColors] = useState(false);
+  const [routeColorMap, setRouteColorMap] = useState({});
   const mapRef = useRef(null);
 
   const handleMapLoad = () => {
@@ -58,7 +67,6 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
     });
   };
 
-  // Toggle route selection when clicking on any non-Point feature.
   const onClick = (info) => {
     if (info && info.object) {
       const { type } = info.object.geometry;
@@ -97,24 +105,20 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
                   <b>ID:</b> {popupInfo.properties.stop_id}
                 </p>
                 <p>
-                  <b>Name: </b>
-                  {popupInfo.properties.stop_name}
+                  <b>Name:</b> {popupInfo.properties.stop_name}
                 </p>
               </div>
             ) : (
               <div>
                 <h4 className="text-center text-2xl text-background">Route Information</h4>
                 <p>
-                  <b>Route ID: </b>
-                  {popupInfo.properties.route_id}
+                  <b>Route ID:</b> {popupInfo.properties.route_id}
                 </p>
                 <p>
-                  <b>Name: </b>
-                  {popupInfo.properties.route_long_name}
+                  <b>Name:</b> {popupInfo.properties.route_long_name}
                 </p>
                 <p>
-                  <b>Route type: </b>
-                  {popupInfo.properties.route_type}
+                  <b>Route type:</b> {popupInfo.properties.route_type}
                 </p>
               </div>
             )}
@@ -123,27 +127,25 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
       </Popup>
     );
 
-  // Filter the data so that when a route is selected, we display its route and stops.
   const selectedRouteObject = selectedRoute
     ? data.features.find((feature) => feature.properties.route_id === selectedRoute)
     : null;
   const filteredData = selectedRouteObject
     ? {
-      ...data,
-      features: data.features.filter(
-        (feature) =>
-          feature.properties.route_id === selectedRoute ||
-          (feature.properties.stop_id &&
-            selectedRouteObject.properties.route_stops &&
-            selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
-      ),
-    }
+        ...data,
+        features: data.features.filter(
+          (feature) =>
+            feature.properties.route_id === selectedRoute ||
+            (feature.properties.stop_id &&
+              selectedRouteObject.properties.route_stops &&
+              selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
+        ),
+      }
     : data;
 
-  // Get distance between two coordinates
   function getDistance(coord1, coord2) {
     const toRad = (deg) => (deg * Math.PI) / 180;
-    const R = 6371000; // Earth's radius in meters
+    const R = 6371000;
     const dLat = toRad(coord2[1] - coord1[1]);
     const dLon = toRad(coord2[0] - coord1[0]);
     const lat1 = toRad(coord1[1]);
@@ -155,7 +157,6 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
     return R * c;
   }
 
-  // Animate the bus along the route using constant speed interpolation.
   useEffect(() => {
     let animationFrame;
     if (selectedRoute) {
@@ -171,7 +172,6 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
           return;
         }
 
-        // Precompute cumulative distances along the route (for consecutive points only).
         const cumulativeDistances = [];
         let totalDistance = 0;
         const numPoints = routeCoordinates.length;
@@ -181,7 +181,7 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
         }
         cumulativeDistances.push(totalDistance);
 
-        const speed = 0.1; // meters per millisecond
+        const speed = 0.1;
         let travelled = 0;
         let lastTimestamp;
 
@@ -192,7 +192,6 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
           travelled += speed * delta;
 
           if (travelled >= totalDistance) {
-            // Finished traversing route: reset to starting position and restart animation.
             setBusPosition(routeCoordinates[0]);
             travelled = 0;
             lastTimestamp = timestamp;
@@ -200,12 +199,11 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
             return;
           }
 
-          // Find the segment where the travelled distance falls.
           let segmentIndex = 0;
           while (
             segmentIndex < cumulativeDistances.length - 1 &&
             cumulativeDistances[segmentIndex + 1] <= travelled
-            ) {
+          ) {
             segmentIndex++;
           }
           const segmentStart = cumulativeDistances[segmentIndex];
@@ -235,15 +233,12 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
   const finalBusModelMatrix = new Matrix4().rotateX(Math.PI / 2).scale(busScale);
 
   const layers = [
+    // Split into two layers - one for points (stops) and one for lines (routes)
     new GeoJsonLayer({
-      id: 'data',
+      id: 'stops-layer',
       data: filteredData,
       stroked: true,
       filled: true,
-      getLineColor: [200, 0, 80, 180],
-      getLineWidth: 2,
-      lineWidthMinPixels: 2,
-      lineWidthScale: 10,
       getFillColor: [200, 0, 80, 180],
       pointRadiusMinPixels: 2,
       getRadius: 10,
@@ -251,16 +246,69 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
       autoHighlight: true,
       onClick,
       beforeId: 'watername_ocean',
+      parameters: {
+        depthTest: mapStyle === STYLE_3D,
+        depthMask: true
+      },
+      // Only render Point geometries
+      getFilterValue: (feature) => (feature.geometry.type === 'Point' ? 1 : 0),
+      filterRange: [0.9, 1] // Strict filter threshold
     }),
+    
+    // Route lines layer - will be hidden in 3D mode
+    new GeoJsonLayer({
+      id: `routes-layer-${useRandomColors ? 'random' : 'default'}`, // Add changing key to force re-render
+      data: filteredData,
+      stroked: true,
+      filled: false,
+      getLineColor: d => {
+        if (useRandomColors) {
+          // Use the pre-generated random color for this route
+          const routeId = d.properties.route_id;
+          return routeColorMap[routeId] || [200, 0, 80, 180]; // Fallback color
+        }
+        // Default color if random colors not enabled
+        return [200, 0, 80, 180];
+      },
+      getLineWidth: 2,
+      lineWidthMinPixels: 2,
+      lineWidthScale: 10,
+      pickable: true,
+      autoHighlight: true,
+      onClick, // Ensure onClick is properly attached
+      beforeId: 'watername_ocean',
+      parameters: {
+        depthTest: mapStyle === STYLE_3D,
+        depthMask: true
+      },
+      visible: !show3DRoutes, // Hide when in 3D mode
+      // Only render LineString geometries
+      getFilterValue: (feature) => (feature.geometry.type === 'LineString' ? 1 : 0),
+      filterRange: [0.9, 1]
+    })
   ];
 
-  // Render the bus as a 3D mesh using meter offsets.
   if (busPosition) {
+    // Determine bus height when in 3D mode
+    let busHeight = 0;
+    
+    if (show3DRoutes && selectedRoute) {
+      // Find the layer index of the selected route
+      const selectedRouteIndex = filteredData.features
+        .filter(feature => feature.geometry.type === 'LineString')
+        .findIndex(feature => feature.properties.route_id === selectedRoute);
+        
+      if (selectedRouteIndex !== -1) {
+        // Use the same height calculation as for the route layers
+        busHeight = (selectedRouteIndex % 10) * 250;
+      }
+    }
+    
     layers.push(
       new SimpleMeshLayer({
         id: 'bus',
-        data: [{}], // dummy data; the mesh is drawn at the origin of the offset coordinate system
-        getPosition: () => [0, 0, 0],
+        data: [{ position: [0, 0, busHeight] }], // Apply height here
+        getPosition: d => d.position,
         coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
         coordinateOrigin: busPosition,
         mesh: busMesh,
@@ -272,16 +320,170 @@ function TransitMap({ data, selectedRoute, setSelectedRoute }) {
     );
   }
 
+  if (show3DRoutes) {
+    // Get the same routes that would be shown in the GeoJsonLayer
+    const routesToShow = filteredData.features.filter(feature => 
+      feature.geometry.type === 'LineString'
+    );
+    
+    // Define start and end colors for gradient
+    const startColor = "#CC0050";
+    const endColor = "#ffa826";
+    
+    const routeLayers = routesToShow.map((feature, index) => {
+      const layerIndex = index % 10;
+      const height = layerIndex * 250; // Height based on layer
+      
+      // Determine color based on current mode
+      let color;
+      if (useRandomColors) {
+        // Use the pre-generated random color for this route
+        const routeId = feature.properties.route_id;
+        color = routeColorMap[routeId] || [200, 0, 80, 180]; // Fallback color
+      } else {
+        // Use the original gradient logic
+        const gradientPosition = layerIndex / 9; // 0 to 1 position in gradient
+        const rgbColor = lerpColor(startColor, endColor, gradientPosition);
+        color = [...rgbColor, 180];
+      }
+      
+      // Create modified data with z-coordinate added
+      const modifiedData = {
+        ...feature,
+        geometry: {
+          ...feature.geometry,
+          coordinates: feature.geometry.coordinates.map(coord => 
+            [...coord, height]
+          )
+        }
+      };
+      
+      return new PathLayer({
+        id: `route-${feature.properties.route_id}`,
+        data: [modifiedData],
+        getPath: d => d.geometry.coordinates,
+        getWidth: 4,
+        getColor: color,
+        widthUnits: 'pixels',
+        pickable: true,
+        autoHighlight: true,
+        onClick,
+      });
+    });
+    
+    layers.push(...routeLayers);
+  }
+
+  const toggleMapStyle = () => {
+    setMapStyle((prevStyle) => (prevStyle === STYLE_3D ? STYLE_REGULAR : STYLE_3D));
+  };
+
+  const toggleBusRoutes = () => {
+    setShowBusRoutes(!showBusRoutes);
+  };
+
+  const toggle3DRoutes = () => {
+    setShow3DRoutes(!show3DRoutes);
+  };
+
+  const toggleRandomColors = () => {
+    if (!useRandomColors) {
+      // Generate random colors for all routes when enabling
+      const newColorMap = {};
+      filteredData.features
+        .filter(feature => feature.geometry.type === 'LineString')
+        .forEach(feature => {
+          const routeId = feature.properties.route_id;
+          // Generate vibrant, distinguishable colors
+          newColorMap[routeId] = [
+            Math.floor(Math.random() * 156) + 100, // R: 100-255
+            Math.floor(Math.random() * 156) + 100, // G: 100-255
+            Math.floor(Math.random() * 156) + 100, // B: 100-255
+            180 // Alpha
+          ];
+        });
+      setRouteColorMap(newColorMap);
+    }
+    setUseRandomColors(!useRandomColors);
+  };
+
+  const togglePanel = () => {
+    setPanelOpen(!panelOpen);
+  };
+
+  const renderPanel = () => {
+    if (!panelOpen) return null;
+    return (
+      <div className="absolute bottom-12 right-0 w-72 bg-zinc-900/60 backdrop-blur-md text-white rounded-l-md shadow-lg p-4 z-10 transition-all duration-300">
+        <h3 className="font-heading text-lg font-semibold pb-4">Map Options</h3>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-row">
+            <div className="relative w-1/2 mx-1 group">
+              <button
+                className={`w-full h-10 ${mapStyle === STYLE_3D ? 'bg-primary' : 'bg-zinc-900'} hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center px-2 py-1 font-medium text-[0.8rem] justify-center focus:outline-none border border-zinc-600`}
+                onClick={toggleMapStyle}
+                aria-label="Toggle map style"
+              >
+                {mapStyle === STYLE_3D ? '3D Buildings' : '2D Buildings'}
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                Toggle Between 3D and 2D buildings
+              </div>
+            </div>
+            
+            <div className="relative w-1/2 mx-1 group">
+              <button
+                className={`w-full h-10 ${show3DRoutes ? 'bg-primary' : 'bg-zinc-900'} hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center px-2 py-1 font-medium text-[0.8rem] justify-center focus:outline-none border border-zinc-600`}
+                onClick={toggle3DRoutes}
+                aria-label="Toggle route visualization"
+              >
+                {show3DRoutes ? 'Layered Routes' : 'Flat Routes'}
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                Toggle between flat and layered route visualization
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex flex-row">
+            <div className="relative w-full mx-1 group">
+              <button
+                className={`w-full h-10 ${useRandomColors ? 'bg-accent' : 'bg-zinc-900'} hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center px-2 py-1 font-medium text-[0.8rem] justify-center focus:outline-none border border-zinc-600`}
+                onClick={toggleRandomColors}
+                aria-label="Toggle random route colors"
+              >
+                {useRandomColors ? 'Random Colors' : 'Gradient Colors'}
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                Toggle between random and gradient route colors
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Map
       ref={mapRef}
       initialViewState={INITIAL_VIEW_STATE}
-      mapStyle={MAP_STYLE}
+      mapStyle={mapStyle}
       onLoad={handleMapLoad}
     >
       <DeckGLOverlay layers={layers} />
       <NavigationControl position="top-right" />
       {renderPopup()}
+      
+      <button
+        className={`absolute bottom-12 ${panelOpen ? 'right-72' : 'right-0'} w-8 h-12 bg-zinc-900/60 backdrop-blur-md text-white flex items-center justify-center rounded-l-md z-20 hover:bg-accent/80 hover:text-white focus:outline-none transition-all duration-300`}
+        onClick={togglePanel}
+        aria-label={panelOpen ? "Close panel" : "Open panel"}
+      >
+        {panelOpen ? '>' : '<'}
+      </button>
+      
+      {renderPanel()}
     </Map>
   );
 }
