@@ -67,7 +67,7 @@ BUILDING_OCCUPANCY = {
     Building.BARRACKS.value: 300,
     Building.BUNGALOW.value: 4,
     Building.DETACHED.value: 4,
-    Building.DORMITORY.value: 2.5,
+    Building.DORMITORY.value: 3,
     Building.HOTEL.value: 2,
     Building.HOUSE.value: 4,
     Building.SEMIDETACHED_HOUSE.value: 4,
@@ -84,7 +84,7 @@ BUILDINGS_TYPES_TALL = {
 GRAVITY_BETA = 0.5
 
 # Weight of each landuse type in attraction calculation at different times of day
-LAND_WEIGHTS = {
+LAND_WEIGHTS_ATTRACTION = {
     Landuse.COMMERCIAL.value: {
         TimePeriod.MORNING: 0.7,
         TimePeriod.AM_RUSH: 1.0,
@@ -114,6 +114,38 @@ LAND_WEIGHTS = {
         TimePeriod.EVENING: 0.7,
     },
 }
+
+LAND_WEIGHTS_PRODUCTION = {
+    Landuse.RESIDENTIAL.value: {
+        TimePeriod.MORNING: 1.0,  
+        TimePeriod.AM_RUSH: 0.9,  
+        TimePeriod.MID_DAY: 0.4,  
+        TimePeriod.PM_RUSH: 0.5,  
+        TimePeriod.EVENING: 1.0,  
+        },
+    Landuse.COMMERCIAL.value: {
+        TimePeriod.MORNING: 0.3,  
+        TimePeriod.AM_RUSH: 1.0,  
+        TimePeriod.MID_DAY: 1.0,  
+        TimePeriod.PM_RUSH: 0.8,  
+        TimePeriod.EVENING: 0.2,  
+        },
+    Landuse.RETAIL.value: {
+        TimePeriod.MORNING: 0.1,  
+        TimePeriod.AM_RUSH: 0.3,  
+        TimePeriod.MID_DAY: 0.9,  
+        TimePeriod.PM_RUSH: 0.8,  
+        TimePeriod.EVENING: 0.7, 
+        },
+    Landuse.INDUSTRIAL.value: {
+        TimePeriod.MORNING: 0.5,  
+        TimePeriod.AM_RUSH: 0.8,  
+        TimePeriod.MID_DAY: 0.7,  
+        TimePeriod.PM_RUSH: 0.6,  
+        TimePeriod.EVENING: 0.2,  
+        },
+    }
+
 
 # Relative importance of population vs poi vs landuse in attraction calculation (must sum to 1.0)
 SCORE_POIS_WEIGHT = 0.3
@@ -230,13 +262,13 @@ def calculate_zone_attraction(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         attraction_by_time = {}
         for time_period in TimePeriod:
             landuse_score = sum([
-                area_by_type[land_type] * LAND_WEIGHTS[land_type][time_period]
+                area_by_type[land_type] * LAND_WEIGHTS_ATTRACTION[land_type][time_period]
                 for land_type in area_by_type
             ])
 
             if landuse_score == 0.0:
                 landuse_score = 5.0
-                
+
             attraction_by_time[time_period] = (
                 SCORE_POIS_WEIGHT * poi_score +
                 SCORE_POPN_WEIGHT * pop_score +
@@ -249,12 +281,40 @@ def calculate_zone_attraction(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 def calculate_zone_production(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     max_pois = zones['pois'].max()
     max_popn = zones['population'].max()
+
     zone_production = {}
+
     for _, zone in zones.iterrows():
         zone_id = zone['zone_id']
-        zone_popn = zone['population']
-        zone_pois = zone['pois']
-        zone_production[zone_id] = {time_period: zone_popn / max_popn * 100.0 + zone_pois / max_pois * 100.0 for time_period in TimePeriod}
+        if 'pois' not in zone or 'land' not in zone or 'population' not in zone:
+            zone_production[zone_id] = {time_period: 0 for time_period in TimePeriod}
+            continue
+
+        area_by_type = zone['land']
+        popn = zone['population']
+        pois = zone['pois']
+        poi_score = (pois / max_pois) * 100.0 
+        pop_score = (popn / max_popn) * 100.0
+
+        production_by_time = {}
+
+        for time_period in TimePeriod:
+            landuse_score = sum([
+                area_by_type.get(land_type, 0) * LAND_WEIGHTS_PRODUCTION.get(land_type, {}).get(time_period, 0)
+                for land_type in area_by_type
+            ])
+
+            if landuse_score == 0.0:
+                landuse_score = 5.0
+
+            production_by_time[time_period] = (
+                SCORE_POIS_WEIGHT * poi_score +
+                SCORE_POPN_WEIGHT * pop_score +
+                SCORE_LAND_WEIGHT * landuse_score
+            )
+
+        zone_production[zone_id] = production_by_time
+
     zones['production'] = zones['zone_id'].map(zone_production)
     return zones
 
