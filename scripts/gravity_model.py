@@ -86,11 +86,11 @@ GRAVITY_BETA = 0.5
 # Weight of each landuse type in attraction calculation at different times of day
 LAND_WEIGHTS = {
     Landuse.COMMERCIAL.value: {
-        TimePeriod.MORNING: 0.5,
+        TimePeriod.MORNING: 0.7,
         TimePeriod.AM_RUSH: 1.0,
-        TimePeriod.MID_DAY: 0.7,
-        TimePeriod.PM_RUSH: 0.5,
-        TimePeriod.EVENING: 0.5,
+        TimePeriod.MID_DAY: 0.6,
+        TimePeriod.PM_RUSH: 0.4,
+        TimePeriod.EVENING: 0.2,
     },
     Landuse.RETAIL.value: {
         TimePeriod.MORNING: 0.6,
@@ -107,9 +107,9 @@ LAND_WEIGHTS = {
         TimePeriod.EVENING: 0.5,
     },
     Landuse.RESIDENTIAL.value: {
-        TimePeriod.MORNING: 0.5,
-        TimePeriod.AM_RUSH: 0.5,
-        TimePeriod.MID_DAY: 0.7,
+        TimePeriod.MORNING: 0.2,
+        TimePeriod.AM_RUSH: 0.4,
+        TimePeriod.MID_DAY: 0.6,
         TimePeriod.PM_RUSH: 1.0,
         TimePeriod.EVENING: 0.7,
     },
@@ -185,6 +185,7 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
                     population += BUILDING_OCCUPANCY.get(building_type, 0) * 10 * num_floors
                 else:
                     population += 50
+
             else:
                 population += BUILDING_OCCUPANCY.get(building_type, 0)
         
