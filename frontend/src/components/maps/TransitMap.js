@@ -55,11 +55,18 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
   const mapRef = useRef(null);
 
   const fetchRidershipData = async (routeId) => {
+    if (!routeId) return;
+    
     try {
-      //TODO: Replace with backend call
-      const response = await fetch('/default.json');
+      // Call the backend route evaluation endpoint
+      const response = await fetch(`http://localhost:8080/evaluate-route/${routeId}`);
+      
+      if (!response.ok) {
+        throw new Error(`API returned status: ${response.status}`);
+      }
+      
       const data = await response.json();
-      setRidershipData(data);
+      setRidershipData(data.ridership);
     } catch (error) {
       console.error('Error fetching ridership data:', error);
       setRidershipData(null);
