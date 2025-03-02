@@ -8,6 +8,7 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Mutex;
+use std::sync::Arc;
 
 // Application state that is shared across all endpoints
 struct AppState {
@@ -59,9 +60,11 @@ async fn optimize_route(route_id: web::Path<String>, data: web::Data<AppState>) 
 
         if let Some(route) = route {
             // Create ACO instance on demand for this optimization
-            let mut aco = ACO::init();
+            let aco = Arc::new(Mutex::new(ACO::init()));
 
-            if let Some((opt_route, eval)) = aco.optimize_route(&city.grid, &city.road, &city.transit, route) {
+            if let Some((opt_route, eval)) =
+                ACO::optimize_route(aco, &city.grid, &city.road, &city.transit, route)
+            {
                 // Update the route with the optimized version
                 city.transit.routes.retain(|r| r.route_id != route_id);
                 city.transit.routes.push(opt_route);
@@ -125,7 +128,8 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
         let route = city.transit.routes.iter().find(|r| r.route_id == route_id);
 
         if let Some(route) = route {
-            let (ridership, avg_occupancy) = eval::ridership_over_route(&route.outbound_stops, &city.grid);
+            let (ridership, avg_occupancy) =
+                eval::ridership_over_route(&route.outbound_stops, &city.grid);
             HttpResponse::Ok().json(serde_json::json!({
                 "route_id": route_id,
                 "ridership": ridership,
@@ -166,14 +170,14 @@ async fn reset_optimizations(data: web::Data<AppState>) -> impl Responder {
     println!("Resetting all route optimizations");
 
     let mut city_guard = data.city.lock().unwrap();
-    
+
     if let Some(city) = &mut *city_guard {
         // Load only the transit network from cache
         match City::load_transit_from_cache("toronto") {
             Ok(fresh_transit) => {
                 // Replace just the transit part of the city
                 city.transit = fresh_transit;
-                
+
                 return HttpResponse::Ok().json(serde_json::json!({
                     "message": "All route optimizations reset"
                 }));
@@ -185,7 +189,7 @@ async fn reset_optimizations(data: web::Data<AppState>) -> impl Responder {
             }
         }
     }
-    
+
     HttpResponse::InternalServerError().json(serde_json::json!({
         "error": "City data not loaded"
     }))

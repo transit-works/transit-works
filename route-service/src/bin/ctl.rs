@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use clap::Parser;
@@ -43,7 +44,12 @@ fn main() {
 
     output_geojson(&gtfs, &format!("{}/gtfs.geojson", args.output_dir));
 
-    output_routes_geojson(&transit, &gtfs, &road, &format!("{}/before.geojson", args.output_dir));
+    output_routes_geojson(
+        &transit,
+        &gtfs,
+        &road,
+        &format!("{}/before.geojson", args.output_dir),
+    );
 
     return ();
 
@@ -95,8 +101,8 @@ fn main() {
     output_routes_geojson(&transit, &gtfs, &road, &before_path);
 
     println!("Initializing ACO");
-    let mut aco = ACO::init();
-    aco.print_stats();
+    let aco = Arc::new(Mutex::new(ACO::init()));
+    aco.lock().unwrap().print_stats();
 
     // Optimize one route
     // let target_route = transit
@@ -134,7 +140,7 @@ fn main() {
 
     println!("Running ACO!");
     let start = Instant::now();
-    let optimized_routes = aco.optimize_routes(&grid, &road, &mut transit.clone(), &target_routes);
+    let optimized_routes = ACO::optimize_routes(aco.clone(), &grid, &road, &mut transit.clone(), &target_routes);
     println!("  ACO finished in {:?}", start.elapsed());
 
     // merge optimized routes to transit network routes
