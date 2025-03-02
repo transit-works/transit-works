@@ -54,12 +54,13 @@ function Sidebar({ data, selectedRoute, setSelectedRoute, onOptimize, isOptimizi
           />
         </div>
 
-        {/* Optimize Button */}
+        {/* Optimize Button - Updated with loading state */}
         <ImageButton
           text={isOptimizing ? "Optimizing..." : "Optimize"}
           imageSrc="/assets/icons/speed.png"
           onClick={onOptimize}
           disabled={!selectedRoute || isOptimizing}
+          isLoading={isOptimizing}
         />
         
         {/* Show error message if optimization failed */}

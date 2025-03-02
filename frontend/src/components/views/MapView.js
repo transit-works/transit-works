@@ -12,6 +12,8 @@ export default function MapView({ data }) {
   const [optimizedData, setOptimizedData] = useState(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationError, setOptimizationError] = useState(null);
+  // Add a cache to track which routes have been optimized
+  const [optimizedRoutes, setOptimizedRoutes] = useState(new Set());
 
   const handleOptimize = async () => {
     if (!selectedRoute) {
@@ -41,6 +43,8 @@ export default function MapView({ data }) {
         
         if (result && result.geojson) {
           setOptimizedData(result.geojson);
+          // Add the optimized route to our cache
+          setOptimizedRoutes(prev => new Set(prev).add(selectedRoute));
         } else {
           throw new Error('Invalid response format from optimization service');
         }
@@ -57,6 +61,35 @@ export default function MapView({ data }) {
       }
     } catch (error) {
       console.error('Error optimizing route:', error);
+      setOptimizationError(error.message);
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  // Reset function for all route optimizations
+  const resetOptimization = async () => {
+    try {
+      setIsOptimizing(true);
+      setOptimizationError(null);
+      
+      const response = await fetch('http://localhost:8080/reset-optimizations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Reset failed with status: ${response.status}`);
+      }
+      
+      // We don't need to get new data - just clear our client state
+      setOptimizedRoutes(new Set());
+      setOptimizedData(null);
+      
+    } catch (error) {
+      console.error('Error resetting optimizations:', error);
       setOptimizationError(error.message);
     } finally {
       setIsOptimizing(false);
@@ -81,7 +114,8 @@ export default function MapView({ data }) {
           selectedRoute={selectedRoute} 
           setSelectedRoute={setSelectedRoute} 
           isOptimized={!!optimizedData}
-          resetOptimization={() => setOptimizedData(null)}
+          optimizedRoutes={optimizedRoutes}
+          resetOptimization={resetOptimization}
         />
       </div>
     </div>
