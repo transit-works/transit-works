@@ -1,6 +1,6 @@
 use geo::{algorithm::Length, Distance, Haversine};
 use geo_types::{LineString, Point};
-use petgraph::{algo::astar, graph::NodeIndex, Directed, Graph};
+use petgraph::{algo::astar, graph::NodeIndex, visit::EdgeRef, Directed, Graph};
 use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
