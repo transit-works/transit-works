@@ -151,6 +151,38 @@ pub fn get_route_demand_grid_info(
     }
 }
 
+/// Struct to store all the zones of the city
+#[derive(Serialize, Deserialize)]
+pub struct CityGridInfo {
+    zones: Vec<Zone>,
+    links: Vec<Vec<Link>>,
+}
+
+/// Get the grids of the whole city
+pub fn get_city_grid_info(od: &GridNetwork) -> CityGridInfo {
+    let mut zones = vec![];
+    let mut links = vec![];
+    let mut vis_zones = vec![];
+    for zone in od.graph.node_indices() {
+        let zone_ref = od.get_zone(zone);
+        if vis_zones.contains(&zone_ref.zoneid) {
+            continue;
+        }
+        vis_zones.push(zone_ref.zoneid);
+        let mut zone_links = vec![];
+        for zone2 in od.graph.node_indices() {
+            let demand = od.link_between_zones(zone, zone2).unwrap();
+            zone_links.push((*demand).clone());
+        }
+        zones.push(zone_ref.clone());
+        links.push(zone_links);
+    }
+    CityGridInfo {
+        zones: zones,
+        links: links,
+    }
+}
+
 /// Get the population density data of all the zones along a route
 pub fn get_route_demand_population_info(route_stops: &Vec<Arc<TransitStop>>) {
     // TODO: get OSM building pop density data available through Sqlite
