@@ -125,10 +125,10 @@ LAND_WEIGHTS_PRODUCTION = {
         },
     Landuse.COMMERCIAL.value: {
         TimePeriod.MORNING: 0.3,  
-        TimePeriod.AM_RUSH: 1.0,  
-        TimePeriod.MID_DAY: 1.0,  
-        TimePeriod.PM_RUSH: 0.8,  
-        TimePeriod.EVENING: 0.2,  
+        TimePeriod.AM_RUSH: 0.3,  
+        TimePeriod.MID_DAY: 0.6,  
+        TimePeriod.PM_RUSH: 1.0,  
+        TimePeriod.EVENING: 0.7,  
         },
     Landuse.RETAIL.value: {
         TimePeriod.MORNING: 0.1,  
