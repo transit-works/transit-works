@@ -11,6 +11,7 @@ import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './Map.css';
 import { PathLayer } from '@deck.gl/layers';
+import { HeatmapLayer } from '@deck.gl/aggregation-layers';
 import lerpColor from '../../utils/colorUtils';
 import RidershipChart from '../../components/visualization/RidershipChart';
 
@@ -52,6 +53,8 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
   const [useRandomColors, setUseRandomColors] = useState(false);
   const [routeColorMap, setRouteColorMap] = useState({});
   const [ridershipData, setRidershipData] = useState(null);
+  const [showPopulationHeatmap, setShowPopulationHeatmap] = useState(false);
+  const [populationData, setPopulationData] = useState(null);
   const mapRef = useRef(null);
 
   const fetchRidershipData = async (routeId) => {
@@ -70,6 +73,23 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
     } catch (error) {
       console.error('Error fetching ridership data:', error);
       setRidershipData(null);
+    }
+  };
+
+  const fetchPopulationData = async () => {
+    try {
+      // Call the backend endpoint
+      const response = await fetch('http://localhost:3000/tmp.json');
+      
+      if (!response.ok) {
+        throw new Error(`API returned status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setPopulationData(data);
+    } catch (error) {
+      console.error('Error fetching population data:', error);
+      setPopulationData(null);
     }
   };
 
@@ -260,6 +280,10 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
     return () => cancelAnimationFrame(animationFrame);
   }, [selectedRoute, data]);
 
+  useEffect(() => {
+    fetchPopulationData();
+  }, []);
+
   const finalBusModelMatrix = new Matrix4().rotateX(Math.PI / 2).scale(busScale);
 
   const layers = [
@@ -429,6 +453,22 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
     layers.push(...routeLayers);
   }
 
+  if (showPopulationHeatmap) {
+    layers.push(
+      new HeatmapLayer({
+        id: 'population-heatmap',
+        data: populationData,
+        getPosition: d => d.COORDS, // change to d.COORDINATES
+        getWeight: d => d.SPACES, // change to d.POPULATION
+        radiusPixels: 275,
+        intensity: 1.2,
+        threshold: 0.05,
+        opacity: 0.6,
+        visible: showPopulationHeatmap,
+      })
+    );
+  }
+
   const toggleMapStyle = () => {
     setMapStyle((prevStyle) => (prevStyle === STYLE_3D ? STYLE_REGULAR : STYLE_3D));
   };
@@ -464,6 +504,10 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
 
   const togglePanel = () => {
     setPanelOpen(!panelOpen);
+  };
+
+  const togglePopulationHeatmap = () => {
+    setShowPopulationHeatmap(!showPopulationHeatmap);
   };
 
   const renderPanel = () => {
@@ -532,6 +576,19 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
               </button>
               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
                 Toggle between random and gradient route colors
+              </div>
+            </div>
+
+            <div className="relative w-full mx-1 group">
+              <button
+                className={`w-full h-10 ${showPopulationHeatmap ? 'bg-accent' : 'bg-zinc-900'} hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center px-2 py-1 font-medium text-[0.8rem] justify-center focus:outline-none border border-zinc-600`}
+                onClick={togglePopulationHeatmap}
+                aria-label="Toggle population heatmap"
+              >
+                Pop. Heatmap
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                Toggle the visibility of the population density heatmap
               </div>
             </div>
           </div>
