@@ -90,7 +90,7 @@ LAND_WEIGHTS = {
         TimePeriod.AM_RUSH: 1.0,
         TimePeriod.MID_DAY: 0.6,
         TimePeriod.PM_RUSH: 0.4,
-        TimePeriod.EVENING: 0.2,
+        TimePeriod.EVENING: 0.2, 
     },
     Landuse.RETAIL.value: {
         TimePeriod.MORNING: 0.6,
