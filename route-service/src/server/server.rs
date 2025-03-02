@@ -231,52 +231,66 @@ impl OptimizationWs {
             heartbeat: Instant::now(),
         }
     }
-    
+
     fn run_optimization_iteration(&mut self, ctx: &mut ws::WebsocketContext<Self>) {
         let route_id = self.route_id.clone();
-        println!("Running optimization iteration {} for route {}", self.iterations_done + 1, route_id);
-        
+        println!(
+            "Running optimization iteration {} for route {}",
+            self.iterations_done + 1,
+            route_id
+        );
+
         // Check if we've completed all iterations
         if self.iterations_done >= self.total_iterations {
             println!("Completed all iterations for route {}", route_id);
             ctx.close(None);
             return;
         }
-        
+
         // Update heartbeat timestamp to prevent timeout during long-running optimization
         self.heartbeat = Instant::now();
-        
+
         // Try to access the city from the shared state
         let mut city_guard = match self.app_state.city.lock() {
             Ok(guard) => guard,
             Err(e) => {
                 println!("Failed to acquire lock on city data: {}", e);
-                ctx.text(serde_json::to_string(&serde_json::json!({
-                    "error": "Server error: Failed to access city data"
-                })).unwrap());
+                ctx.text(
+                    serde_json::to_string(&serde_json::json!({
+                        "error": "Server error: Failed to access city data"
+                    }))
+                    .unwrap(),
+                );
                 ctx.close(None);
                 return;
             }
         };
-        
+
         if let Some(city) = &mut *city_guard {
             // Find the route with the given ID
-            let route = city.transit.routes.iter().find(|r| r.route_id == route_id).cloned();
-            
+            let route = city
+                .transit
+                .routes
+                .iter()
+                .find(|r| r.route_id == route_id)
+                .cloned();
+
             if let Some(route) = route {
                 // Create ACO instance for this optimization iteration
                 let mut aco = ACO::init();
-                
+
                 match aco.optimize_route(&city.grid, &city.road, &city.transit, &route) {
                     Some((opt_route, eval)) => {
                         // Update the route in city data for next iteration
                         city.transit.routes.retain(|r| r.route_id != route_id);
                         city.transit.routes.push(opt_route);
-                        
+
                         // Prepare and send update
-                        let features = geojson::get_all_features(&city.transit.to_gtfs(&city.gtfs, &city.road));
+                        let features = geojson::get_all_features(
+                            &city.transit.to_gtfs(&city.gtfs, &city.road),
+                        );
                         let geojson = geojson::convert_to_geojson(&features);
-                        
+
                         let response = serde_json::json!({
                             "message": format!("Optimized route {} (iteration {}/{})", route_id, self.iterations_done + 1, self.total_iterations),
                             "geojson": geojson,
@@ -284,54 +298,69 @@ impl OptimizationWs {
                             "iteration": self.iterations_done + 1,
                             "total_iterations": self.total_iterations
                         });
-                        
+
                         // Send the update via WebSocket
                         ctx.text(serde_json::to_string(&response).unwrap());
-                        
+
                         // Increment iteration counter
                         self.iterations_done += 1;
-                        
+
                         // Update heartbeat timestamp again after the long optimization process
                         self.heartbeat = Instant::now();
-                        
+
                         // Schedule next iteration with a short delay
                         // Use a clone of self.iterations_done to track which iteration this is
                         let current_iteration = self.iterations_done;
-                        println!("Scheduling next iteration {} for route {}", current_iteration + 1, route_id);
-                        
+                        println!(
+                            "Scheduling next iteration {} for route {}",
+                            current_iteration + 1,
+                            route_id
+                        );
+
                         // Use address() and do_send() pattern which is more reliable
                         let addr = ctx.address();
                         ctx.run_later(Duration::from_millis(500), move |_, _| {
-                            addr.do_send(RunNextIteration { iteration: current_iteration });
+                            addr.do_send(RunNextIteration {
+                                iteration: current_iteration,
+                            });
                         });
-                    },
+                    }
                     None => {
                         let error_msg = format!("Failed to optimize route {}", route_id);
                         println!("{}", error_msg);
-                        ctx.text(serde_json::to_string(&serde_json::json!({
-                            "error": error_msg
-                        })).unwrap());
+                        ctx.text(
+                            serde_json::to_string(&serde_json::json!({
+                                "error": error_msg
+                            }))
+                            .unwrap(),
+                        );
                         ctx.close(None);
                     }
                 }
             } else {
                 let error_msg = format!("Route {} not found", route_id);
                 println!("{}", error_msg);
-                ctx.text(serde_json::to_string(&serde_json::json!({
-                    "error": error_msg
-                })).unwrap());
+                ctx.text(
+                    serde_json::to_string(&serde_json::json!({
+                        "error": error_msg
+                    }))
+                    .unwrap(),
+                );
                 ctx.close(None);
             }
         } else {
             let error_msg = "City data not loaded";
             println!("{}", error_msg);
-            ctx.text(serde_json::to_string(&serde_json::json!({
-                "error": error_msg
-            })).unwrap());
+            ctx.text(
+                serde_json::to_string(&serde_json::json!({
+                    "error": error_msg
+                }))
+                .unwrap(),
+            );
             ctx.close(None);
         }
     }
-    
+
     // Heartbeat to keep connection alive
     fn heartbeat(&self, ctx: &mut ws::WebsocketContext<Self>) {
         ctx.run_interval(Duration::from_secs(5), |act, ctx| {
@@ -340,7 +369,7 @@ impl OptimizationWs {
                 ctx.stop();
                 return;
             }
-            
+
             println!("Sending ping to keep WebSocket alive");
             ctx.ping(b"");
         });
@@ -349,7 +378,7 @@ impl OptimizationWs {
 
 // Message to trigger the next optimization iteration
 struct RunNextIteration {
-    iteration: usize
+    iteration: usize,
 }
 
 impl Message for RunNextIteration {
@@ -358,22 +387,28 @@ impl Message for RunNextIteration {
 
 impl Handler<RunNextIteration> for OptimizationWs {
     type Result = ();
-    
+
     fn handle(&mut self, msg: RunNextIteration, ctx: &mut ws::WebsocketContext<Self>) {
         // Verify that this is the correct iteration we're expecting
         if msg.iteration == self.iterations_done {
-            println!("Handling RunNextIteration message for iteration {}", msg.iteration + 1);
+            println!(
+                "Handling RunNextIteration message for iteration {}",
+                msg.iteration + 1
+            );
             self.run_optimization_iteration(ctx);
         } else {
-            println!("Ignoring outdated RunNextIteration message for iteration {} (currently at {})", 
-                     msg.iteration + 1, self.iterations_done);
+            println!(
+                "Ignoring outdated RunNextIteration message for iteration {} (currently at {})",
+                msg.iteration + 1,
+                self.iterations_done
+            );
         }
     }
 }
 
 impl Actor for OptimizationWs {
     type Context = ws::WebsocketContext<Self>;
-    
+
     fn started(&mut self, ctx: &mut Self::Context) {
         println!("WebSocket connection started for route {}", self.route_id);
         self.heartbeat(ctx);

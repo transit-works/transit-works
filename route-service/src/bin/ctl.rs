@@ -43,7 +43,12 @@ fn main() {
 
     output_geojson(&gtfs, &format!("{}/gtfs.geojson", args.output_dir));
 
-    output_routes_geojson(&transit, &gtfs, &road, &format!("{}/before.geojson", args.output_dir));
+    output_routes_geojson(
+        &transit,
+        &gtfs,
+        &road,
+        &format!("{}/before.geojson", args.output_dir),
+    );
 
     return ();
 

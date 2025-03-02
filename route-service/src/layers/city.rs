@@ -237,9 +237,7 @@ impl City {
     }
 
     /// Load transit network from cache
-    pub fn load_transit_from_cache(
-        city_name: &str,
-    ) -> Result<TransitNetwork, Error> {
+    pub fn load_transit_from_cache(city_name: &str) -> Result<TransitNetwork, Error> {
         let transit_cache_file = format!("{}/{}_transit.cached", CITY_CACHE_DIR, city_name);
 
         if std::path::Path::new(&transit_cache_file).exists() {
