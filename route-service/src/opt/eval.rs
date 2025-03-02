@@ -31,8 +31,8 @@ pub fn ridership_over_route(
     od: &GridNetwork,
 ) -> (Vec<f64>, f64) {
     let mut ridership = vec![];
-    let mut total_ridership = 0.0;
     let mut zone_prev_outer = None;
+    // populate the net change at each stop for ridership
     for i in 0..route_stops.len() {
         let stop = &route_stops[i];
         let (x, y) = (stop.geom.x(), stop.geom.y());
@@ -71,8 +71,7 @@ pub fn ridership_over_route(
             net_at_stop += demand;
         }
         zone_prev_outer = Some(zone);
-        total_ridership += net_at_stop;
-        ridership.push(total_ridership);
+        ridership.push(net_at_stop);
     }
     // for all NAN entries in a row, distribe the last non-NAN value over them
     // assume that the demand is equally distribued over all the stops in the same zone
@@ -91,6 +90,10 @@ pub fn ridership_over_route(
             }
             last_non_nan = ridership[i];
         }
+    }
+    // rider ship should be the running sum of the net at stop
+    for i in 1..ridership.len() {
+        ridership[i] += ridership[i - 1];
     }
     let average_ridership = ridership.iter().sum::<f64>() / ridership.len() as f64;
     (ridership, average_ridership / consts::BUS_CAPACITY as f64)

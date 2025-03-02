@@ -107,7 +107,7 @@ pub struct Link {
 pub struct Zone {
     pub zoneid: u32,
     pub polygon: Polygon<f64>,
-    population: u32,
+    pub population: u32,
 }
 
 #[derive(Deserialize, Serialize)]

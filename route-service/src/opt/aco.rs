@@ -63,8 +63,8 @@ impl ACO {
     }
 
     pub fn init() -> Self {
-        let aco_num_ant = 20;
-        let aco_max_gen = 200;
+        let aco_num_ant = 5;
+        let aco_max_gen = 10;
         let max_gen = 4;
         let alpha = 2.0;
         let beta = 3.0;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from '../maps/Sidebar';
 
@@ -14,7 +14,14 @@ export default function MapView({ data }) {
   const [optimizationError, setOptimizationError] = useState(null);
   // Add a cache to track which routes have been optimized
   const [optimizedRoutes, setOptimizedRoutes] = useState(new Set());
+  
+  // New state for WebSocket optimization
+  const [optimizationProgress, setOptimizationProgress] = useState(0);
+  const [currentEvaluation, setCurrentEvaluation] = useState(null);
+  const [useLiveOptimization, setUseLiveOptimization] = useState(true); // Default to live optimization
+  const wsRef = useRef(null);
 
+  // Handle traditional REST API optimization
   const handleOptimize = async () => {
     if (!selectedRoute) {
       // Cannot optimize if no route is selected
@@ -67,6 +74,155 @@ export default function MapView({ data }) {
     }
   };
 
+  // New live optimization function using WebSockets
+  const handleLiveOptimize = () => {
+    if (!selectedRoute) {
+      setOptimizationError('Please select a route to optimize');
+      return;
+    }
+
+    // Close any existing WebSocket connection
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      wsRef.current.close();
+    }
+
+    try {
+      setIsOptimizing(true);
+      setOptimizationError(null);
+      setOptimizationProgress(0);
+      setCurrentEvaluation(null);
+
+      // Create WebSocket connection
+      const wsUrl = `ws://localhost:8080/optimize-route-live/${selectedRoute}`;
+      console.log(`Connecting to WebSocket at ${wsUrl}`);
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      // Set up ping interval to keep connection alive
+      const pingInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          console.log('Sending client ping to keep connection alive');
+          // Send a small message to keep the connection active
+          ws.send('ping');
+        }
+      }, 15000); // Send ping every 15 seconds
+
+      ws.onopen = () => {
+        console.log('WebSocket connection established');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Received WebSocket message:', data);
+          
+          if (data.error) {
+            setOptimizationError(data.error);
+            ws.close();
+            return;
+          }
+
+          // Update optimization progress
+          if (data.iteration && data.total_iterations) {
+            const progress = (data.iteration / data.total_iterations) * 100;
+            setOptimizationProgress(progress);
+            console.log(`Optimization progress: ${progress}% (iteration ${data.iteration}/${data.total_iterations})`);
+            
+            // If this is the last iteration, make sure we mark optimization as complete
+            if (data.iteration === data.total_iterations) {
+              // Add to optimized routes set
+              setOptimizedRoutes(prev => new Set(prev).add(selectedRoute));
+              
+              // Set isOptimizing to false since we're done
+              setIsOptimizing(false);
+            }
+          }
+
+          // Update evaluation score
+          if (data.evaluation) {
+            setCurrentEvaluation(data.evaluation);
+          }
+
+          // Update map with latest optimized route
+          if (data.geojson) {
+            setOptimizedData(data.geojson);
+          }
+
+          // Check if this is the final iteration
+          if (data.iteration === data.total_iterations) {
+            // Add to optimized routes set
+            setOptimizedRoutes(prev => new Set(prev).add(selectedRoute));
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+          setOptimizationError('Failed to process optimization update');
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setOptimizationError('Connection to optimization service failed');
+        clearInterval(pingInterval);
+      };
+
+      ws.onclose = (event) => {
+        console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
+        
+        // Always set isOptimizing to false when WebSocket closes
+        // This ensures the button is re-enabled
+        setIsOptimizing(false);
+        
+        // If closed abnormally with optimization incomplete, show error
+        if (event.code !== 1000 && optimizationProgress < 100) {
+          setOptimizationError('WebSocket connection closed unexpectedly');
+        }
+        
+        wsRef.current = null;
+        clearInterval(pingInterval);
+      };
+
+      return () => {
+        clearInterval(pingInterval);
+      };
+    } catch (error) {
+      console.error('Error setting up WebSocket connection:', error);
+      setOptimizationError(error.message);
+      setIsOptimizing(false);
+    }
+  };
+
+  // Choose appropriate optimization method based on user preference
+  const handleOptimizeRoute = () => {
+    if (useLiveOptimization) {
+      handleLiveOptimize();
+    } else {
+      handleOptimize();
+    }
+  };
+
+  // Clean up WebSocket on component unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  // Add an effect to make sure isOptimizing is reset when route selection changes
+  useEffect(() => {
+    // If a route is deselected while optimizing, disable optimization mode
+    if (!selectedRoute && isOptimizing) {
+      setIsOptimizing(false);
+      
+      // Close any existing WebSocket connection
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        wsRef.current.close();
+      }
+    }
+  }, [selectedRoute, isOptimizing]);
+
   // Reset function for all route optimizations
   const resetOptimization = async () => {
     try {
@@ -103,9 +259,13 @@ export default function MapView({ data }) {
           data={data} 
           selectedRoute={selectedRoute} 
           setSelectedRoute={setSelectedRoute} 
-          onOptimize={handleOptimize}
+          onOptimize={handleOptimizeRoute}
           isOptimizing={isOptimizing}
           optimizationError={optimizationError}
+          optimizationProgress={optimizationProgress}
+          currentEvaluation={currentEvaluation}
+          useLiveOptimization={useLiveOptimization}
+          setUseLiveOptimization={setUseLiveOptimization}
         />
       </div>
       <div className="absolute inset-0 z-0 h-full w-full">
