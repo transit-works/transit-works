@@ -2,11 +2,15 @@ use env_logger::init;
 use geo::{Distance, Haversine, Length, LineString, Point};
 use rand::rngs::StdRng;
 use rand::{distributions::WeightedIndex, prelude::Distribution, SeedableRng};
+use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
+    sync::mpsc::channel,
     sync::Arc,
+    sync::Mutex,
     time::Instant,
 };
+use threadpool::ThreadPool;
 
 use crate::layers::{
     geo_util,
@@ -550,7 +554,7 @@ impl ACO {
         heuristic
     }
 
-    pub fn optimize_route(
+    pub fn optimize_route_old(
         &mut self,
         od: &GridNetwork,
         road: &RoadNetwork,
@@ -605,6 +609,103 @@ impl ACO {
 
         if gen_best_eval.0 < best_eval.0 {
             Some((best_route, best_eval.0))
+        } else {
+            log::debug!("Returned original route because not better route was found");
+            Some((route.clone(), init_eval.0))
+        }
+    }
+
+    pub fn optimize_route(
+        &mut self,
+        od: &GridNetwork,
+        road: &RoadNetwork,
+        transit: &TransitNetwork,
+        route: &TransitRoute,
+    ) -> Option<(TransitRoute, f64)> {
+        let init_eval = ACO::evaluate_route(od, road, route);
+        log::debug!("inital evaluation : {}", init_eval.0);
+        let mut best_route = route.clone();
+        let mut best_eval = ACO::evaluate_route(od, road, route);
+        let gen_best_eval = best_eval;
+        log::debug!("    Initial route len : {}", route.outbound_stops.len());
+
+        let mut pheromone = HashMap::new();
+        let eval = ACO::evaluate_route(od, road, route).0;
+        for w in route.outbound_stops.windows(2) {
+            pheromone.insert((w[0].stop_id.clone(), w[1].stop_id.clone()), eval / self.q);
+        }
+
+        for aco_max_gen_i in 0..self.aco_max_gen {
+            let mut ant_routes: Vec<TransitRoute> = Vec::new();
+            log::debug!("    Gen {}", aco_max_gen_i);
+            // Update pheromone for route
+            
+            let (tx, rx) = channel();
+            let pheromone = Arc::new(Mutex::new(pheromone.clone()));
+            let best_route = Arc::new(Mutex::new(best_route.clone()));
+            let best_eval = Arc::new(Mutex::new(best_eval.clone()));
+            let od = Arc::new(od.clone());
+            let road = Arc::new(road.clone());
+            let transit = Arc::new(transit.clone());
+
+            (0..self.aco_num_ant).into_par_iter().for_each(|i| {
+                let pheromone = Arc::clone(&pheromone);
+                let best_route = Arc::clone(&best_route);
+                let best_eval = Arc::clone(&best_eval);
+                let od = Arc::clone(&od);
+                let road = Arc::clone(&road);
+                let transit = Arc::clone(&transit);
+                let tx = tx.clone();
+
+                log::trace!("      Ant {}", i);
+
+                let mut local_aco = ACO {
+                    alpha: self.alpha,
+                    beta: self.beta,
+                    rho: self.rho,
+                    q: self.q,
+                    aco_num_ant: self.aco_num_ant,
+                    aco_max_gen: self.aco_max_gen,
+                    max_gen: self.max_gen,
+                    heuristic_cache: HashMap::new(),
+                };
+                let local_best_route = best_route.lock().unwrap().clone();
+                let local_pheromone = pheromone.lock().unwrap().clone();
+
+                if let Some(new_route) = local_aco.adjust_route(
+                    &local_best_route,
+                    &od,
+                    &road,
+                    &transit,
+                    &vec![local_best_route.clone()],
+                    &local_pheromone,
+                ) {
+                    let new_eval = ACO::evaluate_route(&od, &road, &new_route);
+                    if new_eval.0 > best_eval.lock().unwrap().0 {
+                        *best_eval.lock().unwrap() = new_eval.clone();
+                        *best_route.lock().unwrap() = new_route.clone();
+                    }
+                    tx.send(new_route).unwrap();
+                }
+            });
+
+            drop(tx);
+            for new_route in rx {
+                ant_routes.push(new_route);
+            }
+
+            self.update_route_pheromone(&od, &road, &ant_routes, &mut pheromone.lock().unwrap());
+            self.maybe_punish_route(
+                &best_route.lock().unwrap(),
+                &road,
+                best_eval.lock().unwrap().1,
+                best_eval.lock().unwrap().2,
+                &mut pheromone.lock().unwrap(),
+            );
+        }
+
+        if gen_best_eval.0 < best_eval.0 {
+            Some((best_route.clone(), best_eval.0))
         } else {
             log::debug!("Returned original route because not better route was found");
             Some((route.clone(), init_eval.0))
