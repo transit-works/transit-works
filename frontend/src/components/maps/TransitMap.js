@@ -12,6 +12,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './Map.css';
 import { PathLayer } from '@deck.gl/layers';
 import lerpColor from '../../utils/colorUtils';
+import RidershipChart from '../../components/visualization/RidershipChart';
 
 const INITIAL_VIEW_STATE = {
   latitude: 43.647667,
@@ -50,7 +51,20 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
   const [show3DRoutes, setShow3DRoutes] = useState(false);
   const [useRandomColors, setUseRandomColors] = useState(false);
   const [routeColorMap, setRouteColorMap] = useState({});
+  const [ridershipData, setRidershipData] = useState(null);
   const mapRef = useRef(null);
+
+  const fetchRidershipData = async (routeId) => {
+    try {
+      //TODO: Replace with backend call
+      const response = await fetch('/default.json');
+      const data = await response.json();
+      setRidershipData(data);
+    } catch (error) {
+      console.error('Error fetching ridership data:', error);
+      setRidershipData(null);
+    }
+  };
 
   const handleMapLoad = () => {
     const map = mapRef.current.getMap();
@@ -71,11 +85,13 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
     if (info && info.object) {
       const { type } = info.object.geometry;
       if (type !== 'Point') {
+        const routeId = info.object.properties.route_id;
         setSelectedRoute((prevSelectedRoute) =>
-          prevSelectedRoute === info.object.properties.route_id
-            ? null
-            : info.object.properties.route_id
+          prevSelectedRoute === routeId ? null : routeId
         );
+        
+        // Fetch ridership data when a route is selected
+        fetchRidershipData(routeId);
       }
       setPopupInfo({
         coordinates: info.coordinate,
@@ -96,33 +112,40 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
         onClose={() => setPopupInfo(null)}
         style={{ zIndex: 10 }}
       >
-        <div>
-          <p className="text-wrap text-background">
-            {popupInfo.type === 'Point' ? (
-              <div>
-                <h4 className="text-center text-2xl text-background">Stop Information</h4>
+        <div className="p-2">
+          {popupInfo.type === 'Point' ? (
+            <div>
+              <h4 className="text-center text-xl font-heading mb-2">Stop Information</h4>
+              <div className="text-[0.8rem] text-accent">
                 <p>
-                  <b>ID:</b> {popupInfo.properties.stop_id}
+                  <span className="font-semibold">ID:</span> {popupInfo.properties.stop_id}
                 </p>
                 <p>
-                  <b>Name:</b> {popupInfo.properties.stop_name}
-                </p>
-              </div>
-            ) : (
-              <div>
-                <h4 className="text-center text-2xl text-background">Route Information</h4>
-                <p>
-                  <b>Route ID:</b> {popupInfo.properties.route_id}
-                </p>
-                <p>
-                  <b>Name:</b> {popupInfo.properties.route_long_name}
-                </p>
-                <p>
-                  <b>Route type:</b> {popupInfo.properties.route_type}
+                  <span className="font-semibold">Name:</span> {popupInfo.properties.stop_name}
                 </p>
               </div>
-            )}
-          </p>
+            </div>
+          ) : (
+            <div className="w-60">
+              <h4 className="text-center text-xl font-heading mb-2 mr-6">Route Information</h4>
+              <div className="text-[0.8rem] text-accent">
+                <p>
+                  <span className="font-semibold">Route ID:</span> {popupInfo.properties.route_id}
+                </p>
+                <p>
+                  <span className="font-semibold">Name:</span> {popupInfo.properties.route_long_name}
+                </p>
+              </div>
+              <p className='mt-2'>
+                  <span className="font-semibold">Average Ridership By Stop</span>
+              </p>
+              <RidershipChart 
+                routeId={popupInfo.properties.route_id} 
+                data={ridershipData || []} 
+                width={200}
+              />
+            </div>
+          )}
         </div>
       </Popup>
     );
@@ -378,11 +401,14 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
         autoHighlight: true,
         onClick: (info) => {
           if (info && info.object) {
+            const routeId = feature.properties.route_id;
             setSelectedRoute((prevSelectedRoute) =>
-              prevSelectedRoute === feature.properties.route_id
-                ? null
-                : feature.properties.route_id
+              prevSelectedRoute === routeId ? null : routeId
             );
+            
+            // Fetch ridership data
+            fetchRidershipData(routeId);
+            
             setPopupInfo({
               coordinates: info.coordinate,
               properties: feature.properties,
