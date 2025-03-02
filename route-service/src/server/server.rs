@@ -60,7 +60,7 @@ async fn optimize_route(route_id: web::Path<String>, data: web::Data<AppState>) 
 
         if let Some(route) = route {
             // Create ACO instance on demand for this optimization
-            let aco = Arc::new(Mutex::new(ACO::init()));
+            let aco = Arc::new(ACO::init());
 
             if let Some((opt_route, eval)) =
                 ACO::optimize_route(aco, &city.grid, &city.road, &city.transit, route)
