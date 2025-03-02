@@ -66,7 +66,6 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
       }
       
       const data = await response.json();
-      console.log('Received ridership data:', data);
       setRidershipData(data.ridership);
     } catch (error) {
       console.error('Error fetching ridership data:', error);
