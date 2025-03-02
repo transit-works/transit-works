@@ -556,7 +556,6 @@ impl ACO {
         road: &RoadNetwork,
         transit: &TransitNetwork,
         route: &TransitRoute,
-        pheromone: &mut HashMap<(String, String), f64>,
     ) -> Option<(TransitRoute, f64)> {
         let init_eval = ACO::evaluate_route(od, road, route);
         log::debug!("inital evaluation : {}", init_eval.0);
@@ -564,6 +563,13 @@ impl ACO {
         let mut best_eval = ACO::evaluate_route(od, road, route);
         let gen_best_eval = best_eval;
         log::debug!("    Initial route len : {}", route.outbound_stops.len());
+
+        let mut pheromone = HashMap::new();
+        let eval = ACO::evaluate_route(od, road, route).0;
+        for w in route.outbound_stops.windows(2) {
+            pheromone.insert((w[0].stop_id.clone(), w[1].stop_id.clone()), eval / self.q);
+        }
+
         for aco_max_gen_i in 0..self.aco_max_gen {
             let mut ant_routes: Vec<TransitRoute> = Vec::new();
             log::trace!("    Gen {}", aco_max_gen_i);
@@ -593,8 +599,8 @@ impl ACO {
                     log::debug!("        Failed to build new route");
                 }
             }
-            self.update_route_pheromone(od, road, &ant_routes, pheromone);
-            self.maybe_punish_route(&best_route, road, best_eval.1, best_eval.2, pheromone);
+            self.update_route_pheromone(od, road, &ant_routes, &mut pheromone);
+            self.maybe_punish_route(&best_route, road, best_eval.1, best_eval.2, &mut pheromone);
         }
 
         if gen_best_eval.0 < best_eval.0 {
@@ -619,7 +625,6 @@ impl ACO {
             .iter()
             .map(|route| (*route).clone())
             .collect::<Vec<_>>();
-        let mut pheromone = HashMap::new();
         for max_gen_i in 0..self.max_gen {
             log::debug!("ACO generation {}", max_gen_i);
             // Sort the routes by their evaluate_route
@@ -637,13 +642,8 @@ impl ACO {
                     continue;
                 }
 
-                let eval = ACO::evaluate_route(od, road, &best_routes[i]).0;
-                for w in best_routes[i].outbound_stops.windows(2) {
-                    pheromone.insert((w[0].stop_id.clone(), w[1].stop_id.clone()), eval / self.q);
-                }
-
                 if let Some((best_route, _)) =
-                    self.optimize_route(od, road, transit, &best_routes[i], &mut pheromone)
+                    self.optimize_route(od, road, transit, &best_routes[i])
                 {
                     let found_route_idx = transit
                         .routes
