@@ -61,16 +61,23 @@ TRIPS_GENERATED = {
     TimePeriod.EVENING: 20_000.0,
 }
 
-# Rough estimate of the number of people living in each building type
+# Rough estimate of the number of people living in each building type PER UNIT
 BUILDING_OCCUPANCY = {
-    Building.APARTMENTS.value: 400,
-    Building.BARRACKS.value: 200,
+    Building.APARTMENTS.value: 2.5,
+    Building.BARRACKS.value: 300,
     Building.BUNGALOW.value: 4,
     Building.DETACHED.value: 4,
-    Building.DORMITORY.value: 400,
-    Building.HOTEL.value: 200,
+    Building.DORMITORY.value: 2.5,
+    Building.HOTEL.value: 2,
     Building.HOUSE.value: 4,
     Building.SEMIDETACHED_HOUSE.value: 4,
+}
+
+# All building types that have more than 2 floor
+BUILDINGS_TYPES_TALL = {
+    Building.APARTMENTS.value,
+    Building.DORMITORY.value,
+    Building.HOTEL.value,
 }
 
 # Distance decay parameter for gravity model (0.8-2.0)
@@ -166,7 +173,20 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
         population = 0
         for _, building in buildings.iterrows():
             building_type = building['building']
-            population += BUILDING_OCCUPANCY.get(building_type, 0)
+            if building_type in BUILDINGS_TYPES_TALL:
+                num_flats = building.get("building:flats", 0)
+                num_floors = building.get("building:levels", 0)
+
+                if num_flats is not None and str(num_flats).isdigit():
+                    num_flats = int(num_flats)
+                    population += BUILDING_OCCUPANCY.get(building_type, 0) * num_flats
+                elif num_floors is not None and str(num_floors).isdigit():
+                    num_floors = int(num_floors)
+                    population += BUILDING_OCCUPANCY.get(building_type, 0) * 10 * num_floors
+                else:
+                    population += 50
+            else:
+                population += BUILDING_OCCUPANCY.get(building_type, 0)
         
         # determine the proportion of each landuse type by area in the zone
         area_by_type = {x.value: 0 for x in Landuse}
