@@ -91,19 +91,28 @@ export default function Home() {
         </div>
       </ParallaxLayer>
       <ParallaxLayer offset={1}>
-        <div className="flex w-1/2 flex-col justify-center">
-          <h1 className="ml-36 mt-36 w-full text-left font-heading text-7xl text-accent">
-            Optimize & Visualize
-            <br />
-            Bus Routes
-          </h1>
-          <p className="mx-36 mt-10 w-2/3 text-left font-body text-text">
-            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque
-            laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi
-            architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas
-            sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione
-            voluptatem sequi nesciunt.
-          </p>
+        <div className="flex flex-col md:flex-row items-center h-screen px-6 md:px-0">
+          <div className="w-full md:w-1/2 flex flex-col justify-center">
+            <div className="relative">
+              <div className="absolute -left-6 top-0 h-full w-1 bg-accent rounded-full"></div>
+              <h1 className="ml-8 md:ml-36 mt-12 md:mt-36 w-full text-left font-heading text-5xl md:text-7xl text-accent">
+                Optimize & Visualize
+                <br />
+                <span className="text-white">Bus Routes</span>
+              </h1>
+              <p className="ml-8 md:ml-36 mt-6 md:mt-10 w-full md:w-2/3 text-left font-body text-text/80 leading-relaxed">
+                Our advanced algorithms analyze traffic patterns, passenger demand, and existing infrastructure to identify the most efficient transit solutions. Visualize impact with interactive 3D models that help stakeholders understand proposed changes and their benefits.
+              </p>
+              <div className="ml-8 md:ml-36 mt-8">
+                <Link href="/city-select" className="inline-flex items-center text-primary hover:text-accent transition-colors">
+                  <span>Explore Cities</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </ParallaxLayer>
 
@@ -153,26 +162,113 @@ export default function Home() {
 
       {/* MultiBarChart Section */}
       <ParallaxLayer offset={3}>
-        <div className="flex h-screen items-center justify-center">
-          <div className="ml-36 w-1/2">
-            <MultiBarChart width={600} height={600} />
-          </div>
-          <div className="flex w-1/2 flex-col">
-            <h1 className="mt-36 w-full text-left font-heading text-7xl text-accent">
-              Transit & Economic Score Comparison
-              <br />
-            </h1>
-            <p className="mt-10 w-2/3 text-left font-body text-text">
-              Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque
-              laudantium, totam rem aperiam, eaque ipsa quae ab illo.
-            </p>
+        <div className="relative flex h-screen items-center justify-center px-6 md:px-12">
+          {/* Enhanced background elements */}
+          <div className="absolute left-0 top-1/4 h-1/2 w-1/3 rounded-r-full bg-accent/10 blur-3xl"></div>
+          <div className="absolute right-0 bottom-1/4 h-1/3 w-1/4 rounded-l-full bg-primary/5 blur-3xl"></div>
+          
+          <div className="mx-auto flex w-full max-w-7xl flex-col md:flex-row items-center gap-8 md:gap-16">
+            {/* Chart container with enhanced styling */}
+            <div className="w-full md:w-1/2 p-4">
+              <div className="rounded-xl bg-background-dk/30 p-6 backdrop-blur-sm shadow-lg border border-accent/10 relative overflow-hidden">
+                {/* Decorative accent */}
+                <div className="absolute -top-10 -right-10 h-20 w-20 rounded-full bg-primary/10 blur-xl"></div>
+                
+                <h4 className="mb-4 font-heading text-lg flex items-center text-primary">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
+                    <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+                  </svg>
+                  Interactive Comparison Tool
+                </h4>
+                
+                {/* Note about chart - addressing text overlap */}
+                <div className="mb-2 text-xs text-text/70 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  Hover over bars to view statistics
+                </div>
+                
+                <div className="p-1">
+                  <MultiBarChart width={575} height={420} /> {/* Reduced height slightly to help with text overlap */}
+                </div>
+                
+                <div className="mt-4 flex justify-between items-center">
+                  <span className="text-xs text-text/70">Scores Generated Using a Custom Algorithm</span>
+                  <button 
+                    onClick={() => {
+                      fetch('/data/city_stats.json')
+                        .then(response => response.json())
+                        .then(data => {
+                          // Format data as CSV
+                          const headers = ['City', 'Transit Score', 'Economic Score'];
+                          const csvRows = [headers.join(',')];
+                          
+                          data.forEach(city => {
+                            csvRows.push(`${city.name},${city.transitScore},${city.economicScore}`);
+                          });
+                          
+                          const csvContent = csvRows.join('\n');
+                          
+                          // Create download link
+                          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.setAttribute('href', url);
+                          link.setAttribute('download', 'transit_economic_scores.csv');
+                          link.style.visibility = 'hidden';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        });
+                    }}
+                    className="px-3 py-1 text-xs bg-primary/20 hover:bg-primary/30 text-primary rounded-full transition-colors"
+                  >
+                    Export Data
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {/* Text content with improved hierarchy */}
+            <div className="w-full md:w-1/2 flex flex-col">
+              <div className="relative">
+                <div className="absolute -left-4 top-0 h-full w-1 bg-accent rounded-full"></div>
+                <h1 className="pl-6 w-full text-left font-heading text-4xl md:text-6xl bg-gradient-to-r from-accent to-primary bg-clip-text text-transparent">
+                  Transit & Economic Score Comparison
+                </h1>
+              </div>
+              
+              <p className="mt-6 md:mt-8 pl-6 w-full md:w-5/6 text-left font-body text-text/80 leading-relaxed">
+                Our analysis reveals the powerful correlation between transit accessibility and economic prosperity. 
+                Cities with higher transit scores consistently show stronger economic growth, lower unemployment, 
+                and improved quality of life metrics.
+              </p>
+              
+              <div className="mt-6 pl-6">
+                <div className="flex items-center">
+                  <span className="h-3 w-3 rounded-full bg-[#f43f5e] mr-2"></span>
+                  <span className="text-xs text-text/80 mr-4">Transit Score</span>
+                  <span className="h-3 w-3 rounded-full bg-[#c4a76e] mr-2"></span>
+                  <span className="text-xs text-text/80">Economic Score</span>
+                </div>
+                
+                <Link href="/city-select" className="mt-6 inline-flex items-center text-primary hover:text-accent transition-colors">
+                  <span>View More Cities</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </ParallaxLayer>
 
       {/* FlatMap Section */}
       <ParallaxLayer offset={4}>
-        <div id="get-started" className="mx-36 mb-0 flex flex-col">
+        <div id="get-started" className="mx-36 mt-8 mb-0 flex flex-col">
           <h2 className="mb-2 w-full font-heading text-6xl text-primary md:text-7xl lg:w-2/3">
             Get Started with Transit Optimization
           </h2>
