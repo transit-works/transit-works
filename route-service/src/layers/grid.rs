@@ -81,7 +81,10 @@ impl GridNetwork {
     }
 
     pub fn demand_between_coords(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
-        match (self.find_nearest_zone(x1, y1), self.find_nearest_zone(x2, y2)) {
+        match (
+            self.find_nearest_zone(x1, y1),
+            self.find_nearest_zone(x2, y2),
+        ) {
             (Some(from), Some(to)) => self.demand_between_zones(from, to),
             _ => 0.0,
         }

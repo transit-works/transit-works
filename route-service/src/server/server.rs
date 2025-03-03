@@ -1,5 +1,6 @@
 use crate::gtfs::geojson;
 use crate::layers::city::City;
+use crate::layers::transit_network::{TransitNetwork, TransitRoute};
 use crate::opt::aco::ACO;
 use crate::opt::eval;
 use crate::server::cors::cors_middleware;
@@ -9,15 +10,16 @@ use actix_web::{get, post, web, App, Error, HttpRequest, HttpResponse, HttpServe
 use actix_web_actors::ws;
 use geo::Centroid;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-// Application state that is shared across all endpoints
+// Updated application state with immutable city and mutable optimized transit
 struct AppState {
-    city: Mutex<Option<City>>,
-    gtfs_path: String,
-    db_path: String,
+    city: Mutex<Option<City>>, // Immutable after initialization
+    optimized_transit: Mutex<Option<TransitNetwork>>, // Stores optimized routes
+    optimized_route_ids: Mutex<Vec<String>>, // Tracks which routes have been optimized
 }
 
 #[derive(Deserialize)]
@@ -30,6 +32,31 @@ struct GridResponse {
     message: String,
 }
 
+fn get_optimized_geojson(
+    city: &City,
+    optimized_transit: &TransitNetwork,
+    optimized_route_ids: &Vec<String>,
+) -> Value {
+    let all_opt_routes = optimized_transit
+        .routes
+        .iter()
+        .filter(|r| optimized_route_ids.contains(&r.route_id))
+        .collect::<Vec<&TransitRoute>>();
+    let features = geojson::get_all_features(&TransitNetwork::to_gtfs_filtered(
+        all_opt_routes,
+        &city.gtfs,
+        &city.road,
+    ));
+    let geojson = geojson::convert_to_geojson(&features);
+    geojson
+}
+
+fn get_base_geojson(city: &City) -> Value {
+    let features = geojson::get_all_features(&city.transit.to_gtfs(&city.gtfs, &city.road));
+    let geojson = geojson::convert_to_geojson(&features);
+    geojson
+}
+
 #[get("/get-data")]
 async fn get_data(data: web::Data<AppState>) -> impl Responder {
     println!("Fetching network data");
@@ -38,11 +65,7 @@ async fn get_data(data: web::Data<AppState>) -> impl Responder {
     let city_guard = data.city.lock().unwrap();
 
     if let Some(city) = &*city_guard {
-        let features = geojson::get_all_features(&city.transit.to_gtfs(&city.gtfs, &city.road));
-        println!("There are {} features", features.len());
-        let geojson = geojson::convert_to_geojson(&features);
-        println!("Generated GeoJSON");
-        HttpResponse::Ok().json(geojson)
+        HttpResponse::Ok().json(get_base_geojson(city))
     } else {
         HttpResponse::InternalServerError().json(serde_json::json!({
             "error": "City data not loaded"
@@ -55,41 +78,58 @@ async fn optimize_route(route_id: web::Path<String>, data: web::Data<AppState>) 
     let route_id = route_id.into_inner();
     println!("Optimizing route: {}", route_id);
 
-    let mut city_guard = data.city.lock().unwrap();
+    // Access the original city (immutable)
+    let city_guard = data.city.lock().unwrap();
+    let city = match &*city_guard {
+        Some(city) => city,
+        None => {
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "City data not loaded"
+            }));
+        }
+    };
 
-    if let Some(city) = &mut *city_guard {
-        // Find the route with the given ID
-        let route = city.transit.routes.iter().find(|r| r.route_id == route_id);
+    // Find the route with the given ID from the original city data
+    let original_route = city
+        .transit
+        .routes
+        .iter()
+        .find(|r| r.route_id == route_id)
+        .cloned();
 
-        if let Some(route) = route {
-            // Create ACO instance on demand for this optimization
-            let mut aco = ACO::init();
+    if let Some(route) = original_route {
+        // Create ACO instance on demand for this optimization
+        let mut aco = ACO::init();
 
-            if let Some((opt_route, eval)) =
-                aco.optimize_route(&city.grid, &city.road, &city.transit, route)
-            {
-                // Update the route with the optimized version
-                city.transit.routes.retain(|r| r.route_id != route_id);
-                city.transit.routes.push(opt_route);
+        if let Some((opt_route, eval)) =
+            aco.optimize_route(&city.grid, &city.road, &city.transit, &route)
+        {
+            let mut optimized_transit_guard = data.optimized_transit.lock().unwrap();
+            let optimized_transit = optimized_transit_guard.as_mut().unwrap();
+            let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
 
-                HttpResponse::Ok().json(serde_json::json!({
-                    "message": format!("Optimized route {}", route_id),
-                    "geojson": geojson::convert_to_geojson(&geojson::get_all_features(&city.transit.to_gtfs(&city.gtfs, &city.road))),
-                    "evaluation": eval
-                }))
-            } else {
-                HttpResponse::InternalServerError().json(serde_json::json!({
-                    "error": format!("Failed to optimize route {}", route_id)
-                }))
+            // Update the optimized transit with the new route
+            optimized_transit.routes.retain(|r| r.route_id != route_id);
+            optimized_transit.routes.push(opt_route);
+
+            // Track the optimized route ID
+            if !optimized_route_ids.contains(&route_id) {
+                optimized_route_ids.push(route_id.clone());
             }
+
+            HttpResponse::Ok().json(serde_json::json!({
+                "message": format!("Optimized route {}", route_id),
+                "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids),
+                "evaluation": eval
+            }))
         } else {
-            HttpResponse::NotFound().json(serde_json::json!({
-                "error": format!("Route {} not found", route_id)
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": format!("Failed to optimize route {}", route_id)
             }))
         }
     } else {
-        HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "City data not loaded"
+        HttpResponse::NotFound().json(serde_json::json!({
+            "error": format!("Route {} not found", route_id)
         }))
     }
 }
@@ -186,30 +226,59 @@ async fn get_grid(data: web::Data<AppState>) -> impl Responder {
 async fn reset_optimizations(data: web::Data<AppState>) -> impl Responder {
     println!("Resetting all route optimizations");
 
-    let mut city_guard = data.city.lock().unwrap();
-
-    if let Some(city) = &mut *city_guard {
-        // Load only the transit network from cache
-        match City::load_transit_from_cache("toronto") {
-            Ok(fresh_transit) => {
-                // Replace just the transit part of the city
-                city.transit = fresh_transit;
-
-                return HttpResponse::Ok().json(serde_json::json!({
-                    "message": "All route optimizations reset"
-                }));
-            }
-            Err(e) => {
-                return HttpResponse::InternalServerError().json(serde_json::json!({
-                    "error": format!("Failed to reload transit data: {}", e)
-                }));
-            }
+    let city_guard = data.city.lock().unwrap();
+    if let Some(city) = &*city_guard {
+        // Reset the optimized transit to original state
+        {
+            let mut optimized_transit_guard = data.optimized_transit.lock().unwrap();
+            *optimized_transit_guard = Some(city.transit.clone());
         }
+
+        // Clear the list of optimized route IDs
+        {
+            let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
+            optimized_route_ids.clear();
+        }
+
+        return HttpResponse::Ok().json(serde_json::json!({
+            "message": "All route optimizations reset"
+        }));
     }
 
     HttpResponse::InternalServerError().json(serde_json::json!({
         "error": "City data not loaded"
     }))
+}
+
+#[get("/get-optimizations")]
+async fn get_optimizations(data: web::Data<AppState>) -> impl Responder {
+    println!("Fetching optimized routes");
+
+    // Get the list of optimized route IDs
+    let optimized_route_ids = data.optimized_route_ids.lock().unwrap().clone();
+
+    if optimized_route_ids.is_empty() {
+        return HttpResponse::Ok().json(serde_json::json!({
+            "message": "No routes have been optimized yet",
+            "features": []
+        }));
+    }
+
+    // Access the city data (for gtfs and road network)
+    let city_guard = data.city.lock().unwrap();
+    let optimized_transit_guard = data.optimized_transit.lock().unwrap();
+
+    if let (Some(city), Some(optimized_transit)) = (&*city_guard, &*optimized_transit_guard) {
+        HttpResponse::Ok().json(serde_json::json!({
+            "message": format!("Found {} optimized routes", optimized_route_ids.len()),
+            "routes": optimized_route_ids,
+            "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids)
+        }))
+    } else {
+        HttpResponse::InternalServerError().json(serde_json::json!({
+            "error": "City data not loaded"
+        }))
+    }
 }
 
 // WebSocket actor for live optimization
@@ -250,8 +319,8 @@ impl OptimizationWs {
         // Update heartbeat timestamp to prevent timeout during long-running optimization
         self.heartbeat = Instant::now();
 
-        // Try to access the city from the shared state
-        let mut city_guard = match self.app_state.city.lock() {
+        // Access the city data (immutable)
+        let city_guard = match self.app_state.city.lock() {
             Ok(guard) => guard,
             Err(e) => {
                 println!("Failed to acquire lock on city data: {}", e);
@@ -266,10 +335,27 @@ impl OptimizationWs {
             }
         };
 
-        if let Some(city) = &mut *city_guard {
-            // Find the route with the given ID
-            let route = city
-                .transit
+        if let Some(city) = &*city_guard {
+            // Get the route to optimize - check optimized_transit first, then fall back to original
+            let mut optimized_transit_guard = match self.app_state.optimized_transit.lock() {
+                Ok(guard) => guard,
+                Err(e) => {
+                    println!("Failed to acquire lock on optimized transit data: {}", e);
+                    ctx.text(
+                        serde_json::to_string(&serde_json::json!({
+                            "error": "Server error: Failed to access optimized transit data"
+                        }))
+                        .unwrap(),
+                    );
+                    ctx.close(None);
+                    return;
+                }
+            };
+
+            let optimized_transit = optimized_transit_guard.as_mut().unwrap();
+
+            // Find the route to optimize
+            let route = optimized_transit
                 .routes
                 .iter()
                 .find(|r| r.route_id == route_id)
@@ -281,19 +367,20 @@ impl OptimizationWs {
 
                 match aco.optimize_route(&city.grid, &city.road, &city.transit, &route) {
                     Some((opt_route, eval)) => {
-                        // Update the route in city data for next iteration
-                        city.transit.routes.retain(|r| r.route_id != route_id);
-                        city.transit.routes.push(opt_route);
+                        // Update the route in optimized_transit for next iteration
+                        optimized_transit.routes.retain(|r| r.route_id != route_id);
+                        optimized_transit.routes.push(opt_route);
+                        let mut optimized_route_ids =
+                            self.app_state.optimized_route_ids.lock().unwrap();
 
-                        // Prepare and send update
-                        let features = geojson::get_all_features(
-                            &city.transit.to_gtfs(&city.gtfs, &city.road),
-                        );
-                        let geojson = geojson::convert_to_geojson(&features);
+                        // Ensure route ID is in the optimized list
+                        if !optimized_route_ids.contains(&route_id) {
+                            optimized_route_ids.push(route_id.clone());
+                        }
 
                         let response = serde_json::json!({
                             "message": format!("Optimized route {} (iteration {}/{})", route_id, self.iterations_done + 1, self.total_iterations),
-                            "geojson": geojson,
+                            "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids),
                             "evaluation": eval,
                             "iteration": self.iterations_done + 1,
                             "total_iterations": self.total_iterations
@@ -309,7 +396,6 @@ impl OptimizationWs {
                         self.heartbeat = Instant::now();
 
                         // Schedule next iteration with a short delay
-                        // Use a clone of self.iterations_done to track which iteration this is
                         let current_iteration = self.iterations_done;
                         println!(
                             "Scheduling next iteration {} for route {}",
@@ -317,7 +403,6 @@ impl OptimizationWs {
                             route_id
                         );
 
-                        // Use address() and do_send() pattern which is more reliable
                         let addr = ctx.address();
                         ctx.run_later(Duration::from_millis(500), move |_, _| {
                             addr.do_send(RunNextIteration {
@@ -465,6 +550,18 @@ async fn optimize_route_live(
     ws::start(ws, &req, stream)
 }
 
+#[post("/optimize-routes-live")]
+async fn optimize_routes_live(
+    req: HttpRequest,
+    stream: web::Payload,
+    route_ids: web::Json<RouteIds>,
+    data: web::Data<AppState>,
+) -> Result<HttpResponse, Error> {
+    Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+        "error": "Not implemented"
+    })))
+}
+
 pub async fn start_server(
     gtfs_path: &str,
     db_path: &str,
@@ -482,11 +579,11 @@ pub async fn start_server(
         false, // don't invalidate cache
     );
 
-    // Initialize application state with the city and paths for reloading
+    // Initialize application state with the city and a copy of transit for optimizations
     let app_state = web::Data::new(AppState {
+        optimized_transit: Mutex::new(city_result.as_ref().ok().map(|c| c.transit.clone())),
+        optimized_route_ids: Mutex::new(Vec::new()),
         city: Mutex::new(city_result.ok()),
-        gtfs_path: gtfs_path.to_string(),
-        db_path: db_path.to_string(),
     });
 
     println!("Starting server on {}:{}", host, port);
@@ -500,7 +597,8 @@ pub async fn start_server(
             .service(evaluate_route)
             .service(get_grid)
             .service(reset_optimizations)
-            .service(optimize_route_live) // Add the new WebSocket endpoint
+            .service(optimize_route_live)
+            .service(get_optimizations) // Add the new endpoint
     })
     .bind(addr)?
     .run()

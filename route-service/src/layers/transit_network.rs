@@ -125,117 +125,40 @@ impl TransitNetwork {
         })
     }
 
+    pub fn to_gtfs(&self, src_gtfs: &Gtfs, road: &RoadNetwork) -> Gtfs {
+        return TransitNetwork::to_gtfs_filtered(self.routes.iter().collect(), src_gtfs, road);
+    }
+
     /// Convert the transit network to GTFS format
     ///
     /// # Parameters
     /// - `src_gtfs`: The original GTFS data
     /// - `road`: The road network
+    /// - `filter`: A list of route IDs to include in the output
     ///
     /// # Returns
     /// A GTFS object representing the transit network
     /// Currently only outputs the OUTBOUND trip of each route.
     /// TODO: Support inbound and outbound trips, display separate on frontend + geojson
-    pub fn to_gtfs(&self, src_gtfs: &Gtfs, road: &RoadNetwork) -> Gtfs {
+    pub fn to_gtfs_filtered(
+        target_routes: Vec<&TransitRoute>,
+        src_gtfs: &Gtfs,
+        road: &RoadNetwork,
+    ) -> Gtfs {
         let mut stops: HashMap<String, Arc<Stop>> = HashMap::new();
         let mut trips: HashMap<String, Vec<Trip>> = HashMap::new();
         let mut routes: HashMap<String, Route> = HashMap::new();
         let mut shapes: HashMap<String, Vec<Shape>> = HashMap::new();
-        for route in self.routes.iter() {
-            if route.route_type != TransitRouteType::Bus {
-                // Copy non-bus routes / trips / shapes / stops as is
-                let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
-                routes.insert(src_route.route_id.clone(), (*src_route).clone());
-                let trip = {
-                    let (trip1, trip2) =
-                        pick_inbound_outbound_trips(&route.route_id, src_gtfs).unwrap();
-                    if trip_is_outbound(trip1) {
-                        trip1
-                    } else {
-                        trip2
-                    }
-                };
-                for src_trip in [trip] {
-                    trips
-                        .entry(route.route_id.clone())
-                        .or_insert_with(Vec::new)
-                        .push((*src_trip).clone());
-                    if let Some(src_shape_id) = &src_trip.shape_id {
-                        let src_shape = src_gtfs.shapes.get(src_shape_id).unwrap();
-                        shapes.insert(src_shape_id.clone(), src_shape.clone());
-                    }
-                    for src_stop_time in src_trip.stop_times.iter() {
-                        let src_stop = src_gtfs.stops.get(&src_stop_time.stop_id).unwrap();
-                        stops.insert(src_stop.stop_id.clone(), src_stop.clone());
-                    }
-                }
-                continue;
-            }
-            let route_id = route.route_id.clone();
-            let mut shape = Vec::new();
-            let mut stop_times = Vec::new();
-            let mut stop_sequence = 0;
-            let mut prev_stop: Option<&Arc<TransitStop>> = None;
-            let mut shape_pt_sequence = 0;
-            route.outbound_stops.iter().for_each(|stop| {
-                let stop_id = stop.stop_id.clone();
-                let gtfs_stop: Arc<Stop> = if !stops.contains_key(&stop_id) {
-                    let src_stop = src_gtfs.stops.get(&stop_id).unwrap();
-                    stops.insert(stop_id.clone(), src_stop.clone());
-                    src_stop.clone()
-                } else {
-                    stops.get(&stop_id).unwrap().clone()
-                };
-                // This probably needs to be fixed
-                stop_times.push(StopTime {
-                    trip_id: route_id.clone(),
-                    stop_id: stop_id.clone(),
-                    stop_sequence: stop_sequence,
-                    stop: gtfs_stop.clone(),
-                    ..StopTime::default()
-                });
-                // The trip points to a shape
-                if let Some(ps) = prev_stop {
-                    let (_, path) = ps.road_distance(stop, road);
-                    for node_index in path.iter() {
-                        let node = road.get_node(*node_index);
-                        shape.push(Shape {
-                            shape_id: route_id.clone(),
-                            shape_pt_lat: node.geom.y(),
-                            shape_pt_lon: node.geom.x(),
-                            shape_pt_sequence: shape_pt_sequence,
-                            ..Shape::default()
-                        });
-                        shape_pt_sequence += 1;
-                    }
-                }
-                stop_sequence += 1;
-                prev_stop = Some(stop);
-            });
-            // TODO eventually can have many trips...
-            trips.insert(
-                route_id.clone(),
-                vec![Trip {
-                    route_id: route_id.clone(),
-                    trip_id: route_id.clone(),
-                    shape_id: Some(route_id.clone()),
-                    stop_times: stop_times,
-                    ..Trip::default()
-                }],
+        for route in target_routes {
+            TransitNetwork::route_to_gtfs_helper(
+                route,
+                src_gtfs,
+                road,
+                &mut stops,
+                &mut trips,
+                &mut routes,
+                &mut shapes,
             );
-            let src_route = src_gtfs.routes.get(&route_id).unwrap();
-            routes.insert(
-                route_id.clone(),
-                Route {
-                    route_id: route_id.clone(),
-                    route_short_name: src_route.route_short_name.clone(),
-                    route_long_name: src_route.route_long_name.clone(),
-                    route_desc: src_route.route_desc.clone(),
-                    route_type: src_route.route_type,
-                    route_url: src_route.route_url.clone(),
-                    ..Route::default()
-                },
-            );
-            shapes.insert(route_id.clone(), shape);
         }
 
         Gtfs {
@@ -245,6 +168,112 @@ impl TransitNetwork {
             shapes: shapes,
             ..Gtfs::default()
         }
+    }
+
+    fn route_to_gtfs_helper(
+        route: &TransitRoute,
+        src_gtfs: &Gtfs,
+        road: &RoadNetwork,
+        stops: &mut HashMap<String, Arc<Stop>>,
+        trips: &mut HashMap<String, Vec<Trip>>,
+        routes: &mut HashMap<String, Route>,
+        shapes: &mut HashMap<String, Vec<Shape>>,
+    ) {
+        if route.route_type != TransitRouteType::Bus {
+            // Copy non-bus routes / trips / shapes / stops as is
+            let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
+            routes.insert(src_route.route_id.clone(), (*src_route).clone());
+            let trip = {
+                let (trip1, trip2) =
+                    pick_inbound_outbound_trips(&route.route_id, src_gtfs).unwrap();
+                if trip_is_outbound(trip1) {
+                    trip1
+                } else {
+                    trip2
+                }
+            };
+            for src_trip in [trip] {
+                trips
+                    .entry(route.route_id.clone())
+                    .or_insert_with(Vec::new)
+                    .push((*src_trip).clone());
+                if let Some(src_shape_id) = &src_trip.shape_id {
+                    let src_shape = src_gtfs.shapes.get(src_shape_id).unwrap();
+                    shapes.insert(src_shape_id.clone(), src_shape.clone());
+                }
+                for src_stop_time in src_trip.stop_times.iter() {
+                    let src_stop = src_gtfs.stops.get(&src_stop_time.stop_id).unwrap();
+                    stops.insert(src_stop.stop_id.clone(), src_stop.clone());
+                }
+            }
+            return;
+        }
+        let route_id = route.route_id.clone();
+        let mut shape = Vec::new();
+        let mut stop_times = Vec::new();
+        let mut stop_sequence = 0;
+        let mut prev_stop: Option<&Arc<TransitStop>> = None;
+        let mut shape_pt_sequence = 0;
+        route.outbound_stops.iter().for_each(|stop| {
+            let stop_id = stop.stop_id.clone();
+            let gtfs_stop: Arc<Stop> = if !stops.contains_key(&stop_id) {
+                let src_stop = src_gtfs.stops.get(&stop_id).unwrap();
+                stops.insert(stop_id.clone(), src_stop.clone());
+                src_stop.clone()
+            } else {
+                stops.get(&stop_id).unwrap().clone()
+            };
+            // This probably needs to be fixed
+            stop_times.push(StopTime {
+                trip_id: route_id.clone(),
+                stop_id: stop_id.clone(),
+                stop_sequence: stop_sequence,
+                stop: gtfs_stop.clone(),
+                ..StopTime::default()
+            });
+            // The trip points to a shape
+            if let Some(ps) = prev_stop {
+                let (_, path) = ps.road_distance(stop, road);
+                for node_index in path.iter() {
+                    let node = road.get_node(*node_index);
+                    shape.push(Shape {
+                        shape_id: route_id.clone(),
+                        shape_pt_lat: node.geom.y(),
+                        shape_pt_lon: node.geom.x(),
+                        shape_pt_sequence: shape_pt_sequence,
+                        ..Shape::default()
+                    });
+                    shape_pt_sequence += 1;
+                }
+            }
+            stop_sequence += 1;
+            prev_stop = Some(stop);
+        });
+        // TODO eventually can have many trips...
+        trips.insert(
+            route_id.clone(),
+            vec![Trip {
+                route_id: route_id.clone(),
+                trip_id: route_id.clone(),
+                shape_id: Some(route_id.clone()),
+                stop_times: stop_times,
+                ..Trip::default()
+            }],
+        );
+        let src_route = src_gtfs.routes.get(&route_id).unwrap();
+        routes.insert(
+            route_id.clone(),
+            Route {
+                route_id: route_id.clone(),
+                route_short_name: src_route.route_short_name.clone(),
+                route_long_name: src_route.route_long_name.clone(),
+                route_desc: src_route.route_desc.clone(),
+                route_type: src_route.route_type,
+                route_url: src_route.route_url.clone(),
+                ..Route::default()
+            },
+        );
+        shapes.insert(route_id.clone(), shape);
     }
 }
 
