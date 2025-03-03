@@ -61,8 +61,10 @@ impl GridNetwork {
 
     pub fn find_nearest_zone(&self, x: f64, y: f64) -> Option<NodeIndex> {
         let point = [x, y];
-        let nearest = self.rtree.locate_at_point(&point).unwrap();
-        Some(nearest.node_index)
+        match self.rtree.locate_at_point(&point) {
+            Some(nearest) => Some(nearest.node_index),
+            None => None,
+        }
     }
 
     pub fn get_zone(&self, node_index: NodeIndex) -> &Zone {
@@ -79,9 +81,13 @@ impl GridNetwork {
     }
 
     pub fn demand_between_coords(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
-        let from = self.find_nearest_zone(x1, y1).unwrap();
-        let to = self.find_nearest_zone(x2, y2).unwrap();
-        self.demand_between_zones(from, to)
+        match (
+            self.find_nearest_zone(x1, y1),
+            self.find_nearest_zone(x2, y2),
+        ) {
+            (Some(from), Some(to)) => self.demand_between_zones(from, to),
+            _ => 0.0,
+        }
     }
 }
 

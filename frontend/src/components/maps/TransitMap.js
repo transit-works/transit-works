@@ -43,7 +43,14 @@ const busMesh = new CylinderGeometry({
 
 const busScale = [8, 4, 8];
 
-function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimizedRoutes, resetOptimization }) {
+function TransitMap({ 
+  data, 
+  selectedRoute, 
+  setSelectedRoute, 
+  optimizedRoutesData,
+  optimizedRoutes, 
+  resetOptimization 
+}) {
   const [popupInfo, setPopupInfo] = useState(null);
   const [busPosition, setBusPosition] = useState(null);
   const [mapStyle, setMapStyle] = useState(STYLE_REGULAR);
@@ -177,6 +184,13 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
       </Popup>
     );
 
+  const filteredFeatures = data.features.filter(feature => {
+    if (feature.geometry.type === 'Point') return true;
+    const routeId = feature.properties.route_id;
+    if (optimizedRoutes.has(routeId)) return false;
+    return true;
+  });
+
   const selectedRouteObject = selectedRoute
     ? data.features.find((feature) => feature.properties.route_id === selectedRoute)
     : null;
@@ -191,7 +205,23 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
               selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
         ),
       }
-    : data;
+    : {
+        ...data,
+        features: filteredFeatures,
+      };
+  
+  const filteredOptimizedData = selectedRouteObject && optimizedRoutesData
+    ? {
+        ...optimizedRoutesData,
+        features: optimizedRoutesData.features.filter(
+          (feature) =>
+            feature.properties.route_id === selectedRoute ||
+            (feature.properties.stop_id &&
+              selectedRouteObject.properties.route_stops &&
+              selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
+        ),
+      }
+    : optimizedRoutesData;
 
   function getDistance(coord1, coord2) {
     const toRad = (deg) => (deg * Math.PI) / 180;
@@ -210,11 +240,17 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
   useEffect(() => {
     let animationFrame;
     if (selectedRoute) {
-      const routeFeature = data.features.find(
-        (feature) =>
-          feature.properties.route_id === selectedRoute &&
-          feature.geometry.type === 'LineString'
-      );
+      const routeFeature = optimizedRoutes.has(selectedRoute) 
+        ? optimizedRoutesData.features.find(
+            (feature) =>
+              feature.properties.route_id === selectedRoute &&
+              feature.geometry.type === 'LineString'
+          )
+        : data.features.find(
+            (feature) =>
+              feature.properties.route_id === selectedRoute &&
+              feature.geometry.type === 'LineString'
+          );
       if (routeFeature) {
         const routeCoordinates = routeFeature.geometry.coordinates;
         if (routeCoordinates.length < 2) {
@@ -317,12 +353,6 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
       filled: false,
       getLineColor: d => {
         const routeId = d.properties.route_id;
-        
-        // Check if this route has been optimized (is in optimizedRoutes)
-        if (optimizedRoutes && optimizedRoutes.has(routeId)) {
-          return [46, 204, 113, 200]; // Green color for optimized routes
-        }
-        
         if (useRandomColors) {
           // Use the pre-generated random color for this route
           return routeColorMap[routeId] || [200, 0, 80, 180]; // Fallback color
@@ -345,7 +375,31 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
       // Only render LineString geometries
       getFilterValue: (feature) => (feature.geometry.type === 'LineString' ? 1 : 0),
       filterRange: [0.9, 1]
-    })
+    }),
+    
+    // Add the optimized routes layers
+    new GeoJsonLayer({
+      id: `optimized-routes`,
+      data: filteredOptimizedData,
+      stroked: true,
+      filled: false,
+      getLineColor: [46, 204, 113, 200], // Green color for optimized routes
+      getLineWidth: 3, // Slightly wider than regular routes
+      lineWidthMinPixels: 3,
+      lineWidthScale: 10,
+      pickable: true,
+      autoHighlight: true,
+      onClick,
+      beforeId: 'watername_ocean',
+      parameters: {
+        depthTest: mapStyle === STYLE_3D,
+        depthMask: true
+      },
+      visible: !show3DRoutes, // Hide when in 3D mode
+      // Only render LineString geometries
+      getFilterValue: (feature) => (feature.geometry.type === 'LineString' ? 1 : 0),
+      filterRange: [0.9, 1]
+    }),
   ];
 
   if (busPosition) {
@@ -517,7 +571,7 @@ function TransitMap({ data, selectedRoute, setSelectedRoute, isOptimized, optimi
         <h3 className="font-heading text-lg font-semibold pb-4">Map Options</h3>
         
         {/* Show optimized route indicator without reset button */}
-        {isOptimized && selectedRoute && optimizedRoutes.has(selectedRoute) && (
+        {selectedRoute && optimizedRoutes.has(selectedRoute) && (
           <div className="mb-3 py-2 px-3 bg-green-800/70 rounded-md">
             <span className="text-sm">Viewing optimized route</span>
           </div>

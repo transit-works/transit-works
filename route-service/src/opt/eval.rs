@@ -36,7 +36,13 @@ pub fn ridership_over_route(
     for i in 0..route_stops.len() {
         let stop = &route_stops[i];
         let (x, y) = (stop.geom.x(), stop.geom.y());
-        let zone = od.find_nearest_zone(x, y).unwrap();
+        let zone = od.find_nearest_zone(x, y);
+        if zone.is_none() {
+            // skip stops that are not in any zone
+            ridership.push(f64::NAN);
+            continue;
+        }
+        let zone = zone.unwrap();
         if zone_prev_outer == Some(zone) {
             // track duplicate zones for stops, and skip them
             ridership.push(f64::NAN);
@@ -49,26 +55,28 @@ pub fn ridership_over_route(
         for j in 0..i {
             // riders leaving at stop i
             let (x1, y1) = (route_stops[j].geom.x(), route_stops[j].geom.y());
-            let zone_curr = od.find_nearest_zone(x1, y1).unwrap();
-            // avoid double counting the same zone, assume the total demand from that zone
-            // is distribued over all the stops in that zone from the route
-            if zone_prev == Some(zone_curr) {
-                continue;
+            if let Some(zone_curr) = od.find_nearest_zone(x1, y1) {
+                // avoid double counting the same zone, assume the total demand from that zone
+                // is distribued over all the stops in that zone from the route
+                if zone_prev == Some(zone_curr) {
+                    continue;
+                }
+                zone_prev = Some(zone_curr);
+                let demand = od.demand_between_zones(zone, zone_curr);
+                net_at_stop -= demand;
             }
-            zone_prev = Some(zone_curr);
-            let demand = od.demand_between_zones(zone, zone_curr);
-            net_at_stop -= demand;
         }
         for j in i + 1..route_stops.len() {
             // riders boarding at stop i
             let (x2, y2) = (route_stops[j].geom.x(), route_stops[j].geom.y());
-            let zone_curr = od.find_nearest_zone(x2, y2).unwrap();
-            if zone_prev == Some(zone_curr) {
-                continue;
+            if let Some(zone_curr) = od.find_nearest_zone(x2, y2) {
+                if zone_prev == Some(zone_curr) {
+                    continue;
+                }
+                zone_prev = Some(zone_curr);
+                let demand = od.demand_between_zones(zone, zone_curr);
+                net_at_stop += demand;
             }
-            zone_prev = Some(zone_curr);
-            let demand = od.demand_between_zones(zone, zone_curr);
-            net_at_stop += demand;
         }
         zone_prev_outer = Some(zone);
         ridership.push(net_at_stop);

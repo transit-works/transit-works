@@ -7,15 +7,13 @@ import Sidebar from '../maps/Sidebar';
 // Dynamically import MapView with no SSR to ensure it runs only on the client
 const TransitMap = dynamic(() => import('../maps/TransitMap'), { ssr: false });
 
-export default function MapView({ data }) {
+export default function MapView({ data, initialOptimizedRoutesData, initialOptimizedRoutes }) {
   const [selectedRoute, setSelectedRoute] = useState(null);
-  const [optimizedData, setOptimizedData] = useState(null);
+  const [optimizedRoutesData, setOptimizedRoutesData] = useState(initialOptimizedRoutesData);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationError, setOptimizationError] = useState(null);
-  // Add a cache to track which routes have been optimized
-  const [optimizedRoutes, setOptimizedRoutes] = useState(new Set());
-  
-  // New state for WebSocket optimization
+  const [optimizedRoutes, setOptimizedRoutes] = useState(new Set(initialOptimizedRoutes));
+  // for websocket live optimization
   const [optimizationProgress, setOptimizationProgress] = useState(0);
   const [currentEvaluation, setCurrentEvaluation] = useState(null);
   const [useLiveOptimization, setUseLiveOptimization] = useState(true); // Default to live optimization
@@ -49,7 +47,8 @@ export default function MapView({ data }) {
         const result = await response.json();
         
         if (result && result.geojson) {
-          setOptimizedData(result.geojson);
+          // Store the optimized route data with route ID as key
+          setOptimizedRoutesData(result.geojson);
           // Add the optimized route to our cache
           setOptimizedRoutes(prev => new Set(prev).add(selectedRoute));
         } else {
@@ -146,7 +145,7 @@ export default function MapView({ data }) {
 
           // Update map with latest optimized route
           if (data.geojson) {
-            setOptimizedData(data.geojson);
+            setOptimizedRoutesData(data.geojson);
           }
 
           // Check if this is the final iteration
@@ -240,9 +239,9 @@ export default function MapView({ data }) {
         throw new Error(`Reset failed with status: ${response.status}`);
       }
       
-      // We don't need to get new data - just clear our client state
+      // Clear optimized routes data
       setOptimizedRoutes(new Set());
-      setOptimizedData(null);
+      setOptimizedRoutesData(null);
       
     } catch (error) {
       console.error('Error resetting optimizations:', error);
@@ -270,10 +269,10 @@ export default function MapView({ data }) {
       </div>
       <div className="absolute inset-0 z-0 h-full w-full">
         <TransitMap 
-          data={optimizedData || data} 
+          data={data} 
           selectedRoute={selectedRoute} 
           setSelectedRoute={setSelectedRoute} 
-          isOptimized={!!optimizedData}
+          optimizedRoutesData={optimizedRoutesData}
           optimizedRoutes={optimizedRoutes}
           resetOptimization={resetOptimization}
         />

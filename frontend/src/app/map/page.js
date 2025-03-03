@@ -8,12 +8,35 @@ async function fetchGeoJsonData() {
     return data;
 }
 
-export default async function MapPage() {
-  const data = await fetchGeoJsonData();
+async function fetchOptimizedGeoJsonData() {
+    const response = await fetch('http://localhost:8080/get-optimizations');
+    const data = await response.json();
+    if (data.geojson && data.routes) {
+      return [data.geojson, data.routes];
+    }
+    return [null, []];
+}
 
-  return (
-    <Suspense fallback={<Loading />}>
-      <MapView data={data} />
-    </Suspense>
-  );
+export default async function MapPage() {
+  try {
+    const data = await fetchGeoJsonData();
+    const optData = await fetchOptimizedGeoJsonData();
+    const [optimizedData, routes] = optData;
+  
+    return (
+      <Suspense fallback={<Loading />}>
+        <MapView data={data} initialOptimizedRoutesData={optimizedData} initialOptimizedRoutes={routes} />
+      </Suspense>
+    );
+  } catch (error) {
+    console.error('Error fetching data:', error);
+
+    const response = await fetch('http://localhost:3000/data.geojson');
+    const data = await response.json();
+    return (
+      <Suspense fallback={<Loading />}>
+        <MapView data={data} initialOptimizedRoutesData={null} initialOptimizedRoutes={[]} />
+      </Suspense>
+    );
+  }
 }
