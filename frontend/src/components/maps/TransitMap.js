@@ -670,7 +670,7 @@ function TransitMap({
     >
       <DeckGLOverlay layers={layers} />
       <NavigationControl position="top-right" />
-      {renderFixedInfoPanel()} {/* Replace renderPopup with renderFixedInfoPanel */}
+      {renderFixedInfoPanel()}
       
       <button
         className={`absolute bottom-12 ${panelOpen ? 'right-72' : 'right-0'} w-8 h-12 bg-zinc-900/60 backdrop-blur-md text-white flex items-center justify-center rounded-l-md z-20 hover:bg-accent/80 hover:text-white focus:outline-none transition-all duration-300`}
