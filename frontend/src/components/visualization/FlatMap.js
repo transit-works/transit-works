@@ -137,23 +137,23 @@ export default function FlatMap({ events = false }) {
                     className="pointer-events-auto cursor-pointer"
                   />
                 );
-              })}
-            </g>
-          )}
-        </Mercator>
-      </svg>
+                })}
+              </g>
+              )}
+            </Mercator>
+            </svg>
 
-      {/* Browse Button */}
-      <div className="mt-4 flex justify-center">
-        <button
-          onClick={() => alert('Browse functionality coming soon!')}
-          className="pointer-events-auto rounded bg-primary px-8 py-3 font-body text-text shadow-lg hover:bg-white hover:text-black"
-        >
-          Browse All
-        </button>
-      </div>
+            {/* Browse Button */}
+            <div className="mt-4 flex justify-center">
+            <Link 
+              href="/city-select" 
+              className="pointer-events-auto rounded bg-primary px-8 py-3 font-body text-text shadow-lg hover:bg-white hover:text-black cursor-pointer inline-block"
+            >
+              Browse All
+            </Link>
+            </div>
 
-      {/* Popup with City Details */}
+            {/* Popup with City Details */}
       {selectedCity && (
         <div
           ref={popupRef}

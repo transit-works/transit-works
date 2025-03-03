@@ -110,7 +110,7 @@ function Sidebar({
           <Link href="/" className="w-full pr-1" passHref>
             <ImageButton text="Home" imageSrc="/assets/icons/home.png" altText="Home icon" />
           </Link>
-          <Link href="/" className="w-full pl-1" passHref>
+          <Link href="city-select" className="w-full pl-1" passHref>
             <ImageButton
               text="New"
               imageSrc="/assets/icons/earth.png"
