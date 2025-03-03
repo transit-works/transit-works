@@ -86,7 +86,7 @@ function TransitMap({
   const fetchPopulationData = async () => {
     try {
       // Call the backend endpoint
-      const response = await fetch('http://localhost:3000/tmp.json');
+      const response = await fetch('http://localhost:8080/grid');
       
       if (!response.ok) {
         throw new Error(`API returned status: ${response.status}`);
@@ -512,8 +512,8 @@ function TransitMap({
       new HeatmapLayer({
         id: 'population-heatmap',
         data: populationData,
-        getPosition: d => d.COORDS, // change to d.COORDINATES
-        getWeight: d => d.SPACES, // change to d.POPULATION
+        getPosition: d => d.COORDINATES,
+        getWeight: d => d.POPULATION,
         radiusPixels: 275,
         intensity: 1.2,
         threshold: 0.05,
