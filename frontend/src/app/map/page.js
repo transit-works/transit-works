@@ -18,13 +18,25 @@ async function fetchOptimizedGeoJsonData() {
 }
 
 export default async function MapPage() {
-  const data = await fetchGeoJsonData();
-  const optData = await fetchOptimizedGeoJsonData();
-  const [optimizedData, routes] = optData;
+  try {
+    const data = await fetchGeoJsonData();
+    const optData = await fetchOptimizedGeoJsonData();
+    const [optimizedData, routes] = optData;
+  
+    return (
+      <Suspense fallback={<Loading />}>
+        <MapView data={data} initialOptimizedRoutesData={optimizedData} initialOptimizedRoutes={routes} />
+      </Suspense>
+    );
+  } catch (error) {
+    console.error('Error fetching data:', error);
 
-  return (
-    <Suspense fallback={<Loading />}>
-      <MapView data={data} initialOptimizedRoutesData={optimizedData} initialOptimizedRoutes={routes} />
-    </Suspense>
-  );
+    const response = await fetch('http://localhost:3000/data.geojson');
+    const data = await response.json();
+    return (
+      <Suspense fallback={<Loading />}>
+        <MapView data={data} initialOptimizedRoutesData={null} initialOptimizedRoutes={[]} />
+      </Suspense>
+    );
+  }
 }
