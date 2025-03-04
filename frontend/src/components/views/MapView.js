@@ -275,6 +275,14 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           optimizedRoutesData={optimizedRoutesData}
           optimizedRoutes={optimizedRoutes}
           resetOptimization={resetOptimization}
+          useLiveOptimization={useLiveOptimization}
+          setUseLiveOptimization={setUseLiveOptimization}
+          isOptimizing={isOptimizing}
+          optimizationProgress={optimizationProgress}
+          currentEvaluation={currentEvaluation}
+          // Add these new props
+          onOptimize={handleOptimizeRoute}
+          optimizationError={optimizationError}
         />
       </div>
     </div>

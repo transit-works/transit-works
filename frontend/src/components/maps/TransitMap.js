@@ -14,6 +14,7 @@ import { PathLayer } from '@deck.gl/layers';
 import { HeatmapLayer } from '@deck.gl/aggregation-layers';
 import lerpColor from '../../utils/colorUtils';
 import RidershipChart from '../../components/visualization/RidershipChart';
+import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt } from 'react-icons/fa';
 
 const INITIAL_VIEW_STATE = {
   latitude: 43.647667,
@@ -49,7 +50,15 @@ function TransitMap({
   setSelectedRoute, 
   optimizedRoutesData,
   optimizedRoutes, 
-  resetOptimization 
+  resetOptimization,
+  useLiveOptimization,
+  setUseLiveOptimization,
+  isOptimizing,
+  optimizationProgress,
+  currentEvaluation,
+  // Add onOptimize prop
+  onOptimize,
+  optimizationError
 }) {
   const [popupInfo, setPopupInfo] = useState(null);
   const [busPosition, setBusPosition] = useState(null);
@@ -578,7 +587,7 @@ function TransitMap({
     if (!panelOpen) return null;
     return (
       <div className="absolute bottom-12 right-0 w-72 bg-zinc-900/60 backdrop-blur-md text-white rounded-l-md shadow-lg p-4 z-10 transition-all duration-300">
-        <h3 className="font-heading text-lg font-semibold pb-4">Map Options</h3>
+        <h3 className="font-heading text-lg font-semibold pb-4">Route Optimization</h3>
         
         {/* Show optimized route indicator without reset button */}
         {selectedRoute && optimizedRoutes.has(selectedRoute) && (
@@ -600,63 +609,71 @@ function TransitMap({
           </div>
         )}
         
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-row">
-            <div className="relative w-1/2 mx-1 group">
-              <button
-                className={`w-full h-10 ${mapStyle === STYLE_3D ? 'bg-primary' : 'bg-zinc-900'} hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center px-2 py-1 font-medium text-[0.8rem] justify-center focus:outline-none border border-zinc-600`}
-                onClick={toggleMapStyle}
-                aria-label="Toggle map style"
-              >
-                {mapStyle === STYLE_3D ? '3D Buildings' : '2D Buildings'}
-              </button>
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
-                Toggle Between 3D and 2D buildings
-              </div>
-            </div>
-            
-            <div className="relative w-1/2 mx-1 group">
-              <button
-                className={`w-full h-10 ${show3DRoutes ? 'bg-primary' : 'bg-zinc-900'} hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center px-2 py-1 font-medium text-[0.8rem] justify-center focus:outline-none border border-zinc-600`}
-                onClick={toggle3DRoutes}
-                aria-label="Toggle route visualization"
-              >
-                {show3DRoutes ? 'Layered Routes' : 'Flat Routes'}
-              </button>
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
-                Toggle between flat and layered route visualization
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex flex-row">
-            <div className="relative w-full mx-1 group">
-              <button
-                className={`w-full h-10 ${useRandomColors ? 'bg-accent' : 'bg-zinc-900'} hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center px-2 py-1 font-medium text-[0.8rem] justify-center focus:outline-none border border-zinc-600`}
-                onClick={toggleRandomColors}
-                aria-label="Toggle random route colors"
-              >
-                {useRandomColors ? 'Random Colors' : 'Gradient Colors'}
-              </button>
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
-                Toggle between random and gradient route colors
-              </div>
-            </div>
-
-            <div className="relative w-full mx-1 group">
-              <button
-                className={`w-full h-10 ${showPopulationHeatmap ? 'bg-accent' : 'bg-zinc-900'} hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center px-2 py-1 font-medium text-[0.8rem] justify-center focus:outline-none border border-zinc-600`}
-                onClick={togglePopulationHeatmap}
-                aria-label="Toggle population heatmap"
-              >
-                Pop. Heatmap
-              </button>
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
-                Toggle the visibility of the population density heatmap
-              </div>
-            </div>
-          </div>
+        {/* Live Optimization Toggle */}
+        <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md flex justify-between items-center">
+          <span className="text-sm">Live Optimization</span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={useLiveOptimization} 
+              onChange={() => setUseLiveOptimization(!useLiveOptimization)} 
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+          </label>
         </div>
+        
+        {/* Add Optimize Button */}
+        <div className="mb-3">
+          <button
+            onClick={onOptimize}
+            disabled={!selectedRoute || isOptimizing}
+            className={`w-full py-2 px-4 rounded flex items-center justify-center gap-2 
+              ${!selectedRoute || isOptimizing 
+                ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed' 
+                : 'bg-accent hover:bg-accent/90 text-white'}`}
+          >
+            {isOptimizing ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Optimizing...
+              </>
+            ) : (
+              <>
+                <img src="/assets/icons/speed.png" alt="Speed" className="w-5 h-5" />
+                Optimize
+              </>
+            )}
+          </button>
+        </div>
+        
+        {/* Show error message if optimization failed */}
+        {optimizationError && (
+          <div className="mb-3 text-xs text-red-500 text-center">
+            {optimizationError}
+          </div>
+        )}
+        
+        {/* Optimization Progress Bar - Only show when optimizing */}
+        {isOptimizing && useLiveOptimization && (
+          <div className="mb-3">
+            <div className="w-full bg-gray-700 rounded-full h-2.5 mb-1">
+              <div 
+                className="bg-accent h-2.5 rounded-full" 
+                style={{ width: `${optimizationProgress}%` }}
+              ></div>
+            </div>
+            {currentEvaluation && (
+              <div className="text-xs text-right text-white/80">
+                Score: {currentEvaluation.toFixed(2)}
+              </div>
+            )}
+          </div>
+        )}
+        
       </div>
     );
   };
