@@ -56,20 +56,20 @@ function TransitMap({
   isOptimizing,
   optimizationProgress,
   currentEvaluation,
-  // Add onOptimize prop
   onOptimize,
-  optimizationError
+  optimizationError,
+  // Add these props
+  mapStyle,
+  show3DRoutes,
+  useRandomColors,
+  showPopulationHeatmap
 }) {
+  // Keep other internal state that doesn't need to be shared
   const [popupInfo, setPopupInfo] = useState(null);
   const [busPosition, setBusPosition] = useState(null);
-  const [mapStyle, setMapStyle] = useState(STYLE_REGULAR);
   const [panelOpen, setPanelOpen] = useState(true);
-  const [showBusRoutes, setShowBusRoutes] = useState(true);
-  const [show3DRoutes, setShow3DRoutes] = useState(false);
-  const [useRandomColors, setUseRandomColors] = useState(false);
   const [routeColorMap, setRouteColorMap] = useState({});
   const [ridershipData, setRidershipData] = useState(null);
-  const [showPopulationHeatmap, setShowPopulationHeatmap] = useState(false);
   const [populationData, setPopulationData] = useState(null);
   const mapRef = useRef(null);
 
@@ -542,45 +542,33 @@ function TransitMap({
     );
   }
 
-  const toggleMapStyle = () => {
-    setMapStyle((prevStyle) => (prevStyle === STYLE_3D ? STYLE_REGULAR : STYLE_3D));
-  };
-
-  const toggleBusRoutes = () => {
-    setShowBusRoutes(!showBusRoutes);
-  };
-
-  const toggle3DRoutes = () => {
-    setShow3DRoutes(!show3DRoutes);
-  };
-
   const toggleRandomColors = () => {
-    if (!useRandomColors) {
-      // Generate random colors for all routes when enabling
-      const newColorMap = {};
-      filteredData.features
-        .filter(feature => feature.geometry.type === 'LineString')
-        .forEach(feature => {
-          const routeId = feature.properties.route_id;
-          // Generate vibrant, distinguishable colors
-          newColorMap[routeId] = [
-            Math.floor(Math.random() * 156) + 100, // R: 100-255
-            Math.floor(Math.random() * 156) + 100, // G: 100-255
-            Math.floor(Math.random() * 156) + 100, // B: 100-255
-            180 // Alpha
-          ];
-        });
-      setRouteColorMap(newColorMap);
-    }
-    setUseRandomColors(!useRandomColors);
+    // Remove the if (!useRandomColors) condition
+    // Always generate random colors when this function is called
+    const newColorMap = {};
+    filteredData.features
+      .filter(feature => feature.geometry.type === 'LineString')
+      .forEach(feature => {
+        const routeId = feature.properties.route_id;
+        // Generate vibrant, distinguishable colors
+        newColorMap[routeId] = [
+          Math.floor(Math.random() * 156) + 100, // R: 100-255
+          Math.floor(Math.random() * 156) + 100, // G: 100-255
+          Math.floor(Math.random() * 156) + 100, // B: 100-255
+          180 // Alpha
+        ];
+      });
+    setRouteColorMap(newColorMap);
   };
+
+  useEffect(() => {
+    if (useRandomColors) {
+      toggleRandomColors();
+    }
+  }, [useRandomColors]);
 
   const togglePanel = () => {
     setPanelOpen(!panelOpen);
-  };
-
-  const togglePopulationHeatmap = () => {
-    setShowPopulationHeatmap(!showPopulationHeatmap);
   };
 
   const renderPanel = () => {

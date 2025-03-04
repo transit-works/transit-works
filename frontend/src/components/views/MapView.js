@@ -8,16 +8,41 @@ import Sidebar from '../maps/Sidebar';
 const TransitMap = dynamic(() => import('../maps/TransitMap'), { ssr: false });
 
 export default function MapView({ data, initialOptimizedRoutesData, initialOptimizedRoutes }) {
+  // Existing state variables
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [optimizedRoutesData, setOptimizedRoutesData] = useState(initialOptimizedRoutesData);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationError, setOptimizationError] = useState(null);
   const [optimizedRoutes, setOptimizedRoutes] = useState(new Set(initialOptimizedRoutes));
-  // for websocket live optimization
   const [optimizationProgress, setOptimizationProgress] = useState(0);
   const [currentEvaluation, setCurrentEvaluation] = useState(null);
-  const [useLiveOptimization, setUseLiveOptimization] = useState(true); // Default to live optimization
+  const [useLiveOptimization, setUseLiveOptimization] = useState(true);
   const wsRef = useRef(null);
+
+  // Add map control state variables
+  const [mapStyle, setMapStyle] = useState('/styles/dark_matter.json');
+  const [show3DRoutes, setShow3DRoutes] = useState(false);
+  const [useRandomColors, setUseRandomColors] = useState(false);
+  const [showPopulationHeatmap, setShowPopulationHeatmap] = useState(false);
+  
+  // Map control toggle functions
+  const toggleMapStyle = () => {
+    setMapStyle((prevStyle) => (prevStyle === '/styles/dark_matter_3d.json' 
+      ? '/styles/dark_matter.json' 
+      : '/styles/dark_matter_3d.json'));
+  };
+
+  const toggle3DRoutes = () => {
+    setShow3DRoutes(!show3DRoutes);
+  };
+
+  const toggleRandomColors = () => {
+    setUseRandomColors(!useRandomColors);
+  };
+
+  const togglePopulationHeatmap = () => {
+    setShowPopulationHeatmap(!showPopulationHeatmap);
+  };
 
   // Handle traditional REST API optimization
   const handleOptimize = async () => {
@@ -265,6 +290,15 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           currentEvaluation={currentEvaluation}
           useLiveOptimization={useLiveOptimization}
           setUseLiveOptimization={setUseLiveOptimization}
+          // Add map control props
+          mapStyle={mapStyle}
+          show3DRoutes={show3DRoutes}
+          useRandomColors={useRandomColors}
+          showPopulationHeatmap={showPopulationHeatmap}
+          onToggleMapStyle={toggleMapStyle}
+          onToggle3DRoutes={toggle3DRoutes}
+          onToggleRandomColors={toggleRandomColors}
+          onTogglePopulationHeatmap={togglePopulationHeatmap}
         />
       </div>
       <div className="absolute inset-0 z-0 h-full w-full">
@@ -280,9 +314,13 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           isOptimizing={isOptimizing}
           optimizationProgress={optimizationProgress}
           currentEvaluation={currentEvaluation}
-          // Add these new props
           onOptimize={handleOptimizeRoute}
           optimizationError={optimizationError}
+          // Add map control props
+          mapStyle={mapStyle}
+          show3DRoutes={show3DRoutes}
+          useRandomColors={useRandomColors}
+          showPopulationHeatmap={showPopulationHeatmap}
         />
       </div>
     </div>
