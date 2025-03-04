@@ -73,6 +73,14 @@ function TransitMap({
   const [populationData, setPopulationData] = useState(null);
   const mapRef = useRef(null);
 
+  // Add these new state variables at the top of your component
+  const [showOptimizedBanner, setShowOptimizedBanner] = useState(false);
+  const [collapsedBanner, setCollapsedBanner] = useState(false);
+  let bannerTimeout = useRef(null);
+
+  // Add a state to track hover
+  const [bannerHovered, setBannerHovered] = useState(false);
+
   const fetchRidershipData = async (routeId) => {
     if (!routeId) return;
     
@@ -339,6 +347,32 @@ function TransitMap({
     fetchPopulationData();
   }, []);
 
+  // Add this effect to handle banner display and collapse
+  useEffect(() => {
+    // Clear any existing timeouts
+    if (bannerTimeout.current) {
+      clearTimeout(bannerTimeout.current);
+    }
+    
+    if (selectedRoute && optimizedRoutes.has(selectedRoute)) {
+      setShowOptimizedBanner(true);
+      setCollapsedBanner(false);
+      
+      // After 3 seconds, collapse the banner
+      bannerTimeout.current = setTimeout(() => {
+        setCollapsedBanner(true);
+      }, 3000);
+    } else {
+      setShowOptimizedBanner(false);
+    }
+    
+    return () => {
+      if (bannerTimeout.current) {
+        clearTimeout(bannerTimeout.current);
+      }
+    };
+  }, [selectedRoute, optimizedRoutes]);
+
   const finalBusModelMatrix = new Matrix4().rotateX(Math.PI / 2).scale(busScale);
 
   const layers = [
@@ -577,25 +611,23 @@ function TransitMap({
       <div className="absolute bottom-12 right-0 w-72 bg-zinc-900/60 backdrop-blur-md text-white rounded-l-md shadow-lg p-4 z-10 transition-all duration-300">
         <h3 className="font-heading text-lg font-semibold pb-4">Route Optimization</h3>
         
-        {/* Show optimized route indicator without reset button */}
-        {selectedRoute && optimizedRoutes.has(selectedRoute) && (
-          <div className="mb-3 py-2 px-3 bg-green-800/70 rounded-md">
-            <span className="text-sm">Viewing optimized route</span>
-          </div>
-        )}
-        
-        {/* Add Reset All Optimizations button if there are any optimized routes */}
-        {optimizedRoutes && optimizedRoutes.size > 0 && (
-          <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md flex justify-between items-center">
-            <span className="text-sm">{optimizedRoutes.size} optimized route{optimizedRoutes.size !== 1 ? 's' : ''}</span>
+        {/* Always show the optimized routes counter box */}
+        <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md flex justify-between items-center">
+          <span className="text-sm">
+            {optimizedRoutes.size > 0 
+              ? `${optimizedRoutes.size} optimized route${optimizedRoutes.size !== 1 ? 's' : ''}`
+              : "No optimized routes"
+            }
+          </span>
+          {optimizedRoutes.size > 0 && (
             <button 
               onClick={() => resetOptimization()}
               className="text-xs bg-zinc-700 hover:bg-zinc-600 px-2 py-1 rounded"
             >
               Reset All
             </button>
-          </div>
-        )}
+          )}
+        </div>
         
         {/* Live Optimization Toggle */}
         <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md flex justify-between items-center">
@@ -648,20 +680,62 @@ function TransitMap({
         {/* Optimization Progress Bar - Only show when optimizing */}
         {isOptimizing && useLiveOptimization && (
           <div className="mb-3">
-            <div className="w-full bg-gray-700 rounded-full h-2.5 mb-1">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs text-zinc-400">Optimization Progress</span>
+              <span className="text-xs font-medium">{Math.round(optimizationProgress)}%</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2.5 mb-1.5 overflow-hidden">
               <div 
-                className="bg-accent h-2.5 rounded-full" 
+                className="bg-accent h-2.5 rounded-full transition-all duration-300" 
                 style={{ width: `${optimizationProgress}%` }}
               ></div>
             </div>
             {currentEvaluation && (
-              <div className="text-xs text-right text-white/80">
-                Score: {currentEvaluation.toFixed(2)}
+              <div className="text-xs flex justify-between items-center">
+                <span className="text-zinc-400">Current Score</span>
+                <span className="font-mono text-white/90">{currentEvaluation.toFixed(2)}</span>
               </div>
             )}
           </div>
         )}
         
+      </div>
+    );
+  };
+
+  // Modify the renderOptimizedBanner function
+  const renderOptimizedBanner = () => {
+    if (!showOptimizedBanner) return null;
+    
+    return (
+      <div 
+        className={`fixed top-4 left-[calc(20%+16px)] z-30 flex items-center transition-all duration-300 ease-in-out ${
+          collapsedBanner && !bannerHovered
+            ? 'bg-green-600 rounded-full w-8 h-8 overflow-hidden shadow-lg shadow-green-800/20' 
+            : 'bg-green-800/90 backdrop-blur-sm rounded-lg shadow-lg pr-4 pl-3 py-2'
+        }`}
+        onMouseEnter={() => setBannerHovered(true)}
+        onMouseLeave={() => setBannerHovered(false)}
+      >
+        {collapsedBanner && !bannerHovered ? (
+          <div className="flex items-center justify-center w-full h-full text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="bg-green-500 rounded-full p-1">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <span className="text-white text-sm font-medium">Viewing optimized route</span>
+              <span className="text-white/70 text-xs ml-2">Route {selectedRoute}</span>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -676,6 +750,7 @@ function TransitMap({
       <DeckGLOverlay layers={layers} />
       <NavigationControl position="top-right" />
       {renderFixedInfoPanel()}
+      {renderOptimizedBanner()} {/* Add this line */}
       
       <button
         className={`absolute bottom-12 ${panelOpen ? 'right-72' : 'right-0'} w-8 h-12 bg-zinc-900/60 backdrop-blur-md text-white flex items-center justify-center rounded-l-md z-20 hover:bg-accent/80 hover:text-white focus:outline-none transition-all duration-300`}

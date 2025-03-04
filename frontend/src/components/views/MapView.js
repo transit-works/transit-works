@@ -276,6 +276,35 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     }
   };
 
+  // Add this function to MapView.js
+  const fetchOptimizedRoutes = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/get-optimizations');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch optimized routes: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.routes && Array.isArray(data.routes) && data.routes.length > 0) {
+        // Update optimized routes set with the routes from server
+        setOptimizedRoutes(new Set(data.routes));
+        
+        if (data.geojson) {
+          // Update optimized routes data with geojson from server
+          setOptimizedRoutesData(data.geojson);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching optimized routes:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchOptimizedRoutes();
+  }, []);
+
   return (
     <div className="flex h-screen">
       <div className="relative z-10 h-full w-1/5 rounded-2xl bg-background-dk bg-opacity-20 backdrop-blur-lg">
