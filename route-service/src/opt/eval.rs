@@ -1,10 +1,11 @@
 use core::f64;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, collections::HashSet, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
 use crate::layers::{
-    grid::{GridNetwork, Link, Zone},
+    geo_util,
+    grid::{self, GridNetwork, Link, Zone},
     road_network::RoadNetwork,
     transit_network::{TransitNetwork, TransitStop},
 };
@@ -103,7 +104,10 @@ pub fn ridership_over_route(
     for i in 1..ridership.len() {
         ridership[i] += ridership[i - 1];
     }
-    let average_ridership = ridership.iter().sum::<f64>() / ridership.len() as f64;
+
+    let s : f64 = ridership.iter().filter(|&&r| !r.is_nan()).sum();
+
+    let average_ridership = s / ridership.len() as f64;
     (ridership, average_ridership / consts::BUS_CAPACITY as f64)
 }
 
@@ -198,6 +202,33 @@ pub fn get_city_grid_info(od: &GridNetwork) -> CityGridInfo {
 pub fn get_route_demand_population_info(route_stops: &Vec<Arc<TransitStop>>) {
     // TODO: get OSM building pop density data available through Sqlite
     panic!("Not implemented");
+}
+
+/// Function to evaluate the coverage of a route
+/// Coverage is calculated using the ratio of the ridership over the sum demand around a 400m radius of each stop
+pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) -> f64 {
+    let mut total_demand = 0.0;
+
+    // Locate zones within the envelope using the rtree
+    let mut visited_zones = HashSet::new();
+    for stop in route_stops {
+        let (x, y) = (stop.geom.x(), stop.geom.y());
+        let zone = od.find_nearest_zone(x, y);
+        let nodes_within_envelope = od.rtree.locate_within_distance([x, y], 200.0);
+        for node in nodes_within_envelope {
+            let new_zone = od.get_zone(node.get_node_index());
+            if visited_zones.insert(new_zone.zoneid) {
+                total_demand += od.demand_between_zones(zone.unwrap(), node.get_node_index());
+            }
+        }
+    }
+
+    // Calculate the ridership over the route
+    let (_ , avrage_ridership) = ridership_over_route(route_stops, od);
+    // Calculate the coverage as the ratio of ridership to demand
+    println!("avrage ridership: {}", avrage_ridership);
+    println!("total demand: {}", total_demand);
+    (avrage_ridership * consts::BUS_CAPACITY as f64 / total_demand) * 100.0
 }
 
 pub fn evaluate_transit_network(
