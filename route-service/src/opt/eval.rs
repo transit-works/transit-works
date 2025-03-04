@@ -79,6 +79,7 @@ pub fn ridership_over_route(
                 net_at_stop += demand;
             }
         }
+
         zone_prev_outer = Some(zone);
         ridership.push(net_at_stop);
     }
@@ -214,7 +215,7 @@ pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) 
     for stop in route_stops {
         let (x, y) = (stop.geom.x(), stop.geom.y());
         let zone = od.find_nearest_zone(x, y);
-        let nodes_within_envelope = od.rtree.locate_within_distance([x, y], 200.0);
+        let nodes_within_envelope = od.rtree.locate_within_distance([x, y], 400.0);
         for node in nodes_within_envelope {
             let new_zone = od.get_zone(node.get_node_index());
             if visited_zones.insert(new_zone.zoneid) {
@@ -224,11 +225,15 @@ pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) 
     }
 
     // Calculate the ridership over the route
-    let (_ , avrage_ridership) = ridership_over_route(route_stops, od);
+    let (total_ridership , avrage_ridership) = ridership_over_route(route_stops, od);
+    let mut s = 0.0;
+    for r in total_ridership {
+        s += r.min(consts::BUS_CAPACITY as f64);
+    }
     // Calculate the coverage as the ratio of ridership to demand
-    println!("avrage ridership: {}", avrage_ridership);
+    println!("avrage ridership: {}", s);
     println!("total demand: {}", total_demand);
-    (avrage_ridership * consts::BUS_CAPACITY as f64 / total_demand) * 100.0
+    (s / total_demand) * 100.0
 }
 
 pub fn evaluate_transit_network(
