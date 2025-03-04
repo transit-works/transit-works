@@ -44,43 +44,60 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     setShowPopulationHeatmap(!showPopulationHeatmap);
   };
 
-  // Handle traditional REST API optimization
-  const handleOptimize = async () => {
-    if (!selectedRoute) {
-      // Cannot optimize if no route is selected
+  // Update handleOptimize to handle multiple routes
+  const handleOptimize = async (routes) => {
+    // If routes is undefined or empty and no route is selected, show error
+    if ((!routes || routes.length === 0) && !selectedRoute) {
       setOptimizationError('Please select a route to optimize');
       return;
     }
+
+    // Determine if we're optimizing one route or multiple routes
+    const isMultiRouteOptimization = routes && routes.length > 0;
+    const routesToOptimize = isMultiRouteOptimization ? routes : [selectedRoute];
 
     try {
       setIsOptimizing(true);
       setOptimizationError(null);
       
-      // Check if the backend service is reachable first
+      // Choose appropriate endpoint based on whether we're optimizing one or multiple routes
+      const endpoint = isMultiRouteOptimization 
+        ? 'http://localhost:8080/optimize-routes'
+        : `http://localhost:8080/optimize-route/${selectedRoute}`;
+      
+      const requestOptions = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        // For multi-route, send the routes array in the body
+        body: isMultiRouteOptimization ? JSON.stringify({ routes: routesToOptimize }) : undefined
+      };
+
       try {
-        const response = await fetch(`http://localhost:8080/optimize-route/${selectedRoute}`, {
-          method: 'POST', // Changed to POST to match backend expectation
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
+        const response = await fetch(endpoint, requestOptions);
         
         if (!response.ok) {
           throw new Error(`Optimization failed with status: ${response.status}`);
         }
         
         const result = await response.json();
+        console.log(result)
         
         if (result && result.geojson) {
-          // Store the optimized route data with route ID as key
+          // Store the optimized route data
           setOptimizedRoutesData(result.geojson);
-          // Add the optimized route to our cache
-          setOptimizedRoutes(prev => new Set(prev).add(selectedRoute));
+          // Add the optimized routes to our cache
+          setOptimizedRoutes(prev => {
+            const newSet = new Set(prev);
+            routesToOptimize.forEach(routeId => newSet.add(routeId));
+            return newSet;
+          });
         } else {
           throw new Error('Invalid response format from optimization service');
         }
       } catch (fetchError) {
-        // Specific error handling for network issues
+        // Handle network errors
         if (fetchError.message.includes('NetworkError') || 
             fetchError.message.includes('Failed to fetch')) {
           throw new Error(
@@ -91,7 +108,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         }
       }
     } catch (error) {
-      console.error('Error optimizing route:', error);
+      console.error('Error optimizing routes:', error);
       setOptimizationError(error.message);
     } finally {
       setIsOptimizing(false);
@@ -99,9 +116,17 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   };
 
   // New live optimization function using WebSockets
-  const handleLiveOptimize = () => {
-    if (!selectedRoute) {
+  const handleLiveOptimize = (routes) => {
+    // If routes is provided, use it; otherwise fall back to selectedRoute
+    if ((!routes || routes.length === 0) && !selectedRoute) {
       setOptimizationError('Please select a route to optimize');
+      return;
+    }
+
+    // Fall back to regular optimization for multiple routes since WebSockets 
+    // are currently only set up for single routes
+    if (routes && routes.length > 0) {
+      handleOptimize(routes);
       return;
     }
 
@@ -217,11 +242,11 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   };
 
   // Choose appropriate optimization method based on user preference
-  const handleOptimizeRoute = () => {
+  const handleOptimizeRoute = (routes) => {
     if (useLiveOptimization) {
-      handleLiveOptimize();
+      handleLiveOptimize(routes);
     } else {
-      handleOptimize();
+      handleOptimize(routes);
     }
   };
 

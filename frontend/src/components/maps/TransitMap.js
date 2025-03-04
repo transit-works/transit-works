@@ -280,18 +280,25 @@ function TransitMap({
           features: filteredFeatures,
         });
   
-  const filteredOptimizedData = selectedRouteObject && optimizedRoutesData
-    ? {
-        ...optimizedRoutesData,
-        features: optimizedRoutesData.features.filter(
-          (feature) =>
-            feature.properties.route_id === selectedRoute ||
-            (feature.properties.stop_id &&
-              selectedRouteObject.properties.route_stops &&
-              selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
-        ),
-      }
-    : optimizedRoutesData;
+  const filteredOptimizedData = 
+    // When in multi-select mode, show all optimized routes
+    multiSelectMode 
+    ? optimizedRoutesData 
+    : (
+      // In single-select mode, show only the selected route if it exists
+      selectedRouteObject && optimizedRoutesData
+        ? {
+            ...optimizedRoutesData,
+            features: optimizedRoutesData.features.filter(
+              (feature) =>
+                feature.properties.route_id === selectedRoute ||
+                (feature.properties.stop_id &&
+                  selectedRouteObject.properties.route_stops &&
+                  selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
+            ),
+          }
+        : optimizedRoutesData
+    );
 
   function getDistance(coord1, coord2) {
     const toRad = (deg) => (deg * Math.PI) / 180;
