@@ -14,7 +14,6 @@ import { PathLayer } from '@deck.gl/layers';
 import { HeatmapLayer } from '@deck.gl/aggregation-layers';
 import lerpColor from '../../utils/colorUtils';
 import RidershipChart from '../../components/visualization/RidershipChart';
-import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt } from 'react-icons/fa';
 
 const INITIAL_VIEW_STATE = {
   latitude: 43.647667,
@@ -66,11 +65,15 @@ function TransitMap({
 }) {
   // Keep other internal state that doesn't need to be shared
   const [popupInfo, setPopupInfo] = useState(null);
-  const [busPosition, setBusPosition] = useState(null);
+  const [busPositions, setBusPositions] = useState(new window.Map());
+  // Keep other state variables
   const [panelOpen, setPanelOpen] = useState(true);
   const [routeColorMap, setRouteColorMap] = useState({});
   const [ridershipData, setRidershipData] = useState(null);
   const [populationData, setPopulationData] = useState(null);
+  // Add new state for multi-route selection
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedRoutes, setSelectedRoutes] = useState(new Set());
   const mapRef = useRef(null);
 
   // Add these new state variables at the top of your component
@@ -132,23 +135,55 @@ function TransitMap({
     });
   };
 
+  // Update onClick to handle multi-select mode
   const onClick = (info) => {
     if (info && info.object) {
       const { type } = info.object.geometry;
       if (type !== 'Point') {
         const routeId = info.object.properties.route_id;
-        setSelectedRoute((prevSelectedRoute) =>
-          prevSelectedRoute === routeId ? null : routeId
-        );
         
-        // Fetch ridership data when a route is selected
-        fetchRidershipData(routeId);
+        if (multiSelectMode) {
+          // In multi-select mode, toggle the route in the selection set
+          setSelectedRoutes(prevSelectedRoutes => {
+            const newSelectedRoutes = new Set(prevSelectedRoutes);
+            if (newSelectedRoutes.has(routeId)) {
+              newSelectedRoutes.delete(routeId);
+            } else {
+              newSelectedRoutes.add(routeId);
+            }
+            return newSelectedRoutes;
+          });
+          
+          // Keep the last clicked route as the "selectedRoute" for compatibility
+          setSelectedRoute(routeId);
+          
+          // Fetch ridership data when a route is selected
+          fetchRidershipData(routeId);
+          
+          // Don't show popup in multi-select mode for routes
+          return;
+        } else {
+          // Regular single selection mode
+          setSelectedRoute((prevSelectedRoute) =>
+            prevSelectedRoute === routeId ? null : routeId
+          );
+          
+          // Clear the multi-select set if we're not in multi-select mode
+          setSelectedRoutes(new Set());
+          
+          // Fetch ridership data when a route is selected
+          fetchRidershipData(routeId);
+        }
       }
-      setPopupInfo({
-        coordinates: info.coordinate,
-        properties: info.object.properties,
-        type,
-      });
+      
+      // Only set popup info if not in multi-select mode or if it's a stop
+      if (!multiSelectMode || type === 'Point') {
+        setPopupInfo({
+          coordinates: info.coordinate,
+          properties: info.object.properties,
+          type,
+        });
+      }
     }
   };
 
@@ -211,6 +246,7 @@ function TransitMap({
       </div>
     );
 
+// Update this section to handle multi-select mode differently
   const filteredFeatures = data.features.filter(feature => {
     if (feature.geometry.type === 'Point') return true;
     const routeId = feature.properties.route_id;
@@ -218,24 +254,31 @@ function TransitMap({
     return true;
   });
 
+  // Modify this section to keep all routes visible in multi-select mode
   const selectedRouteObject = selectedRoute
     ? data.features.find((feature) => feature.properties.route_id === selectedRoute)
     : null;
-  const filteredData = selectedRouteObject
+  
+  const filteredData = multiSelectMode
     ? {
         ...data,
-        features: data.features.filter(
-          (feature) =>
-            feature.properties.route_id === selectedRoute ||
-            (feature.properties.stop_id &&
-              selectedRouteObject.properties.route_stops &&
-              selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
-        ),
+        features: filteredFeatures, // Show all routes in multi-select mode
       }
-    : {
-        ...data,
-        features: filteredFeatures,
-      };
+    : (selectedRouteObject
+      ? {
+          ...data,
+          features: data.features.filter(
+            (feature) =>
+              feature.properties.route_id === selectedRoute ||
+              (feature.properties.stop_id &&
+                selectedRouteObject.properties.route_stops &&
+                selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
+          ),
+        }
+      : {
+          ...data,
+          features: filteredFeatures,
+        });
   
   const filteredOptimizedData = selectedRouteObject && optimizedRoutesData
     ? {
@@ -265,23 +308,42 @@ function TransitMap({
   }
 
   useEffect(() => {
-    let animationFrame;
-    if (selectedRoute) {
-      const routeFeature = optimizedRoutes.has(selectedRoute) 
+    let animationFrames = new window.Map();
+    
+    // Determine which routes to animate - all selected routes in multi-select mode
+    const routesToAnimate = multiSelectMode 
+      ? Array.from(selectedRoutes) 
+      : (selectedRoute ? [selectedRoute] : []);
+      
+    // Clean up any buses for routes no longer selected
+    setBusPositions(prev => {
+      const newPositions = new window.Map(prev);
+      Array.from(prev.keys()).forEach(routeId => {
+        if (!routesToAnimate.includes(routeId)) {
+          newPositions.delete(routeId);
+        }
+      });
+      return newPositions;
+    });
+    
+    // Start animation for each route
+    routesToAnimate.forEach(routeId => {
+      const routeFeature = optimizedRoutes.has(routeId) 
         ? optimizedRoutesData.features.find(
-            (feature) =>
-              feature.properties.route_id === selectedRoute &&
+            feature =>
+              feature.properties.route_id === routeId &&
               feature.geometry.type === 'LineString'
           )
         : data.features.find(
-            (feature) =>
-              feature.properties.route_id === selectedRoute &&
+            feature =>
+              feature.properties.route_id === routeId &&
               feature.geometry.type === 'LineString'
           );
+          
       if (routeFeature) {
         const routeCoordinates = routeFeature.geometry.coordinates;
         if (routeCoordinates.length < 2) {
-          setBusPosition(null);
+          // Skip routes with insufficient coordinates
           return;
         }
 
@@ -305,10 +367,14 @@ function TransitMap({
           travelled += speed * delta;
 
           if (travelled >= totalDistance) {
-            setBusPosition(routeCoordinates[0]);
+            setBusPositions(prev => {
+              const newPositions = new window.Map(prev);
+              newPositions.set(routeId, routeCoordinates[0]);
+              return newPositions;
+            });
             travelled = 0;
             lastTimestamp = timestamp;
-            animationFrame = requestAnimationFrame(animate);
+            animationFrames.set(routeId, requestAnimationFrame(animate));
             return;
           }
 
@@ -331,17 +397,25 @@ function TransitMap({
             currentPos[1] + segmentProgress * (nextPos[1] - currentPos[1]),
           ];
 
-          setBusPosition(interpolatedPosition);
-          animationFrame = requestAnimationFrame(animate);
+          // Update this route's bus position
+          setBusPositions(prev => {
+            const newPositions = new window.Map(prev);
+            newPositions.set(routeId, interpolatedPosition);
+            return newPositions;
+          });
+          
+          animationFrames.set(routeId, requestAnimationFrame(animate));
         };
 
-        animationFrame = requestAnimationFrame(animate);
+        animationFrames.set(routeId, requestAnimationFrame(animate));
       }
-    } else {
-      setBusPosition(null);
-    }
-    return () => cancelAnimationFrame(animationFrame);
-  }, [selectedRoute, data]);
+    });
+
+    return () => {
+      // Cancel all animation frames when cleaning up
+      animationFrames.forEach(frameId => cancelAnimationFrame(frameId));
+    };
+  }, [selectedRoutes, selectedRoute, multiSelectMode, data, optimizedRoutes, optimizedRoutesData]);
 
   useEffect(() => {
     fetchPopulationData();
@@ -398,34 +472,44 @@ function TransitMap({
       filterRange: [0.9, 1] // Strict filter threshold
     }),
     
-    // Route lines layer - will be hidden in 3D mode
+    // Route lines layer - update the getLineColor function to highlight selected routes
     new GeoJsonLayer({
-      id: `routes-layer-${useRandomColors ? 'random' : 'default'}`, // Add changing key to force re-render
+      id: `routes-layer-${useRandomColors ? 'random' : 'default'}`,
       data: filteredData,
       stroked: true,
       filled: false,
       getLineColor: d => {
         const routeId = d.properties.route_id;
-        if (useRandomColors) {
-          // Use the pre-generated random color for this route
-          return routeColorMap[routeId] || [200, 0, 80, 180]; // Fallback color
+        
+        // In multi-select mode, highlight selected routes
+        if (multiSelectMode && selectedRoutes.has(routeId)) {
+          return [30, 144, 255, 220]; // Blue for selected routes in multi-select (changed from orange)
         }
-        // Default color if random colors not enabled
+        
+        // Otherwise use normal coloring logic
+        if (useRandomColors) {
+          return routeColorMap[routeId] || [200, 0, 80, 180]; // Random or fallback color
+        }
+        
+        // Default color
         return [200, 0, 80, 180];
       },
-      getLineWidth: 2,
+      getLineWidth: d => {
+        const routeId = d.properties.route_id;
+        // Make selected routes slightly wider in multi-select mode
+        return (multiSelectMode && selectedRoutes.has(routeId)) ? 3 : 2;
+      },
       lineWidthMinPixels: 2,
       lineWidthScale: 10,
       pickable: true,
       autoHighlight: true,
-      onClick, // Ensure onClick is properly attached
+      onClick,
       beforeId: 'watername_ocean',
       parameters: {
         depthTest: mapStyle === STYLE_3D,
         depthMask: true
       },
-      visible: !show3DRoutes, // Hide when in 3D mode
-      // Only render LineString geometries
+      visible: !show3DRoutes,
       getFilterValue: (feature) => (feature.geometry.type === 'LineString' ? 1 : 0),
       filterRange: [0.9, 1]
     }),
@@ -455,43 +539,51 @@ function TransitMap({
     }),
   ];
 
-  if (busPosition) {
-    // Determine bus height when in 3D mode
-    let busHeight = 0;
-    
-    if (show3DRoutes && selectedRoute) {
-      // Find the layer index of the selected route
-      const selectedRouteIndex = filteredData.features
-        .filter(feature => feature.geometry.type === 'LineString')
-        .findIndex(feature => feature.properties.route_id === selectedRoute);
-        
-      if (selectedRouteIndex !== -1) {
-        // Use the same height calculation as for the route layers
-        busHeight = (selectedRouteIndex % 10) * 250;
+  // Update the bus layer section
+  if (busPositions.size > 0) {
+    // Create a bus for each selected route
+    Array.from(busPositions.entries()).forEach(([routeId, position]) => {
+      // Determine bus height when in 3D mode
+      let busHeight = 0;
+      
+      if (show3DRoutes) {
+        // Find the layer index of the route
+        const routeIndex = data.features
+          .filter(feature => feature.geometry.type === 'LineString')
+          .findIndex(feature => feature.properties.route_id === routeId);
+          
+        if (routeIndex !== -1) {
+          // Use the same height calculation as for the route layers
+          busHeight = (routeIndex % 10) * 250;
+        }
       }
-    }
-    
-    layers.push(
-      new SimpleMeshLayer({
-        id: 'bus',
-        data: [{ position: [0, 0, busHeight] }], // Apply height here
-        getPosition: d => d.position,
-        coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
-        coordinateOrigin: busPosition,
-        mesh: busMesh,
-        sizeScale: 8,
-        modelMatrix: finalBusModelMatrix,
-        getColor: [255, 255, 0, 240],
-        pickable: false,
-      })
-    );
+      
+      layers.push(
+        new SimpleMeshLayer({
+          id: `bus-${routeId}`,
+          data: [{ position: [0, 0, busHeight] }],
+          getPosition: d => d.position,
+          coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
+          coordinateOrigin: position,
+          mesh: busMesh,
+          sizeScale: 8,
+          modelMatrix: finalBusModelMatrix,
+          getColor: [255, 255, 0, 240],
+          pickable: false,
+        })
+      );
+    });
   }
 
   if (show3DRoutes) {
-    // Get the same routes that would be shown in the GeoJsonLayer
-    const routesToShow = filteredData.features.filter(feature => 
-      feature.geometry.type === 'LineString'
-    );
+    // Get all routes when in multi-select mode, not just filtered ones
+    const routesToShow = multiSelectMode 
+      ? data.features.filter(feature => 
+          feature.geometry.type === 'LineString' && !optimizedRoutes.has(feature.properties.route_id)
+        )
+      : filteredData.features.filter(feature => 
+          feature.geometry.type === 'LineString'
+        );
     
     // Define start and end colors for gradient
     const startColor = "#CC0050";
@@ -502,16 +594,23 @@ function TransitMap({
       const height = layerIndex * 250; // Height based on layer
       const routeId = feature.properties.route_id;
       
-      // Determine color based on current mode
+      // Determine color based on current mode, adding multi-select highlighting
       let color;
-      // Check if this route has been optimized (is in optimizedRoutes)
-      if (optimizedRoutes && optimizedRoutes.has(routeId)) {
+      
+      // Multi-select mode - highlight selected routes with blue
+      if (multiSelectMode && selectedRoutes.has(routeId)) {
+        color = [30, 144, 255, 220]; // Blue for selected routes (changed from orange)
+      }
+      // Check if optimized 
+      else if (optimizedRoutes && optimizedRoutes.has(routeId)) {
         color = [46, 204, 113, 200]; // Green color for optimized route
-      } else if (useRandomColors) {
-        // Use the pre-generated random color for this route
+      } 
+      // Random colors mode
+      else if (useRandomColors) {
         color = routeColorMap[routeId] || [200, 0, 80, 180]; // Fallback color
-      } else {
-        // Use the original gradient logic
+      } 
+      // Default gradient
+      else {
         const gradientPosition = layerIndex / 9; // 0 to 1 position in gradient
         const rgbColor = lerpColor(startColor, endColor, gradientPosition);
         color = [...rgbColor, 180];
@@ -605,6 +704,7 @@ function TransitMap({
     setPanelOpen(!panelOpen);
   };
 
+  // Update renderPanel to include multi-select toggle
   const renderPanel = () => {
     if (!panelOpen) return null;
     return (
@@ -629,6 +729,47 @@ function TransitMap({
           )}
         </div>
         
+        {/* Multi-Route Selection Toggle */}
+        <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md flex justify-between items-center">
+          <span className="text-sm">Multi-Route Selection</span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={multiSelectMode} 
+              onChange={() => setMultiSelectMode(!multiSelectMode)} 
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+          </label>
+        </div>
+        
+        {/* Selected Routes Display (only in multi-select mode) */}
+        {multiSelectMode && selectedRoutes.size > 0 && (
+          <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md">
+            <div className="text-sm mb-2">Selected Routes:</div>
+            <div className="flex flex-wrap gap-1">
+              {Array.from(selectedRoutes).map(routeId => (
+                <span key={routeId} className="text-xs bg-zinc-700 px-2 py-1 rounded-full flex items-center">
+                  {routeId}
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedRoutes(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(routeId);
+                        return newSet;
+                      });
+                    }}
+                    className="ml-1 text-zinc-400 hover:text-white"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        
         {/* Live Optimization Toggle */}
         <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md flex justify-between items-center">
           <span className="text-sm">Live Optimization</span>
@@ -643,13 +784,25 @@ function TransitMap({
           </label>
         </div>
         
-        {/* Add Optimize Button */}
+        {/* Optimize Button - Updated for multi-route selection */}
         <div className="mb-3">
           <button
-            onClick={onOptimize}
-            disabled={!selectedRoute || isOptimizing}
+            onClick={() => {
+              if (multiSelectMode && selectedRoutes.size > 0) {
+                // Optimize all selected routes
+                onOptimize(Array.from(selectedRoutes));
+              } else if (selectedRoute) {
+                // Optimize single route
+                onOptimize();
+              }
+            }}
+            disabled={
+              (multiSelectMode && selectedRoutes.size === 0) || 
+              (!multiSelectMode && !selectedRoute) || 
+              isOptimizing
+            }
             className={`w-full py-2 px-4 rounded flex items-center justify-center gap-2 
-              ${!selectedRoute || isOptimizing 
+              ${(multiSelectMode && selectedRoutes.size === 0) || (!multiSelectMode && !selectedRoute) || isOptimizing
                 ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed' 
                 : 'bg-accent hover:bg-accent/90 text-white'}`}
           >
@@ -664,41 +817,13 @@ function TransitMap({
             ) : (
               <>
                 <img src="/assets/icons/speed.png" alt="Speed" className="w-5 h-5" />
-                Optimize
+                Optimize {multiSelectMode && selectedRoutes.size > 0 ? `(${selectedRoutes.size} routes)` : ''}
               </>
             )}
           </button>
         </div>
         
-        {/* Show error message if optimization failed */}
-        {optimizationError && (
-          <div className="mb-3 text-xs text-red-500 text-center">
-            {optimizationError}
-          </div>
-        )}
-        
-        {/* Optimization Progress Bar - Only show when optimizing */}
-        {isOptimizing && useLiveOptimization && (
-          <div className="mb-3">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-xs text-zinc-400">Optimization Progress</span>
-              <span className="text-xs font-medium">{Math.round(optimizationProgress)}%</span>
-            </div>
-            <div className="w-full bg-gray-700 rounded-full h-2.5 mb-1.5 overflow-hidden">
-              <div 
-                className="bg-accent h-2.5 rounded-full transition-all duration-300" 
-                style={{ width: `${optimizationProgress}%` }}
-              ></div>
-            </div>
-            {currentEvaluation && (
-              <div className="text-xs flex justify-between items-center">
-                <span className="text-zinc-400">Current Score</span>
-                <span className="font-mono text-white/90">{currentEvaluation.toFixed(2)}</span>
-              </div>
-            )}
-          </div>
-        )}
-        
+        {/* ...rest of the panel content... */}
       </div>
     );
   };
