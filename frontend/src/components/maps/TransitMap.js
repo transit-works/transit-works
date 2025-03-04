@@ -135,21 +135,22 @@ function TransitMap({
     }
   };
 
-  const renderPopup = () =>
+  const renderFixedInfoPanel = () =>
     popupInfo && (
-      <Popup
-        tipSize={3}
-        anchor="top"
-        longitude={popupInfo.coordinates[0]}
-        latitude={popupInfo.coordinates[1]}
-        closeOnClick={false}
-        onClose={() => setPopupInfo(null)}
-        style={{ zIndex: 10 }}
-      >
-        <div className="p-2">
+      <div className="absolute w-1/6 top-3 right-3 z-10 bg-background-light/70 backdrop-blur-lg text-white rounded-2xl shadow-lg border border-zinc-800 max-w-xs overflow-hidden">
+        <div className="p-4 bg-background-dk/40">
           {popupInfo.type === 'Point' ? (
             <div>
-              <h4 className="text-center text-xl font-heading mb-2">Stop Information</h4>
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-xl font-heading">Stop Information</h4>
+                <button 
+                  onClick={() => setPopupInfo(null)}
+                  className="text-zinc-400 hover:text-white"
+                  aria-label="Close"
+                >
+                  <span className="text-lg">×</span>
+                </button>
+              </div>
               <div className="text-[0.8rem] text-accent">
                 <p>
                   <span className="font-semibold">ID:</span> {popupInfo.properties.stop_id}
@@ -160,8 +161,17 @@ function TransitMap({
               </div>
             </div>
           ) : (
-            <div className="w-60">
-              <h4 className="text-center text-xl font-heading mb-2 mr-6">Route Information</h4>
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-xl font-heading">Route Information</h4>
+                <button 
+                  onClick={() => setPopupInfo(null)}
+                  className="text-zinc-400 hover:text-white"
+                  aria-label="Close"
+                >
+                  <span className="text-lg">×</span>
+                </button>
+              </div>
               <div className="text-[0.8rem] text-accent">
                 <p>
                   <span className="font-semibold">Route ID:</span> {popupInfo.properties.route_id}
@@ -171,7 +181,7 @@ function TransitMap({
                 </p>
               </div>
               <p className='mt-2'>
-                  <span className="font-semibold">Average Ridership By Stop</span>
+                <span className="font-semibold">Average Ridership By Stop</span>
               </p>
               <RidershipChart 
                 routeId={popupInfo.properties.route_id} 
@@ -181,7 +191,7 @@ function TransitMap({
             </div>
           )}
         </div>
-      </Popup>
+      </div>
     );
 
   const filteredFeatures = data.features.filter(feature => {
@@ -660,7 +670,7 @@ function TransitMap({
     >
       <DeckGLOverlay layers={layers} />
       <NavigationControl position="top-right" />
-      {renderPopup()}
+      {renderFixedInfoPanel()}
       
       <button
         className={`absolute bottom-12 ${panelOpen ? 'right-72' : 'right-0'} w-8 h-12 bg-zinc-900/60 backdrop-blur-md text-white flex items-center justify-center rounded-l-md z-20 hover:bg-accent/80 hover:text-white focus:outline-none transition-all duration-300`}
