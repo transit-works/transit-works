@@ -173,24 +173,24 @@ function TransitMap({
           
           // Keep the last clicked route as the "selectedRoute" for compatibility
           setSelectedRoute(routeId);
-          
-          // Fetch ridership data when a route is selected
-          fetchRidershipData(routeId);
-          
-          // Don't show popup in multi-select mode for routes
-          return;
         } else {
           // Regular single selection mode
-          setSelectedRoute((prevSelectedRoute) =>
-            prevSelectedRoute === routeId ? null : routeId
-          );
+          const isCurrentlySelected = selectedRoute === routeId;
           
-          // Clear the multi-select set if we're not in multi-select mode
-          effectiveSetSelectedRoutes(new Set());
-          
-          // Fetch ridership data when a route is selected
-          fetchRidershipData(routeId);
+          // Toggle selection state
+          if (isCurrentlySelected) {
+            // Deselect the route
+            setSelectedRoute(null);
+            effectiveSetSelectedRoutes(new Set());
+          } else {
+            // Select the new route
+            setSelectedRoute(routeId);
+            effectiveSetSelectedRoutes(new Set([routeId])); // Create a new Set with just this route
+          }
         }
+        
+        // Fetch ridership data when a route is selected
+        fetchRidershipData(routeId);
       }
       
       // Only set popup info if not in multi-select mode or if it's a stop
@@ -297,24 +297,28 @@ function TransitMap({
           features: filteredFeatures,
         });
   
+
+  const selectedRouteObjectOptimized = selectedRoute && optimizedRoutesData
+    ? optimizedRoutesData.features.find((feature) => feature.properties.route_id === selectedRoute)
+    : null;
   const filteredOptimizedData = 
     // When in multi-select mode, show all optimized routes
     multiSelectMode 
     ? optimizedRoutesData 
     : (
       // In single-select mode, show only the selected route if it exists
-      selectedRouteObject && optimizedRoutesData
+      selectedRouteObjectOptimized && optimizedRoutesData
         ? {
             ...optimizedRoutesData,
             features: optimizedRoutesData.features.filter(
               (feature) =>
                 feature.properties.route_id === selectedRoute ||
                 (feature.properties.stop_id &&
-                  selectedRouteObject.properties.route_stops &&
-                  selectedRouteObject.properties.route_stops.includes(feature.properties.stop_id))
+                  selectedRouteObjectOptimized.properties.route_stops &&
+                  selectedRouteObjectOptimized.properties.route_stops.includes(feature.properties.stop_id))
             ),
           }
-        : optimizedRoutesData
+        : (selectedRouteObject ? null : optimizedRoutesData)
     );
 
   function getDistance(coord1, coord2) {
