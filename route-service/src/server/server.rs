@@ -227,20 +227,24 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
         let optimized_transit_guard = data.optimized_transit.lock().unwrap();
         let optimized_transit = optimized_transit_guard.as_ref().unwrap();
         let optimized_route_ids = data.optimized_route_ids.lock().unwrap();
-        
+
         // Find the route with the given ID
         let route = city.transit.routes.iter().find(|r| r.route_id == route_id);
 
         if let Some(route) = route {
             let (ridership, avg_occupancy) =
                 eval::ridership_over_route(&route.outbound_stops, &city.grid);
-            
+
             // Only evaluate the optimized route if it has been optimized
             if optimized_route_ids.contains(&route_id) {
-                if let Some(opt_route) = optimized_transit.routes.iter().find(|r| r.route_id == route_id) {
+                if let Some(opt_route) = optimized_transit
+                    .routes
+                    .iter()
+                    .find(|r| r.route_id == route_id)
+                {
                     let (opt_ridership, opt_avg_occupancy) =
                         eval::ridership_over_route(&opt_route.outbound_stops, &city.grid);
-                    
+
                     return HttpResponse::Ok().json(serde_json::json!({
                         "route_id": route_id,
                         "ridership": ridership,
@@ -250,11 +254,11 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
                     }));
                 }
             }
-            
+
             // Return just the original route metrics if no optimized version exists
             return HttpResponse::Ok().json(serde_json::json!({
                 "route_id": route_id,
-                "ridership": ridership, 
+                "ridership": ridership,
                 "average_occupancy": avg_occupancy,
                 "opt_ridership": null,
                 "opt_average_occupancy": null
@@ -378,7 +382,7 @@ impl OptimizationWs {
     fn new(app_state: web::Data<AppState>, route_ids: Vec<String>) -> Self {
         let iterations_per_route = 10; // 10 iterations per route
         let total_iterations = iterations_per_route * route_ids.len(); // Total iterations across all routes
-        
+
         Self {
             app_state,
             route_ids: route_ids.clone(),
@@ -401,17 +405,17 @@ impl OptimizationWs {
 
         // Calculate which iteration number we're on for each route
         let route_iteration = (self.iterations_done / self.route_ids.len()) + 1;
-        
+
         // Calculate which route to optimize in this iteration (alternate between routes)
         let mut current_route_index = self.iterations_done % self.route_ids.len();
         self.current_route_index = current_route_index;
-        
+
         // Check if this route has already converged, if so, find the next non-converged route
         if self.converged_routes[current_route_index] {
             // Try to find another route that hasn't converged yet
             let mut found_non_converged = false;
             let original_index = current_route_index;
-            
+
             // Try routes after the current one
             for i in (current_route_index + 1)..self.route_ids.len() {
                 if !self.converged_routes[i] {
@@ -421,7 +425,7 @@ impl OptimizationWs {
                     break;
                 }
             }
-            
+
             // If we didn't find any non-converged routes after the current one, try from the beginning
             if !found_non_converged {
                 for i in 0..original_index {
@@ -433,7 +437,7 @@ impl OptimizationWs {
                     }
                 }
             }
-            
+
             // If all routes have converged, we can finish early
             if !found_non_converged {
                 println!("All routes have converged, finishing optimization early");
@@ -449,21 +453,26 @@ impl OptimizationWs {
                 ctx.close(None);
                 return;
             }
-            
-            println!("Route at index {} already converged, switching to route at index {}", 
-                    original_index, current_route_index);
+
+            println!(
+                "Route at index {} already converged, switching to route at index {}",
+                original_index, current_route_index
+            );
         }
-        
+
         // Get the current route ID
         let route_id = match self.route_ids.get(current_route_index) {
             Some(id) => id.clone(),
             None => {
-                println!("Invalid route index {}, stopping optimization", current_route_index);
+                println!(
+                    "Invalid route index {}, stopping optimization",
+                    current_route_index
+                );
                 ctx.close(None);
                 return;
             }
         };
-        
+
         println!(
             "Running optimization iteration {} for route {} ({}/{} routes, iteration {}/{})",
             self.iterations_done + 1,
@@ -541,11 +550,14 @@ impl OptimizationWs {
                         optimized_count += 1;
                     }
                     None => {
-                        println!("Failed to optimize route {} - likely reached optimal solution", route_id);
-                        
+                        println!(
+                            "Failed to optimize route {} - likely reached optimal solution",
+                            route_id
+                        );
+
                         // Mark this route as converged
                         self.converged_routes[current_route_index] = true;
-                        
+
                         // No optimization was performed, but we need to send a message to the client
                         let convergence_msg = serde_json::json!({
                             "message": format!("Route {} has converged to optimal solution", route_id),
@@ -561,7 +573,7 @@ impl OptimizationWs {
                             "converged_routes": self.converged_routes.clone(), // Include which routes have converged
                             "early_convergence": true
                         });
-                        
+
                         ctx.text(serde_json::to_string(&convergence_msg).unwrap());
                     }
                 }
@@ -574,7 +586,7 @@ impl OptimizationWs {
             // Send an update for all routes
             if optimized_count > 0 {
                 let response = serde_json::json!({
-                    "message": format!("Optimized route {} (route {}/{}, iteration {}/{})", 
+                    "message": format!("Optimized route {} (route {}/{}, iteration {}/{})",
                                     route_id, current_route_index + 1, self.route_ids.len(),
                                     route_iteration, self.iterations_per_route),
                     "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids_guard),
@@ -671,7 +683,10 @@ impl Actor for OptimizationWs {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        println!("WebSocket connection started for routes {:?}", self.route_ids);
+        println!(
+            "WebSocket connection started for routes {:?}",
+            self.route_ids
+        );
         self.heartbeat(ctx);
         self.run_optimization_iteration(ctx);
     }
@@ -731,18 +746,18 @@ async fn optimize_live(
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty())
         .collect();
-    
+
     println!(
         "WebSocket connection request for optimize-live with routes {:?}",
         route_ids
     );
-    
+
     if route_ids.is_empty() {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "error": "No valid route IDs provided"
         })));
     }
-    
+
     let ws = OptimizationWs::new(data.clone(), route_ids);
     ws::start(ws, &req, stream)
 }
@@ -782,7 +797,7 @@ pub async fn start_server(
             .service(evaluate_route)
             .service(get_grid)
             .service(reset_optimizations)
-            .service(optimize_live)  // Replace the previous WebSocket endpoints with this unified one
+            .service(optimize_live) // Replace the previous WebSocket endpoints with this unified one
             .service(get_optimizations)
     })
     .bind(addr)?
