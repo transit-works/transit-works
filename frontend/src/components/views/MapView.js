@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from '../maps/Sidebar';
+import OptimizationProgress from '../maps/OptimizationProgress';
 
 // Dynamically import MapView with no SSR to ensure it runs only on the client
 const TransitMap = dynamic(() => import('../maps/TransitMap'), { ssr: false });
@@ -19,6 +20,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   const [currentEvaluation, setCurrentEvaluation] = useState(null);
   const [useLiveOptimization, setUseLiveOptimization] = useState(true);
   const wsRef = useRef(null);
+  const [websocketData, setWebsocketData] = useState(null);
 
   // Add map control state variables
   const [mapStyle, setMapStyle] = useState('/styles/dark_matter.json');
@@ -28,6 +30,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   
   // Add multiSelectMode state here
   const [multiSelectMode, setMultiSelectMode] = useState(false);
+
+  // Add state to track routes that have converged early
+  const [earlyConvergedRoutes, setEarlyConvergedRoutes] = useState(new Set());
 
   // Map control toggle functions
   const toggleMapStyle = () => {
@@ -132,6 +137,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setOptimizationError(null);
       setOptimizationProgress(0);
       setCurrentEvaluation(null);
+      setWebsocketData(null);
 
       // Create WebSocket connection with unified endpoint
       const routeIdsParam = routesToOptimize.join(',');
@@ -160,17 +166,51 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           const data = JSON.parse(event.data);
           console.log('Received WebSocket message:', data);
           
+          // Store the complete websocket data for detailed UI rendering
+          setWebsocketData(data);
+          
           if (data.error) {
             setOptimizationError(data.error);
             ws.close();
             return;
           }
 
-          // Update optimization progress
+          // Handle warning messages but continue optimization
+          if (data.warning) {
+            console.warn(`Optimization warning: ${data.warning}`);
+          }
+          
+          // Handle early convergence notification - store it persistently
+          if (data.early_convergence && data.current_route) {
+            console.info(`Route ${data.current_route} converged early to optimal solution`);
+            setEarlyConvergedRoutes(prev => {
+              const newSet = new Set(prev);
+              newSet.add(data.current_route);
+              return newSet;
+            });
+          }
+          
+          // Handle all routes converged notification
+          if (data.all_converged) {
+            console.info("All routes have converged to optimal solutions");
+            setOptimizationProgress(100); // Set to 100% since we're done
+          }
+
+          // Update optimization progress with enhanced information
           if (data.iteration && data.total_iterations) {
             const progress = (data.iteration / data.total_iterations) * 100;
             setOptimizationProgress(progress);
-            console.log(`Optimization progress: ${progress}% (iteration ${data.iteration}/${data.total_iterations})`);
+            
+            // Enhanced console logging with route-specific information
+            if (data.current_route && data.routes_count > 1) {
+              console.log(
+                `Optimization progress: ${progress.toFixed(1)}% - ` +
+                `Route ${data.current_route_index + 1}/${data.routes_count} (${data.current_route}), ` +
+                `Iteration ${data.current_route_iteration}/${data.iterations_per_route}`
+              );
+            } else {
+              console.log(`Optimization progress: ${progress.toFixed(1)}% (iteration ${data.iteration}/${data.total_iterations})`);
+            }
             
             // If this is the last iteration, mark optimization as complete
             if (data.iteration === data.total_iterations) {
@@ -184,8 +224,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             // For multiple routes, show the first evaluation or a combined score
             if (Array.isArray(data.evaluation)) {
               if (data.evaluation.length > 0) {
-                // Could show first route's eval, average, or some combined metric
-                setCurrentEvaluation(data.evaluation[0][1]); // Show first route's evaluation
+                // Show first route's evaluation
+                setCurrentEvaluation(data.evaluation[0][1]);
               }
             } else {
               setCurrentEvaluation(data.evaluation);
@@ -197,12 +237,20 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             setOptimizedRoutesData(data.geojson);
             
             // Mark routes as optimized as soon as we get any valid geojson data
-            // This ensures routes are considered optimized even if all iterations don't complete
-            setOptimizedRoutes(prev => {
-              const newSet = new Set(prev);
-              routesToOptimize.forEach(route => newSet.add(route));
-              return newSet;
-            });
+            if (data.current_route) {
+              setOptimizedRoutes(prev => {
+                const newSet = new Set(prev);
+                newSet.add(data.current_route);
+                return newSet;
+              });
+            } else {
+              // Fallback to mark all routes as optimized
+              setOptimizedRoutes(prev => {
+                const newSet = new Set(prev);
+                routesToOptimize.forEach(route => newSet.add(route));
+                return newSet;
+              });
+            }
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -222,9 +270,13 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         // Always set isOptimizing to false when WebSocket closes
         setIsOptimizing(false);
         
-        // If closed abnormally with optimization incomplete, show error
-        if (event.code !== 1000 && optimizationProgress < 100) {
+        // Only show error if it's an abnormal closure AND not at end of optimization
+        // Code 1000 means normal closure, so don't treat it as an error
+        if (event.code !== 1000 && optimizationProgress < 99) {
           setOptimizationError('WebSocket connection closed unexpectedly');
+        } else {
+          // Clear any previous error if this is a normal completion
+          setOptimizationError(null);
         }
         
         wsRef.current = null;
@@ -264,7 +316,6 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     // If a route is deselected while optimizing, disable optimization mode
     if (selectedRoutes.size === 0 && isOptimizing) {
       setIsOptimizing(false);
-      
       // Close any existing WebSocket connection
       if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
         wsRef.current.close();
@@ -277,14 +328,14 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     try {
       setIsOptimizing(true);
       setOptimizationError(null);
-      
+
       const response = await fetch('http://localhost:8080/reset-optimizations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         throw new Error(`Reset failed with status: ${response.status}`);
       }
@@ -308,7 +359,6 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           console.log('Reset verification successful - server confirms no optimized routes');
         }
       }
-      
     } catch (error) {
       console.error('Error resetting optimizations:', error);
       setOptimizationError(error.message);
@@ -366,8 +416,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           data={data} 
           selectedRoutes={selectedRoutes} 
           setSelectedRoutes={setSelectedRoutes}
-          selectedRoute={selectedRoute} // Add this prop 
-          setSelectedRoute={setSelectedRoute} // Add this prop
+          selectedRoute={selectedRoute}
+          setSelectedRoute={setSelectedRoute}
           multiSelectMode={multiSelectMode}
           onOptimize={handleOptimizeRoute}
           isOptimizing={isOptimizing}
@@ -376,8 +426,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           currentEvaluation={currentEvaluation}
           useLiveOptimization={useLiveOptimization}
           setUseLiveOptimization={setUseLiveOptimization}
-          // Add optimizedRoutes prop
           optimizedRoutes={optimizedRoutes}
+          websocketData={websocketData}
+          earlyConvergedRoutes={earlyConvergedRoutes}
           // Add map control props
           mapStyle={mapStyle}
           show3DRoutes={show3DRoutes}
@@ -394,8 +445,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           data={data} 
           selectedRoutes={selectedRoutes} 
           setSelectedRoutes={setSelectedRoutes}
-          selectedRoute={selectedRoute} // Add this prop
-          setSelectedRoute={setSelectedRoute} // Add this prop
+          selectedRoute={selectedRoute}
+          setSelectedRoute={setSelectedRoute}
           multiSelectMode={multiSelectMode}
           setMultiSelectMode={setMultiSelectMode}
           optimizedRoutesData={optimizedRoutesData}

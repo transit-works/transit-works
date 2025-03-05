@@ -57,7 +57,7 @@ impl ACO {
             rho: 0.1,
             q0: 1.0,
             num_ant: 20,
-            max_gen: 30,
+            max_gen: 100,
             pheromone_max: 30.0,
             pheromone_min: 5.0,
             init_pheromone: 20.0,
