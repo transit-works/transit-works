@@ -25,6 +25,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   const [useRandomColors, setUseRandomColors] = useState(false);
   const [showPopulationHeatmap, setShowPopulationHeatmap] = useState(false);
   
+  // Add multiSelectMode state here
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+
   // Map control toggle functions
   const toggleMapStyle = () => {
     setMapStyle((prevStyle) => (prevStyle === '/styles/dark_matter_3d.json' 
@@ -355,6 +358,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           data={data} 
           selectedRoutes={selectedRoutes} 
           setSelectedRoutes={setSelectedRoutes} 
+          multiSelectMode={multiSelectMode} // Add this prop
           onOptimize={handleOptimizeRoute}
           isOptimizing={isOptimizing}
           optimizationError={optimizationError}
@@ -378,6 +382,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           data={data} 
           selectedRoutes={selectedRoutes} 
           setSelectedRoutes={setSelectedRoutes} 
+          multiSelectMode={multiSelectMode} // Add this prop
+          setMultiSelectMode={setMultiSelectMode} // Add this prop
           optimizedRoutesData={optimizedRoutesData}
           optimizedRoutes={optimizedRoutes}
           resetOptimization={resetOptimization}

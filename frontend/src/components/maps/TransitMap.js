@@ -62,7 +62,9 @@ function TransitMap({
   mapStyle,
   show3DRoutes,
   useRandomColors,
-  showPopulationHeatmap
+  showPopulationHeatmap,
+  multiSelectMode,
+  setMultiSelectMode,
 }) {
   // Add the missing mapRef
   const mapRef = useRef(null);
@@ -83,8 +85,6 @@ function TransitMap({
   const selectedRoute = propsSelectedRoute || localSelectedRoute;
   const setSelectedRoute = propsSetSelectedRoute || setLocalSelectedRoute;
   
-  // Add new state for multi-route selection
-  const [multiSelectMode, setMultiSelectMode] = useState(false);
   // If selectedRoutes is not provided, create a local version
   const [localSelectedRoutes, setLocalSelectedRoutes] = useState(new Set());
   const effectiveSelectedRoutes = selectedRoutes || localSelectedRoutes;
@@ -97,6 +97,9 @@ function TransitMap({
 
   // Add a state to track hover
   const [bannerHovered, setBannerHovered] = useState(false);
+
+  // Add new state for parameters popup
+  const [showParametersPopup, setShowParametersPopup] = useState(false);
 
   const fetchRidershipData = async (routeId) => {
     if (!routeId) return;
@@ -817,7 +820,18 @@ function TransitMap({
           </button>
         </div>
         
-        {/* ...rest of the panel content... */}
+        {/* New Configure Parameters Button */}
+        <div className="mt-5 pt-3 border-t border-zinc-700">
+          <button
+            onClick={() => setShowParametersPopup(true)}
+            className="w-full py-2 px-4 rounded flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-white"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+            </svg>
+            Configure Parameters
+          </button>
+        </div>
       </div>
     );
   };
@@ -858,29 +872,75 @@ function TransitMap({
       </div>
     );
   };
+  
+  const renderParametersPopup = () => {
+    if (!showParametersPopup) return null;
+    
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="bg-zinc-900/60 backdrop-blur-md text-white w-[600px] max-w-[90vw] rounded-lg shadow-xl border border-zinc-700">
+          <div className="flex items-center justify-between border-b border-zinc-800/70 px-6 py-4">
+            <h3 className="text-xl font-heading">Optimization Parameters</h3>
+            <button 
+              onClick={() => setShowParametersPopup(false)} 
+              className="text-zinc-400 hover:text-white"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="p-6">
+            {/* Placeholder content - this will be filled in later */}
+            <p className="text-zinc-300">Parameter configuration options will appear here.</p>
+          </div>
+          
+          <div className="border-t border-zinc-800/70 px-6 py-4 flex justify-end">
+            <button 
+              onClick={() => setShowParametersPopup(false)}
+              className="bg-zinc-700/80 hover:bg-zinc-600 text-white py-2 px-4 rounded mr-2"
+            >
+              Cancel
+            </button>
+            <button 
+              className="bg-accent hover:bg-accent/90 text-white py-2 px-4 rounded"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <Map
-      ref={mapRef}
-      initialViewState={INITIAL_VIEW_STATE}
-      mapStyle={mapStyle}
-      onLoad={handleMapLoad}
-    >
-      <DeckGLOverlay layers={layers} />
-      <NavigationControl position="top-right" />
-      {renderFixedInfoPanel()}
-      {renderOptimizedBanner()} {/* Add this line */}
-      
-      <button
-        className={`absolute bottom-12 ${panelOpen ? 'right-72' : 'right-0'} w-8 h-12 bg-zinc-900/60 backdrop-blur-md text-white flex items-center justify-center rounded-l-md z-20 hover:bg-accent/80 hover:text-white focus:outline-none transition-all duration-300`}
-        onClick={togglePanel}
-        aria-label={panelOpen ? "Close panel" : "Open panel"}
+    <>
+      <Map
+        ref={mapRef}
+        initialViewState={INITIAL_VIEW_STATE}
+        mapStyle={mapStyle}
+        onLoad={handleMapLoad}
       >
-        {panelOpen ? '>' : '<'}
-      </button>
+        <DeckGLOverlay layers={layers} />
+        <NavigationControl position="top-right" />
+        {renderFixedInfoPanel()}
+        {renderOptimizedBanner()}
+        
+        <button
+          className={`absolute bottom-12 ${panelOpen ? 'right-72' : 'right-0'} w-8 h-12 bg-zinc-900/60 backdrop-blur-md text-white flex items-center justify-center rounded-l-md z-20 hover:bg-accent/80 hover:text-white focus:outline-none transition-all duration-300`}
+          onClick={togglePanel}
+          aria-label={panelOpen ? "Close panel" : "Open panel"}
+        >
+          {panelOpen ? '>' : '<'}
+        </button>
+        
+        {renderPanel()}
+      </Map>
       
-      {renderPanel()}
-    </Map>
+      {/* Add the parameters popup */}
+      {renderParametersPopup()}
+    </>
   );
 }
 

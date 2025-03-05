@@ -21,7 +21,8 @@ function Sidebar({
   onToggleMapStyle,
   onToggle3DRoutes,
   onToggleRandomColors,
-  onTogglePopulationHeatmap
+  onTogglePopulationHeatmap,
+  multiSelectMode // Add this prop
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -133,6 +134,7 @@ function Sidebar({
             data={data}
             selectedRoutes={selectedRoutes}
             setSelectedRoutes={setSelectedRoutes}
+            multiSelectMode={multiSelectMode} // Pass it to RouteList
           />
         </div>
         

@@ -1,14 +1,25 @@
-function RouteList({ data, selectedRoutes, setSelectedRoutes }) {
+function RouteList({ data, selectedRoutes, setSelectedRoutes, multiSelectMode }) {
   const handleClick = (id) => {
     setSelectedRoutes((prevSelectedRoutes) => {
       // Create a new Set from previous selections
       const newSelectedRoutes = new Set(prevSelectedRoutes);
       
-      // Toggle the selection
-      if (newSelectedRoutes.has(id)) {
-        newSelectedRoutes.delete(id);
+      if (multiSelectMode) {
+        // Multi-select mode: Toggle the selection
+        if (newSelectedRoutes.has(id)) {
+          newSelectedRoutes.delete(id);
+        } else {
+          newSelectedRoutes.add(id);
+        }
       } else {
-        newSelectedRoutes.add(id);
+        // Single-select mode: Replace the entire selection with just this route
+        // If this route was already the only selected one, deselect it
+        if (newSelectedRoutes.size === 1 && newSelectedRoutes.has(id)) {
+          newSelectedRoutes.clear();
+        } else {
+          newSelectedRoutes.clear();
+          newSelectedRoutes.add(id);
+        }
       }
       
       return newSelectedRoutes;
