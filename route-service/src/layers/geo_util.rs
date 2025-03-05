@@ -29,24 +29,24 @@ pub fn compute_envelope(lat: f64, lon: f64, radius: f64) -> AABB<[f64; 2]> {
 /// - `lon`: Longitude in WGS84 coordinates.
 /// - `targ_lat`: Latitude of the target point in WGS84 coordinates.
 /// - `targ_lon`: Longitude of the target point in WGS84 coordinates.
-/// - `radius`: Radius in meters.
+/// - `padding`: Padding around bbox in meters.
 ///
 /// # Returns
 /// An axis-aligned bounding box (AABB) from the given latitude and longitude to the target latitude and longitude.
-/// The envelope has a width of `radius` meters and is oriented towards the target point.
+/// The bbox has padding around the edges.
 pub fn compute_envelope_rect(
     lat: f64,
     lon: f64,
     targ_lat: f64,
     targ_lon: f64,
-    radius: f64,
+    padding: f64,
 ) -> AABB<[f64; 2]> {
-    let lat_radius = radius / LATITUDE_DEGREE_METERS;
-    let lon_radius = radius / (LONGITUDE_DEGREE_METERS * lat.to_radians().cos());
-    let min_lat = lat.min(targ_lat) - lat_radius;
-    let min_lon = lon.min(targ_lon) - lon_radius;
-    let max_lat = lat.max(targ_lat) + lat_radius;
-    let max_lon = lon.max(targ_lon) + lon_radius;
+    let lat_padding = padding / LATITUDE_DEGREE_METERS;
+    let lon_padding = padding / (LONGITUDE_DEGREE_METERS * lat.to_radians().cos());
+    let min_lat = lat.min(targ_lat) - lat_padding;
+    let min_lon = lon.min(targ_lon) - lon_padding;
+    let max_lat = lat.max(targ_lat) + lat_padding;
+    let max_lon = lon.max(targ_lon) + lon_padding;
     AABB::from_corners([min_lon, min_lat], [max_lon, max_lat])
 }
 

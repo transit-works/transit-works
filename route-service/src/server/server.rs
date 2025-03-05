@@ -2,7 +2,7 @@ use crate::gtfs::geojson;
 use crate::layers::city::City;
 use crate::layers::transit_network::{TransitNetwork, TransitRoute};
 use crate::opt::aco::ACO;
-use crate::opt::eval;
+use crate::opt::{aco2, eval};
 use crate::server::cors::cors_middleware;
 
 use actix::prelude::*;
@@ -53,7 +53,10 @@ fn get_optimized_geojson(
 }
 
 fn get_base_geojson(city: &City) -> Value {
-    let features = geojson::get_all_features(&city.transit.to_gtfs(&city.gtfs, &city.road));
+    let features = geojson::get_all_features(&TransitNetwork::to_gtfs_copy(
+        city.transit.routes.iter().collect(),
+        &city.gtfs,
+    ));
     let geojson = geojson::convert_to_geojson(&features);
     geojson
 }
@@ -441,9 +444,9 @@ impl OptimizationWs {
 
             if let Some(route) = route {
                 // Create ACO instance for this optimization iteration
-                let mut aco = ACO::init();
+                let aco = aco2::ACO::init();
 
-                match aco.optimize_route(&city.grid, &city.road, &city.transit, &route) {
+                match aco2::run_aco(aco, &route, &city) {
                     Some((opt_route, eval)) => {
                         // Update the route in optimized_transit for next iteration
                         optimized_transit.routes.retain(|r| r.route_id != route_id);

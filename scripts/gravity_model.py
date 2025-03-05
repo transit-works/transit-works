@@ -371,6 +371,7 @@ def calculate_zone_distance(zones: gpd.GeoDataFrame) -> list[list[float]]:
         return R * c
     distances = [[0 for _ in range(len(zones))] for _ in range(len(zones))]
     for i, zone1 in zones.iterrows():
+        print(f"Calculating distances for zone {i}")
         for j, zone2 in zones.iterrows():
             if i == j: continue
             if distances[i][j] != 0: continue
@@ -380,7 +381,7 @@ def calculate_zone_distance(zones: gpd.GeoDataFrame) -> list[list[float]]:
             coord2 = geom2.centroid.y, geom2.centroid.x
             distances[idx1][idx2] = haversine(coord1, coord2)
             distances[idx2][idx1] = distances[idx1][idx2]
-            print(f"  Distance between zones {idx1} and {idx2} is {distances[idx1][idx2]} km")
+            # print(f"  Distance between zones {idx1} and {idx2} is {distances[idx1][idx2]} km")
     return distances
 
 def divide_into_zones(city: City, num_rows: int, num_cols: int) -> gpd.GeoDataFrame:
@@ -754,8 +755,8 @@ def main():
         'city_data/toronto/data/Toronto.osm.pbf',
         'city_data/toronto/data/nodes.gpkg',
         'city_data/toronto/data/edges.gpkg',
-        20,
-        20,
+        40,
+        40,
         conn,
     )
 

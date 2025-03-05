@@ -170,6 +170,69 @@ impl TransitNetwork {
         }
     }
 
+    pub fn to_gtfs_copy(
+        target_routes: Vec<&TransitRoute>,
+        src_gtfs: &Gtfs,
+    ) -> Gtfs {
+        let mut stops: HashMap<String, Arc<Stop>> = HashMap::new();
+        let mut trips: HashMap<String, Vec<Trip>> = HashMap::new();
+        let mut routes: HashMap<String, Route> = HashMap::new();
+        let mut shapes: HashMap<String, Vec<Shape>> = HashMap::new();
+        for route in target_routes {
+            TransitNetwork::copy_route_from_gtfs_helper(
+                &src_gtfs.routes.get(&route.route_id).unwrap(),
+                src_gtfs,
+                &mut stops,
+                &mut trips,
+                &mut routes,
+                &mut shapes,
+            );
+        }
+
+        Gtfs {
+            stops: stops,
+            trips: trips,
+            routes: routes,
+            shapes: shapes,
+            ..Gtfs::default()
+        }
+    }
+
+    fn copy_route_from_gtfs_helper(
+        route: &Route,
+        src_gtfs: &Gtfs,
+        stops: &mut HashMap<String, Arc<Stop>>,
+        trips: &mut HashMap<String, Vec<Trip>>,
+        routes: &mut HashMap<String, Route>,
+        shapes: &mut HashMap<String, Vec<Shape>>,
+    ) {
+        let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
+        routes.insert(src_route.route_id.clone(), (*src_route).clone());
+        let trip = {
+            let (trip1, trip2) =
+                pick_inbound_outbound_trips(&route.route_id, src_gtfs).unwrap();
+            if trip_is_outbound(trip1) {
+                trip1
+            } else {
+                trip2
+            }
+        };
+        for src_trip in [trip] {
+            trips
+                .entry(route.route_id.clone())
+                .or_insert_with(Vec::new)
+                .push((*src_trip).clone());
+            if let Some(src_shape_id) = &src_trip.shape_id {
+                let src_shape = src_gtfs.shapes.get(src_shape_id).unwrap();
+                shapes.insert(src_shape_id.clone(), src_shape.clone());
+            }
+            for src_stop_time in src_trip.stop_times.iter() {
+                let src_stop = src_gtfs.stops.get(&src_stop_time.stop_id).unwrap();
+                stops.insert(src_stop.stop_id.clone(), src_stop.clone());
+            }
+        }
+    }
+
     fn route_to_gtfs_helper(
         route: &TransitRoute,
         src_gtfs: &Gtfs,
@@ -181,31 +244,14 @@ impl TransitNetwork {
     ) {
         if route.route_type != TransitRouteType::Bus {
             // Copy non-bus routes / trips / shapes / stops as is
-            let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
-            routes.insert(src_route.route_id.clone(), (*src_route).clone());
-            let trip = {
-                let (trip1, trip2) =
-                    pick_inbound_outbound_trips(&route.route_id, src_gtfs).unwrap();
-                if trip_is_outbound(trip1) {
-                    trip1
-                } else {
-                    trip2
-                }
-            };
-            for src_trip in [trip] {
-                trips
-                    .entry(route.route_id.clone())
-                    .or_insert_with(Vec::new)
-                    .push((*src_trip).clone());
-                if let Some(src_shape_id) = &src_trip.shape_id {
-                    let src_shape = src_gtfs.shapes.get(src_shape_id).unwrap();
-                    shapes.insert(src_shape_id.clone(), src_shape.clone());
-                }
-                for src_stop_time in src_trip.stop_times.iter() {
-                    let src_stop = src_gtfs.stops.get(&src_stop_time.stop_id).unwrap();
-                    stops.insert(src_stop.stop_id.clone(), src_stop.clone());
-                }
-            }
+            TransitNetwork::copy_route_from_gtfs_helper(
+                &src_gtfs.routes.get(&route.route_id).unwrap(),
+                src_gtfs,
+                stops,
+                trips,
+                routes,
+                shapes,
+            );
             return;
         }
         let route_id = route.route_id.clone();
