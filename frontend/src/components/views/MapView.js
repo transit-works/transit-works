@@ -44,6 +44,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   // Add state to track routes that have converged early
   const [earlyConvergedRoutes, setEarlyConvergedRoutes] = useState(new Set());
 
+  // Add state to track if the route carousel is visible
+  const [isRouteCarouselVisible, setIsRouteCarouselVisible] = useState(false);
+
   // Map control toggle functions
   const toggleMapStyle = () => {
     setMapStyle((prevStyle) => (prevStyle === '/styles/dark_matter_3d.json' 
@@ -151,6 +154,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setOptimizationProgress(0);
       setCurrentEvaluation(null);
       setWebsocketData(null);
+      
+      // Clear previously tracked early converged routes
+      setEarlyConvergedRoutes(new Set());
 
       // Create WebSocket connection with unified endpoint
       const routeIdsParam = routesToOptimize.join(',');
@@ -197,8 +203,18 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             console.warn(`Optimization warning: ${data.warning}`);
           }
           
-          // Handle early convergence notification - store it persistently
-          if (data.early_convergence && data.current_route) {
+          // Handle truly converged routes - more accurate convergence detection
+          if (data.truly_converged && data.truly_converged_route) {
+            console.info(`Route ${data.truly_converged_route} has truly converged to optimal solution`);
+            setEarlyConvergedRoutes(prev => {
+              const newSet = new Set(prev);
+              newSet.add(data.truly_converged_route);
+              return newSet;
+            });
+          }
+          
+          // Handle early convergence notification (legacy support) 
+          else if (data.early_convergence && data.current_route) {
             console.info(`Route ${data.current_route} converged early to optimal solution`);
             setEarlyConvergedRoutes(prev => {
               const newSet = new Set(prev);
@@ -230,7 +246,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             }
             
             // If this is the last iteration, mark optimization as complete
-            if (data.iteration === data.total_iterations) {
+            if (data.iteration === data.total_iterations || data.early_completion) {
               // Set isOptimizing to false since we're done
               setIsOptimizing(false);
             }
@@ -317,6 +333,16 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     } else {
       handleOptimize();
     }
+  };
+
+  // Add a cancel optimization function to close the websocket
+  const cancelOptimization = () => {
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      console.log('Cancelling optimization by closing WebSocket connection');
+      wsRef.current.close();
+    }
+    setIsOptimizing(false);
+    setOptimizationError(null);
   };
 
   // Clean up WebSocket on component unmount
@@ -426,6 +452,12 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     fetchOptimizedRoutes();
   }, []);
 
+  // Listen for route selection to determine if carousel should be visible
+  useEffect(() => {
+    // Carousel shows when a single route is selected and not in multi-select mode
+    setIsRouteCarouselVisible(!!selectedRoute && !multiSelectMode);
+  }, [selectedRoute, multiSelectMode]);
+
   return (
     <div className="flex h-screen">
       <div className="relative z-10 h-full w-1/5 rounded-2xl bg-background-dk bg-opacity-20 backdrop-blur-lg">
@@ -483,7 +515,20 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           showPopulationHeatmap={showPopulationHeatmap}
           acoParams={acoParams}
           setAcoParams={setAcoParams}
+          setIsRouteCarouselVisible={setIsRouteCarouselVisible}
         />
+
+        {/* Update the floating OptimizationProgress component position to bottom left with higher z-index */}
+        <div className={`absolute ${isRouteCarouselVisible ? 'bottom-48' : 'bottom-6'} left-[calc(20%+24px)] z-50 transition-all duration-300`}>
+          <OptimizationProgress
+            isOptimizing={isOptimizing}
+            optimizationProgress={optimizationProgress}
+            selectedRoutes={selectedRoutes}
+            websocketData={websocketData}
+            earlyConvergedRoutes={earlyConvergedRoutes}
+            onCancel={cancelOptimization}
+          />
+        </div>
       </div>
     </div>
   );

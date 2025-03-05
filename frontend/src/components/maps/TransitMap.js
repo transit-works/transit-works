@@ -66,7 +66,8 @@ function TransitMap({
   multiSelectMode,
   setMultiSelectMode,
   acoParams,
-  setAcoParams
+  setAcoParams,
+  setIsRouteCarouselVisible
 }) {
   // Add the missing mapRef
   const mapRef = useRef(null);
@@ -1161,7 +1162,16 @@ useEffect(() => {
 
   const renderRouteStopsCarousel = () => {
     // Only show when a single route is selected and not in multi-select mode
-    if (!selectedRoute || multiSelectMode) return null;
+    const isVisible = !!(selectedRoute && !multiSelectMode);
+    
+    // Notify parent component about carousel visibility
+    useEffect(() => {
+      if (setIsRouteCarouselVisible) {
+        setIsRouteCarouselVisible(isVisible);
+      }
+    }, [isVisible]);
+    
+    if (!isVisible) return null;
     
     // Find the selected route's data
     const routeData = optimizedRoutes && optimizedRoutes.has(selectedRoute)

@@ -5,7 +5,8 @@ export default function OptimizationProgress({
   optimizationProgress,
   selectedRoutes,
   websocketData,
-  earlyConvergedRoutes
+  earlyConvergedRoutes,
+  onCancel // Add cancel function prop
 }) {
   // If not optimizing, don't show anything
   if (!isOptimizing) return null;
@@ -25,10 +26,12 @@ export default function OptimizationProgress({
       routes_count,
       route_iteration,
       iterations_per_route,
-      early_convergence,
-      warning,
+      truly_converged,
+      truly_converged_route,
       converged_routes,
-      all_route_ids
+      optimize_attempts,
+      all_route_ids,
+      warning
     } = websocketData;
     
     // Ensure all required values are present
@@ -43,23 +46,29 @@ export default function OptimizationProgress({
         for (let i = 0; i < all_route_ids.length; i++) {
           const routeId = all_route_ids[i];
           const isCurrentRoute = i === current_route_index;
-          const hasConvergedEarly = (converged_routes && converged_routes[i]) || 
-                                     (earlyConvergedRoutes && earlyConvergedRoutes.has(routeId));
+          
+          // A route is only truly converged if the backend has marked it as such
+          // or if it's in our earlyConvergedRoutes set (for backward compatibility)
+          const hasConverged = (converged_routes && converged_routes[i]) || 
+                               (earlyConvergedRoutes && earlyConvergedRoutes.has(routeId));
+          
+          // Show how many optimization attempts have been made
+          const attemptCount = optimize_attempts ? optimize_attempts[i] : 0;
           
           routeStatusElements.push(
             <div key={routeId} className={`text-xs mb-2 ${isCurrentRoute ? 'font-bold' : ''}`}>
               Route {i + 1}/{routes_count}: {routeId.substring(0, 15)}...
-              {hasConvergedEarly ? (
+              {hasConverged ? (
                 <span className="ml-2 text-green-400 font-semibold">
-                  ✓ Converged
+                  ✓ Converged ({attemptCount} attempts)
                 </span>
               ) : isCurrentRoute ? (
                 <span className="ml-2 text-blue-400">
-                  Optimizing...
+                  Optimizing... ({attemptCount} attempts)
                 </span>
               ) : (
                 <span className="ml-2 text-gray-400">
-                  Waiting...
+                  Waiting... ({attemptCount} attempts)
                 </span>
               )}
             </div>
@@ -70,7 +79,7 @@ export default function OptimizationProgress({
         routeStatusElements.push(
           <div key={current_route} className="text-xs mb-2 font-bold">
             Route {current_route_index + 1}/{routes_count}: {current_route}
-            {early_convergence ? (
+            {truly_converged && truly_converged_route === current_route ? (
               <span className="ml-2 text-green-400 font-semibold">
                 ✓ Converged
               </span>
@@ -84,16 +93,24 @@ export default function OptimizationProgress({
       }
       
       return (
-        <div className="mt-4 p-2 bg-background-lt bg-opacity-20 rounded-md">
-          <div className="text-sm font-semibold mb-2">
-            Optimizing {routes_count} routes: {progress}%
+        <div className="p-4 bg-background-dk bg-opacity-20 backdrop-blur-lg rounded-2xl shadow-lg border border-zinc-700 min-w-[300px] max-w-[400px]">
+          <div className="flex justify-between items-center mb-3">
+            <div className="text-sm font-semibold text-white">
+              Optimizing {routes_count} routes: {progress}%
+            </div>
+            <button
+              onClick={onCancel}
+              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs rounded-md transition-colors"
+            >
+              Cancel
+            </button>
           </div>
           
-          <div className="max-h-28 overflow-y-auto custom-scrollbar">
+          <div className="max-h-28 overflow-y-auto custom-scrollbar text-white">
             {routeStatusElements}
           </div>
           
-          <div className="text-xs mt-2 mb-2">
+          <div className="text-xs mt-2 mb-2 text-white">
             Current route: {current_route_index + 1}/{routes_count} (Iteration {route_iteration}/{iterations_per_route})
           </div>
           
@@ -110,9 +127,17 @@ export default function OptimizationProgress({
   
   // Simple progress display for single route
   return (
-    <div className="mt-4 p-2 bg-background-lt bg-opacity-20 rounded-md">
-      <div className="text-sm font-semibold mb-2">
-        Optimizing {routeCount > 1 ? `${routeCount} routes` : '1 route'}: {progress}%
+    <div className="p-4 bg-background-dk bg-opacity-20 backdrop-blur-lg rounded-2xl shadow-lg border border-zinc-700 min-w-[300px] max-w-[400px]">
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-sm font-semibold text-white">
+          Optimizing {routeCount > 1 ? `${routeCount} routes` : '1 route'}: {progress}%
+        </div>
+        <button
+          onClick={onCancel}
+          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs rounded-md transition-colors"
+        >
+          Cancel
+        </button>
       </div>
       <div className="w-full bg-gray-700 rounded-full h-2">
         <div 
