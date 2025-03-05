@@ -112,16 +112,15 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     }
   };
 
-  // Update handleLiveOptimize to work with the first selected route
+  // Update handleLiveOptimize to work with the new unified endpoint
   const handleLiveOptimize = () => {
     if (selectedRoutes.size === 0) {
-      setOptimizationError('Please select a route to optimize');
+      setOptimizationError('Please select at least one route to optimize');
       return;
     }
 
-    // For live optimization, just use the first selected route
-    // (or you could modify your backend to support multiple routes with WebSockets)
-    const selectedRoute = Array.from(selectedRoutes)[0];
+    // Get all selected routes
+    const routesToOptimize = Array.from(selectedRoutes);
     
     // Close any existing WebSocket connection
     if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
@@ -134,8 +133,10 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setOptimizationProgress(0);
       setCurrentEvaluation(null);
 
-      // Create WebSocket connection
-      const wsUrl = `ws://localhost:8080/optimize-route-live/${selectedRoute}`;
+      // Create WebSocket connection with unified endpoint
+      const routeIdsParam = routesToOptimize.join(',');
+      const wsUrl = `ws://localhost:8080/optimize-live?route_ids=${encodeURIComponent(routeIdsParam)}`;
+      
       console.log(`Connecting to WebSocket at ${wsUrl}`);
       
       const ws = new WebSocket(wsUrl);
@@ -174,27 +175,33 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             // If this is the last iteration, make sure we mark optimization as complete
             if (data.iteration === data.total_iterations) {
               // Add to optimized routes set
-              setOptimizedRoutes(prev => new Set(prev).add(selectedRoute));
+              setOptimizedRoutes(prev => {
+                const newSet = new Set(prev);
+                routesToOptimize.forEach(route => newSet.add(route));
+                return newSet;
+              });
               
               // Set isOptimizing to false since we're done
               setIsOptimizing(false);
             }
           }
 
-          // Update evaluation score
+          // Update evaluation score - handle array of evaluations
           if (data.evaluation) {
-            setCurrentEvaluation(data.evaluation);
+            // For multiple routes, show the first evaluation or a combined score
+            if (Array.isArray(data.evaluation)) {
+              if (data.evaluation.length > 0) {
+                // Could show first route's eval, average, or some combined metric
+                setCurrentEvaluation(data.evaluation[0][1]); // Show first route's evaluation
+              }
+            } else {
+              setCurrentEvaluation(data.evaluation);
+            }
           }
 
-          // Update map with latest optimized route
+          // Update map with latest optimized routes
           if (data.geojson) {
             setOptimizedRoutesData(data.geojson);
-          }
-
-          // Check if this is the final iteration
-          if (data.iteration === data.total_iterations) {
-            // Add to optimized routes set
-            setOptimizedRoutes(prev => new Set(prev).add(selectedRoute));
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -212,7 +219,6 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
         
         // Always set isOptimizing to false when WebSocket closes
-        // This ensures the button is re-enabled
         setIsOptimizing(false);
         
         // If closed abnormally with optimization incomplete, show error
@@ -236,7 +242,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
 
   // Choose appropriate optimization method
   const handleOptimizeRoute = () => {
-    if (useLiveOptimization && selectedRoutes.size === 1) {
+    if (useLiveOptimization) {
       handleLiveOptimize();
     } else {
       handleOptimize();

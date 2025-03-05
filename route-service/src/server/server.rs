@@ -365,17 +365,17 @@ async fn get_optimizations(data: web::Data<AppState>) -> impl Responder {
 // WebSocket actor for live optimization
 struct OptimizationWs {
     app_state: web::Data<AppState>,
-    route_id: String,
+    route_ids: Vec<String>,
     iterations_done: usize,
     total_iterations: usize,
     heartbeat: Instant,
 }
 
 impl OptimizationWs {
-    fn new(app_state: web::Data<AppState>, route_id: String) -> Self {
+    fn new(app_state: web::Data<AppState>, route_ids: Vec<String>) -> Self {
         Self {
             app_state,
-            route_id,
+            route_ids,
             iterations_done: 0,
             total_iterations: 10, // 10 iterations as specified
             heartbeat: Instant::now(),
@@ -383,16 +383,16 @@ impl OptimizationWs {
     }
 
     fn run_optimization_iteration(&mut self, ctx: &mut ws::WebsocketContext<Self>) {
-        let route_id = self.route_id.clone();
+        let route_ids = self.route_ids.clone();
         println!(
-            "Running optimization iteration {} for route {}",
+            "Running optimization iteration {} for routes {:?}",
             self.iterations_done + 1,
-            route_id
+            route_ids
         );
 
         // Check if we've completed all iterations
         if self.iterations_done >= self.total_iterations {
-            println!("Completed all iterations for route {}", route_id);
+            println!("Completed all iterations for routes {:?}", route_ids);
             ctx.close(None);
             return;
         }
@@ -417,7 +417,7 @@ impl OptimizationWs {
         };
 
         if let Some(city) = &*city_guard {
-            // Get the route to optimize - check optimized_transit first, then fall back to original
+            // Get the optimized transit data
             let mut optimized_transit_guard = match self.app_state.optimized_transit.lock() {
                 Ok(guard) => guard,
                 Err(e) => {
@@ -434,77 +434,76 @@ impl OptimizationWs {
             };
 
             let optimized_transit = optimized_transit_guard.as_mut().unwrap();
+            let mut all_evaluations = Vec::new();
+            let mut optimized_count = 0;
+            let mut optimized_route_ids_guard = self.app_state.optimized_route_ids.lock().unwrap();
 
-            // Find the route to optimize
-            let route = optimized_transit
-                .routes
-                .iter()
-                .find(|r| r.route_id == route_id)
-                .cloned();
+            // Optimize each route in the list
+            for route_id in &route_ids {
+                // Find the route to optimize
+                let route = optimized_transit
+                    .routes
+                    .iter()
+                    .find(|r| r.route_id == *route_id)
+                    .cloned();
 
-            if let Some(route) = route {
-                // Create ACO instance for this optimization iteration
-                let aco = aco2::ACO::init();
+                if let Some(route) = route {
+                    // Create ACO instance for this optimization iteration
+                    let aco = aco2::ACO::init();
 
-                match aco2::run_aco(aco, &route, &city) {
-                    Some((opt_route, eval)) => {
-                        // Update the route in optimized_transit for next iteration
-                        optimized_transit.routes.retain(|r| r.route_id != route_id);
-                        optimized_transit.routes.push(opt_route);
-                        let mut optimized_route_ids =
-                            self.app_state.optimized_route_ids.lock().unwrap();
+                    match aco2::run_aco(aco, &route, &city) {
+                        Some((opt_route, eval)) => {
+                            // Update the route in optimized_transit for next iteration
+                            optimized_transit.routes.retain(|r| r.route_id != *route_id);
+                            optimized_transit.routes.push(opt_route);
 
-                        // Ensure route ID is in the optimized list
-                        if !optimized_route_ids.contains(&route_id) {
-                            optimized_route_ids.push(route_id.clone());
+                            // Ensure route ID is in the optimized list
+                            if !optimized_route_ids_guard.contains(route_id) {
+                                optimized_route_ids_guard.push(route_id.clone());
+                            }
+
+                            all_evaluations.push((route_id.clone(), eval));
+                            optimized_count += 1;
                         }
-
-                        let response = serde_json::json!({
-                            "message": format!("Optimized route {} (iteration {}/{})", route_id, self.iterations_done + 1, self.total_iterations),
-                            "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids),
-                            "evaluation": eval,
-                            "iteration": self.iterations_done + 1,
-                            "total_iterations": self.total_iterations
-                        });
-
-                        // Send the update via WebSocket
-                        ctx.text(serde_json::to_string(&response).unwrap());
-
-                        // Increment iteration counter
-                        self.iterations_done += 1;
-
-                        // Update heartbeat timestamp again after the long optimization process
-                        self.heartbeat = Instant::now();
-
-                        // Schedule next iteration with a short delay
-                        let current_iteration = self.iterations_done;
-                        println!(
-                            "Scheduling next iteration {} for route {}",
-                            current_iteration + 1,
-                            route_id
-                        );
-
-                        let addr = ctx.address();
-                        ctx.run_later(Duration::from_millis(500), move |_, _| {
-                            addr.do_send(RunNextIteration {
-                                iteration: current_iteration,
-                            });
-                        });
+                        None => {
+                            println!("Failed to optimize route {}", route_id);
+                            // Continue with other routes even if one fails
+                        }
                     }
-                    None => {
-                        let error_msg = format!("Failed to optimize route {}", route_id);
-                        println!("{}", error_msg);
-                        ctx.text(
-                            serde_json::to_string(&serde_json::json!({
-                                "error": error_msg
-                            }))
-                            .unwrap(),
-                        );
-                        ctx.close(None);
-                    }
+                } else {
+                    println!("Route {} not found", route_id);
+                    // Continue with other routes
                 }
+            }
+
+            // Send a combined update for all routes
+            if optimized_count > 0 {
+                let response = serde_json::json!({
+                    "message": format!("Optimized {} routes (iteration {}/{})", 
+                                     optimized_count, self.iterations_done + 1, self.total_iterations),
+                    "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids_guard),
+                    "evaluation": all_evaluations,
+                    "iteration": self.iterations_done + 1,
+                    "total_iterations": self.total_iterations,
+                    "optimized_routes": optimized_count
+                });
+
+                // Send the update via WebSocket
+                ctx.text(serde_json::to_string(&response).unwrap());
+
+                // Increment iteration counter
+                self.iterations_done += 1;
+
+                // Schedule next iteration with a short delay
+                let current_iteration = self.iterations_done;
+                let addr = ctx.address();
+                ctx.run_later(Duration::from_millis(500), move |_, _| {
+                    addr.do_send(RunNextIteration {
+                        iteration: current_iteration,
+                    });
+                });
             } else {
-                let error_msg = format!("Route {} not found", route_id);
+                let error_msg = format!("Failed to optimize any routes in {:?}", route_ids);
                 println!("{}", error_msg);
                 ctx.text(
                     serde_json::to_string(&serde_json::json!({
@@ -525,6 +524,9 @@ impl OptimizationWs {
             );
             ctx.close(None);
         }
+
+        // Update heartbeat timestamp again after the long optimization process
+        self.heartbeat = Instant::now();
     }
 
     // Heartbeat to keep connection alive
@@ -576,7 +578,7 @@ impl Actor for OptimizationWs {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        println!("WebSocket connection started for route {}", self.route_id);
+        println!("WebSocket connection started for routes {:?}", self.route_ids);
         self.heartbeat(ctx);
         self.run_optimization_iteration(ctx);
     }
@@ -615,32 +617,41 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for OptimizationWs {
     }
 }
 
-// WebSocket endpoint for live route optimization
-#[get("/optimize-route-live/{route_id}")]
-async fn optimize_route_live(
-    req: HttpRequest,
-    stream: web::Payload,
-    route_id: web::Path<String>,
-    data: web::Data<AppState>,
-) -> Result<HttpResponse, Error> {
-    println!(
-        "WebSocket connection request for optimize-route-live/{}",
-        route_id
-    );
-    let ws = OptimizationWs::new(data.clone(), route_id.into_inner());
-    ws::start(ws, &req, stream)
+// Define a struct for the query parameters
+#[derive(Deserialize)]
+struct RouteIdParams {
+    route_ids: String, // Comma-separated list of route IDs
 }
 
-#[post("/optimize-routes-live")]
-async fn optimize_routes_live(
+// Single unified endpoint for live route optimization - replaces both previous endpoints
+#[get("/optimize-live")]
+async fn optimize_live(
     req: HttpRequest,
     stream: web::Payload,
-    route_ids: web::Json<RouteIds>,
+    query: web::Query<RouteIdParams>,
     data: web::Data<AppState>,
 ) -> Result<HttpResponse, Error> {
-    Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-        "error": "Not implemented"
-    })))
+    // Parse comma-separated route IDs
+    let route_ids: Vec<String> = query
+        .route_ids
+        .split(',')
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect();
+    
+    println!(
+        "WebSocket connection request for optimize-live with routes {:?}",
+        route_ids
+    );
+    
+    if route_ids.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "No valid route IDs provided"
+        })));
+    }
+    
+    let ws = OptimizationWs::new(data.clone(), route_ids);
+    ws::start(ws, &req, stream)
 }
 
 pub async fn start_server(
@@ -678,8 +689,8 @@ pub async fn start_server(
             .service(evaluate_route)
             .service(get_grid)
             .service(reset_optimizations)
-            .service(optimize_route_live)
-            .service(get_optimizations) // Add the new endpoint
+            .service(optimize_live)  // Replace the previous WebSocket endpoints with this unified one
+            .service(get_optimizations)
     })
     .bind(addr)?
     .run()
