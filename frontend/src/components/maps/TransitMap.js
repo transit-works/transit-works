@@ -764,33 +764,6 @@ function TransitMap({
           </label>
         </div>
         
-        {/* Selected Routes Display (only in multi-select mode) */}
-        {multiSelectMode && effectiveSelectedRoutes.size > 0 && (
-          <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md">
-            <div className="text-sm mb-2">Selected Routes:</div>
-            <div className="flex flex-wrap gap-1">
-              {Array.from(effectiveSelectedRoutes).map(routeId => (
-                <span key={routeId} className="text-xs bg-zinc-700 px-2 py-1 rounded-full flex items-center">
-                  {routeId}
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      effectiveSetSelectedRoutes(prev => {
-                        const newSet = new Set(prev);
-                        newSet.delete(routeId);
-                        return newSet;
-                      });
-                    }}
-                    className="ml-1 text-zinc-400 hover:text-white"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-        
         {/* Live Optimization Toggle */}
         <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md flex justify-between items-center">
           <span className="text-sm">Live Optimization</span>

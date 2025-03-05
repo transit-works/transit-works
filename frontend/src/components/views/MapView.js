@@ -282,6 +282,22 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setOptimizedRoutes(new Set());
       setOptimizedRoutesData(null);
       
+      // Verify the reset worked by checking with the server
+      const verifyResponse = await fetch('http://localhost:8080/get-optimizations');
+      if (verifyResponse.ok) {
+        const verifyData = await verifyResponse.json();
+        if (verifyData.routes && verifyData.routes.length > 0) {
+          console.warn('Warning: Server still has optimized routes after reset');
+          // Force another reset if needed
+          await fetch('http://localhost:8080/reset-optimizations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } else {
+          console.log('Reset verification successful - server confirms no optimized routes');
+        }
+      }
+      
     } catch (error) {
       console.error('Error resetting optimizations:', error);
       setOptimizationError(error.message);
@@ -301,17 +317,30 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       
       const data = await response.json();
       
-      if (data.routes && Array.isArray(data.routes) && data.routes.length > 0) {
-        // Update optimized routes set with the routes from server
-        setOptimizedRoutes(new Set(data.routes));
+      // Check if there are any optimized routes
+      if (data.geojson && data.geojson.features && data.geojson.features.length > 0) {
+        // Extract route IDs from the geojson features
+        const optimizedRouteIds = new Set(
+          data.geojson.features
+            .filter(feature => feature.properties && feature.properties.route_id)
+            .map(feature => feature.properties.route_id)
+        );
         
-        if (data.geojson) {
-          // Update optimized routes data with geojson from server
-          setOptimizedRoutesData(data.geojson);
-        }
+        // Update optimized routes set
+        setOptimizedRoutes(optimizedRouteIds);
+        
+        // Update optimized routes data
+        setOptimizedRoutesData(data.geojson);
+      } else {
+        // No optimized routes, ensure our state reflects this
+        setOptimizedRoutes(new Set());
+        setOptimizedRoutesData(null);
       }
     } catch (error) {
       console.error('Error fetching optimized routes:', error);
+      // On error, clear optimized routes to prevent stale data
+      setOptimizedRoutes(new Set());
+      setOptimizedRoutesData(null);
     }
   };
 

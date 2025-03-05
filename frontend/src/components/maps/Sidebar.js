@@ -51,10 +51,10 @@ function Sidebar({
         {/* Progress Dial Section */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
-            <ProgressDial percentage={68} name="Transit Score" />
+            <ProgressDial percentage={20} name="Transit Score" />
           </div>
           <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
-            <ProgressDial percentage={77} name="Economic Score" />
+            <ProgressDial percentage={37} name="Economic Score" />
           </div>
         </div>
 
