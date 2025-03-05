@@ -9,6 +9,7 @@ use actix::prelude::*;
 use actix_web::{get, post, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
 use geo::Centroid;
+use route_service::opt::aco;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::net::SocketAddr;
@@ -141,20 +142,73 @@ async fn optimize_routes(
 ) -> impl Responder {
     println!("Optimizing multiple routes: {:?}", route_ids.routes);
 
-    let mut city_guard = data.city.lock().unwrap();
+    // Access the original city (immutable)
+    let city_guard = data.city.lock().unwrap();
+    let city = match &*city_guard {
+        Some(city) => city,
+        None => {
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "City data not loaded"
+            }));
+        }
+    };
 
-    if let Some(city) = &mut *city_guard {
-        // Create ACO instance on demand for this optimization
-        let mut aco = ACO::init();
+    // Check if any routes exist
+    if route_ids.routes.is_empty() {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "No route IDs provided"
+        }));
+    }
 
-        // TODO: Implement multi-route optimization
+    let mut optimized_transit_guard = data.optimized_transit.lock().unwrap();
+    let optimized_transit = optimized_transit_guard.as_mut().unwrap();
+    let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
+    
+    // Track successful optimizations and evaluations
+    let mut success_count = 0;
+    let mut all_evaluations = Vec::new();
+
+    // Process each route ID
+    for route_id in &route_ids.routes {
+        // Find the route with the given ID from the original city data
+        let original_route = city
+            .transit
+            .routes
+            .iter()
+            .find(|r| &r.route_id == route_id)
+            .cloned();
+
+        if let Some(route) = original_route {
+            // Create ACO instance for this optimization
+            let mut aco = ACO::init();
+
+            if let Some((opt_route, eval)) = 
+                aco.optimize_route(&city.grid, &city.road, &city.transit, &route)
+            {
+                // Update the optimized transit with the new route
+                optimized_transit.routes.retain(|r| r.route_id != *route_id);
+                optimized_transit.routes.push(opt_route);
+
+                // Track the optimized route ID
+                if !optimized_route_ids.contains(route_id) {
+                    optimized_route_ids.push(route_id.clone());
+                }
+
+                all_evaluations.push(eval);
+                success_count += 1;
+            }
+        }
+    }
+
+    if success_count > 0 {
         HttpResponse::Ok().json(serde_json::json!({
-            "message": "Multiple route optimization in progress",
-            "routes": route_ids.routes
+            "message": format!("Optimized {} routes", success_count),
+            "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids),
+            "evaluation": all_evaluations
         }))
     } else {
-        HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "City data not loaded"
+        HttpResponse::NotFound().json(serde_json::json!({
+            "error": "No routes were successfully optimized"
         }))
     }
 }

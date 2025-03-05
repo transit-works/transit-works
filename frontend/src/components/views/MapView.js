@@ -8,37 +8,71 @@ import Sidebar from '../maps/Sidebar';
 const TransitMap = dynamic(() => import('../maps/TransitMap'), { ssr: false });
 
 export default function MapView({ data, initialOptimizedRoutesData, initialOptimizedRoutes }) {
-  const [selectedRoute, setSelectedRoute] = useState(null);
+  // Update selectedRoute to selectedRoutes (a Set)
+  const [selectedRoutes, setSelectedRoutes] = useState(new Set());
   const [optimizedRoutesData, setOptimizedRoutesData] = useState(initialOptimizedRoutesData);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationError, setOptimizationError] = useState(null);
   const [optimizedRoutes, setOptimizedRoutes] = useState(new Set(initialOptimizedRoutes));
-  // for websocket live optimization
   const [optimizationProgress, setOptimizationProgress] = useState(0);
   const [currentEvaluation, setCurrentEvaluation] = useState(null);
-  const [useLiveOptimization, setUseLiveOptimization] = useState(true); // Default to live optimization
+  const [useLiveOptimization, setUseLiveOptimization] = useState(true);
   const wsRef = useRef(null);
 
-  // Handle traditional REST API optimization
+  // Add map control state variables
+  const [mapStyle, setMapStyle] = useState('/styles/dark_matter.json');
+  const [show3DRoutes, setShow3DRoutes] = useState(false);
+  const [useRandomColors, setUseRandomColors] = useState(false);
+  const [showPopulationHeatmap, setShowPopulationHeatmap] = useState(false);
+  
+  // Add multiSelectMode state here
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+
+  // Map control toggle functions
+  const toggleMapStyle = () => {
+    setMapStyle((prevStyle) => (prevStyle === '/styles/dark_matter_3d.json' 
+      ? '/styles/dark_matter.json' 
+      : '/styles/dark_matter_3d.json'));
+  };
+
+  const toggle3DRoutes = () => {
+    setShow3DRoutes(!show3DRoutes);
+  };
+
+  const toggleRandomColors = () => {
+    setUseRandomColors(!useRandomColors);
+  };
+
+  const togglePopulationHeatmap = () => {
+    setShowPopulationHeatmap(!showPopulationHeatmap);
+  };
+
+  // Modified handleOptimize function to work with multiple routes
   const handleOptimize = async () => {
-    if (!selectedRoute) {
-      // Cannot optimize if no route is selected
-      setOptimizationError('Please select a route to optimize');
+    // Check if any routes are selected
+    if (selectedRoutes.size === 0) {
+      setOptimizationError('Please select at least one route to optimize');
       return;
     }
+
+    const routesToOptimize = Array.from(selectedRoutes);
 
     try {
       setIsOptimizing(true);
       setOptimizationError(null);
       
-      // Check if the backend service is reachable first
+      const endpoint = 'http://localhost:8080/optimize-routes';
+      
+      const requestOptions = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ routes: routesToOptimize })
+      };
+
       try {
-        const response = await fetch(`http://localhost:8080/optimize-route/${selectedRoute}`, {
-          method: 'POST', // Changed to POST to match backend expectation
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
+        const response = await fetch(endpoint, requestOptions);
         
         if (!response.ok) {
           throw new Error(`Optimization failed with status: ${response.status}`);
@@ -47,15 +81,19 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         const result = await response.json();
         
         if (result && result.geojson) {
-          // Store the optimized route data with route ID as key
+          // Store the optimized route data
           setOptimizedRoutesData(result.geojson);
-          // Add the optimized route to our cache
-          setOptimizedRoutes(prev => new Set(prev).add(selectedRoute));
+          // Add the optimized routes to our cache
+          setOptimizedRoutes(prev => {
+            const newSet = new Set(prev);
+            routesToOptimize.forEach(routeId => newSet.add(routeId));
+            return newSet;
+          });
         } else {
           throw new Error('Invalid response format from optimization service');
         }
       } catch (fetchError) {
-        // Specific error handling for network issues
+        // Handle network errors
         if (fetchError.message.includes('NetworkError') || 
             fetchError.message.includes('Failed to fetch')) {
           throw new Error(
@@ -66,20 +104,24 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         }
       }
     } catch (error) {
-      console.error('Error optimizing route:', error);
+      console.error('Error optimizing routes:', error);
       setOptimizationError(error.message);
     } finally {
       setIsOptimizing(false);
     }
   };
 
-  // New live optimization function using WebSockets
+  // Update handleLiveOptimize to work with the first selected route
   const handleLiveOptimize = () => {
-    if (!selectedRoute) {
+    if (selectedRoutes.size === 0) {
       setOptimizationError('Please select a route to optimize');
       return;
     }
 
+    // For live optimization, just use the first selected route
+    // (or you could modify your backend to support multiple routes with WebSockets)
+    const selectedRoute = Array.from(selectedRoutes)[0];
+    
     // Close any existing WebSocket connection
     if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
       wsRef.current.close();
@@ -191,9 +233,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     }
   };
 
-  // Choose appropriate optimization method based on user preference
+  // Choose appropriate optimization method
   const handleOptimizeRoute = () => {
-    if (useLiveOptimization) {
+    if (useLiveOptimization && selectedRoutes.size === 1) {
       handleLiveOptimize();
     } else {
       handleOptimize();
@@ -212,7 +254,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   // Add an effect to make sure isOptimizing is reset when route selection changes
   useEffect(() => {
     // If a route is deselected while optimizing, disable optimization mode
-    if (!selectedRoute && isOptimizing) {
+    if (selectedRoutes.size === 0 && isOptimizing) {
       setIsOptimizing(false);
       
       // Close any existing WebSocket connection
@@ -220,7 +262,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         wsRef.current.close();
       }
     }
-  }, [selectedRoute, isOptimizing]);
+  }, [selectedRoutes, isOptimizing]);
 
   // Reset function for all route optimizations
   const resetOptimization = async () => {
@@ -243,6 +285,22 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setOptimizedRoutes(new Set());
       setOptimizedRoutesData(null);
       
+      // Verify the reset worked by checking with the server
+      const verifyResponse = await fetch('http://localhost:8080/get-optimizations');
+      if (verifyResponse.ok) {
+        const verifyData = await verifyResponse.json();
+        if (verifyData.routes && verifyData.routes.length > 0) {
+          console.warn('Warning: Server still has optimized routes after reset');
+          // Force another reset if needed
+          await fetch('http://localhost:8080/reset-optimizations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } else {
+          console.log('Reset verification successful - server confirms no optimized routes');
+        }
+      }
+      
     } catch (error) {
       console.error('Error resetting optimizations:', error);
       setOptimizationError(error.message);
@@ -251,13 +309,56 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     }
   };
 
+  // Add this function to MapView.js
+  const fetchOptimizedRoutes = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/get-optimizations');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch optimized routes: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Check if there are any optimized routes
+      if (data.geojson && data.geojson.features && data.geojson.features.length > 0) {
+        // Extract route IDs from the geojson features
+        const optimizedRouteIds = new Set(
+          data.geojson.features
+            .filter(feature => feature.properties && feature.properties.route_id)
+            .map(feature => feature.properties.route_id)
+        );
+        
+        // Update optimized routes set
+        setOptimizedRoutes(optimizedRouteIds);
+        
+        // Update optimized routes data
+        setOptimizedRoutesData(data.geojson);
+      } else {
+        // No optimized routes, ensure our state reflects this
+        setOptimizedRoutes(new Set());
+        setOptimizedRoutesData(null);
+      }
+    } catch (error) {
+      console.error('Error fetching optimized routes:', error);
+      // On error, clear optimized routes to prevent stale data
+      setOptimizedRoutes(new Set());
+      setOptimizedRoutesData(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchOptimizedRoutes();
+  }, []);
+
   return (
     <div className="flex h-screen">
       <div className="relative z-10 h-full w-1/5 rounded-2xl bg-background-dk bg-opacity-20 backdrop-blur-lg">
         <Sidebar 
           data={data} 
-          selectedRoute={selectedRoute} 
-          setSelectedRoute={setSelectedRoute} 
+          selectedRoutes={selectedRoutes} 
+          setSelectedRoutes={setSelectedRoutes} 
+          multiSelectMode={multiSelectMode} // Add this prop
           onOptimize={handleOptimizeRoute}
           isOptimizing={isOptimizing}
           optimizationError={optimizationError}
@@ -265,16 +366,39 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           currentEvaluation={currentEvaluation}
           useLiveOptimization={useLiveOptimization}
           setUseLiveOptimization={setUseLiveOptimization}
+          // Add map control props
+          mapStyle={mapStyle}
+          show3DRoutes={show3DRoutes}
+          useRandomColors={useRandomColors}
+          showPopulationHeatmap={showPopulationHeatmap}
+          onToggleMapStyle={toggleMapStyle}
+          onToggle3DRoutes={toggle3DRoutes}
+          onToggleRandomColors={toggleRandomColors}
+          onTogglePopulationHeatmap={togglePopulationHeatmap}
         />
       </div>
       <div className="absolute inset-0 z-0 h-full w-full">
         <TransitMap 
           data={data} 
-          selectedRoute={selectedRoute} 
-          setSelectedRoute={setSelectedRoute} 
+          selectedRoutes={selectedRoutes} 
+          setSelectedRoutes={setSelectedRoutes} 
+          multiSelectMode={multiSelectMode} // Add this prop
+          setMultiSelectMode={setMultiSelectMode} // Add this prop
           optimizedRoutesData={optimizedRoutesData}
           optimizedRoutes={optimizedRoutes}
           resetOptimization={resetOptimization}
+          useLiveOptimization={useLiveOptimization}
+          setUseLiveOptimization={setUseLiveOptimization}
+          isOptimizing={isOptimizing}
+          optimizationProgress={optimizationProgress}
+          currentEvaluation={currentEvaluation}
+          onOptimize={handleOptimizeRoute}
+          optimizationError={optimizationError}
+          // Add map control props
+          mapStyle={mapStyle}
+          show3DRoutes={show3DRoutes}
+          useRandomColors={useRandomColors}
+          showPopulationHeatmap={showPopulationHeatmap}
         />
       </div>
     </div>
