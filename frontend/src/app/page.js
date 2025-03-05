@@ -116,7 +116,7 @@ export default function Home() {
         </div>
       </ParallaxLayer>
 
-      {/* Visualization Section */}
+      {/* Bento Grid Section */}
       <ParallaxLayer offset={2}>
         <div className="flex h-screen items-center justify-center">
           <div className="grid h-5/6 w-5/6 grid-cols-4 grid-rows-6 gap-4 p-4">

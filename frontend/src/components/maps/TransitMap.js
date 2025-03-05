@@ -78,6 +78,7 @@ function TransitMap({
   const [panelOpen, setPanelOpen] = useState(true);
   const [routeColorMap, setRouteColorMap] = useState({});
   const [ridershipData, setRidershipData] = useState(null);
+  const [optRidershipData, setOptRidershipData] = useState(null);
   const [populationData, setPopulationData] = useState(null);
   
   // Add local state for selectedRoute if not provided in props
@@ -118,9 +119,11 @@ function TransitMap({
       
       const data = await response.json();
       setRidershipData(data.ridership);
+      setOptRidershipData(data.opt_ridership);
     } catch (error) {
       console.error('Error fetching ridership data:', error);
       setRidershipData(null);
+      setOptRidershipData(null)
     }
   };
 
@@ -208,66 +211,100 @@ function TransitMap({
     }
   };
 
-  const renderFixedInfoPanel = () =>
-    popupInfo && (
-      <div className="absolute w-1/6 top-3 right-3 z-10 bg-background-light/70 backdrop-blur-lg text-white rounded-2xl shadow-lg border border-zinc-800 max-w-xs overflow-hidden">
-        <div className="p-4 bg-background-dk/40">
-          {popupInfo.type === 'Point' ? (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="text-xl font-heading">Stop Information</h4>
-                <button 
-                  onClick={() => setPopupInfo(null)}
-                  className="text-zinc-400 hover:text-white"
-                  aria-label="Close"
-                >
-                  <span className="text-lg">×</span>
-                </button>
+const renderFixedInfoPanel = () =>
+  popupInfo && (
+    <div className="absolute w-[17rem] top-3 right-3 z-10 bg-gradient-to-br from-zinc-900/80 to-zinc-800/70 backdrop-blur-lg text-white rounded-2xl shadow-lg border border-zinc-700/50 max-w-xs overflow-hidden transition-all duration-300 ease-in-out">
+      <div className="p-4">
+        {popupInfo.type === 'Point' ? (
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="text-xl font-heading font-medium text-white flex items-center gap-2">
+                <span className="flex items-center justify-center bg-blue-500/20 p-1.5 rounded-full">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                Stop
+              </h4>
+              <button 
+                onClick={() => setPopupInfo(null)}
+                className="text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded-full p-1 transition-colors"
+                aria-label="Close"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-blue-500">
+                <span className="font-medium text-zinc-300 w-16">ID:</span>
+                <span className="text-white font-mono">{popupInfo.properties.stop_id}</span>
               </div>
-              <div className="text-[0.8rem] text-accent">
-                <p>
-                  <span className="font-semibold">ID:</span> {popupInfo.properties.stop_id}
-                </p>
-                <p>
-                  <span className="font-semibold">Name:</span> {popupInfo.properties.stop_name}
-                </p>
+              <div className="bg-zinc-800/50 p-2 rounded-md flex flex-col border-l-2 border-blue-500">
+                <span className="font-medium text-zinc-300 mb-0.5">Name:</span>
+                <span className="text-white">{popupInfo.properties.stop_name}</span>
               </div>
             </div>
-          ) : (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="text-xl font-heading">Route Information</h4>
-                <button 
-                  onClick={() => setPopupInfo(null)}
-                  className="text-zinc-400 hover:text-white"
-                  aria-label="Close"
-                >
-                  <span className="text-lg">×</span>
-                </button>
+          </div>
+        ) : (
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="text-xl font-heading font-medium text-white flex items-center gap-2">
+                <span className="flex items-center justify-center bg-rose-600/20 p-1.5 rounded-full">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-rose-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}/>
+                  </svg>
+                </span>
+                Route
+              </h4>
+              <button 
+                onClick={() => setPopupInfo(null)}
+                className="text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded-full p-1 transition-colors"
+                aria-label="Close"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-2 text-sm mb-3">
+              <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-rose-600">
+                <span className="font-medium font-heading text-zinc-300 w-16">ID:</span>
+                <span className="text-white font-body">{popupInfo.properties.route_id}</span>
               </div>
-              <div className="text-[0.8rem] text-accent">
-                <p>
-                  <span className="font-semibold">Route ID:</span> {popupInfo.properties.route_id}
-                </p>
-                <p>
-                  <span className="font-semibold">Name:</span> {popupInfo.properties.route_long_name}
-                </p>
+              <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-rose-600">
+                <span className="font-medium font-heading text-zinc-300 w-16">Name:</span>
+                <span className="text-white font-body">{popupInfo.properties.route_long_name}</span>
               </div>
-              <p className='mt-2'>
-                <span className="font-semibold">Average Ridership By Stop</span>
-              </p>
+            </div>
+            
+            <div className="">
+              <div className="flex items-center mb-2">
+                <span className="font-medium text-zinc-300">
+                  Ridership by Stop
+                </span>
+                {optimizedRoutes && optimizedRoutes.has(popupInfo.properties.route_id) && (
+                  <span className="ml-2 bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full">
+                    Optimized
+                  </span>
+                )}
+              </div>
               <RidershipChart 
                 routeId={popupInfo.properties.route_id} 
-                data={ridershipData || []} 
-                width={200}
+                ridership={ridershipData || []}
+                optRidership={optRidershipData || []}
+                width={250}
               />
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    );
+    </div>
+  );
 
-// Update this section to handle multi-select mode differently
+  // Update this section to handle multi-select mode differently
   const filteredFeatures = data.features.filter(feature => {
     if (feature.geometry.type === 'Point') return true;
     const routeId = feature.properties.route_id;
@@ -332,7 +369,7 @@ function TransitMap({
     const dLon = toRad(coord2[0] - coord1[0]);
     const lat1 = toRad(coord1[1]);
     const lat2 = toRad(coord2[1]);
-    const a =
+    const a =``
       Math.sin(dLat / 2) ** 2 +
       Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
@@ -452,6 +489,46 @@ function TransitMap({
   useEffect(() => {
     fetchPopulationData();
   }, []);
+
+  // Add this useEffect after your other useEffect hooks
+
+  // This effect will refetch ridership data whenever the optimization status of the selected route changes
+  useEffect(() => {
+    if (selectedRoute) {
+      // If the selected route is optimized, fetch the latest ridership data
+      fetchRidershipData(selectedRoute);
+    }
+  }, [selectedRoute, optimizedRoutes]); // Depend on both selectedRoute and optimizedRoutes
+
+  // Add this useEffect after your other useEffect hooks
+
+useEffect(() => {
+  // Only update popup when a single route is selected and not in multi-select mode
+  if (selectedRoute && !multiSelectMode) {
+    // Find the selected route in data
+    const routeFeature = data.features.find(
+      feature => 
+        feature.properties.route_id === selectedRoute && 
+        feature.geometry.type === 'LineString'
+    );
+    
+    if (routeFeature) {
+      // Set popup info for this route
+      setPopupInfo({
+        // Use the first coordinate of the route for popup positioning
+        coordinates: routeFeature.geometry.coordinates[0],
+        properties: routeFeature.properties,
+        type: 'LineString'
+      });
+      
+      // Fetch ridership data for the selected route
+      fetchRidershipData(selectedRoute);
+    }
+  } else if (!multiSelectMode) {
+    // Clear popup when no route is selected
+    setPopupInfo(null);
+  }
+}, [selectedRoute, multiSelectMode]);
 
   useEffect(() => {
     setInitialAcoParams(acoParams);
@@ -793,16 +870,48 @@ function TransitMap({
           </label>
         </div>
         
-        {/* Optimize Button - Updated for multi-route selection */}
-        <div className="mb-3">
+        {/* Optimize Button and Configure Parameters Button in one row */}
+        <div className="mb-3 flex gap-2">
           <button
             onClick={() => {
               if (multiSelectMode && effectiveSelectedRoutes.size > 0) {
                 // Optimize all selected routes
-                onOptimize(Array.from(effectiveSelectedRoutes));
+                try {
+                  const result = onOptimize(Array.from(effectiveSelectedRoutes));
+                  
+                  // Check if result is a Promise
+                  if (result && typeof result.then === 'function') {
+                    result.then(() => {
+                      if (selectedRoute) {
+                        fetchRidershipData(selectedRoute);
+                      }
+                    });
+                  } else {
+                    // If not a Promise, fetch data immediately
+                    if (selectedRoute) {
+                      fetchRidershipData(selectedRoute);
+                    }
+                  }
+                } catch (error) {
+                  console.error("Error during optimization:", error);
+                }
               } else if (selectedRoute) {
                 // Optimize single route
-                onOptimize();
+                try {
+                  const result = onOptimize(selectedRoute);
+                  
+                  // Check if result is a Promise
+                  if (result && typeof result.then === 'function') {
+                    result.then(() => {
+                      fetchRidershipData(selectedRoute);
+                    });
+                  } else {
+                    // If not a Promise, fetch data immediately
+                    fetchRidershipData(selectedRoute);
+                  }
+                } catch (error) {
+                  console.error("Error during optimization:", error);
+                }
               }
             }}
             disabled={
@@ -810,7 +919,7 @@ function TransitMap({
               (!multiSelectMode && !selectedRoute) || 
               isOptimizing
             }
-            className={`w-full py-2 px-4 rounded flex items-center justify-center gap-2 
+            className={`flex-1 py-2 px-4 rounded flex items-center justify-center gap-2 
               ${(multiSelectMode && effectiveSelectedRoutes.size === 0) || (!multiSelectMode && !selectedRoute) || isOptimizing
                 ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed' 
                 : 'bg-accent hover:bg-accent/90 text-white'}`}
@@ -826,29 +935,34 @@ function TransitMap({
             ) : (
               <>
                 <img src="/assets/icons/speed.png" alt="Speed" className="w-5 h-5" />
-                Optimize {multiSelectMode && effectiveSelectedRoutes.size > 0 ? `(${effectiveSelectedRoutes.size} routes)` : ''}
+                Optimize {multiSelectMode && effectiveSelectedRoutes.size > 0 ? `(${effectiveSelectedRoutes.size})` : ''}
               </>
             )}
           </button>
-        </div>
-        
-        {/* New Configure Parameters Button */}
-        <div className="mt-5 pt-3 border-t border-zinc-700">
-          <button
-            onClick={() => setShowParametersPopup(true)}
-            className="w-full py-2 px-4 rounded flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-white"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-            </svg>
-            Configure Parameters
-          </button>
+          
+          {/* Configure Parameters Button - Just the gear icon with tooltip */}
+          <div className="relative group">
+            <button
+              onClick={() => setShowParametersPopup(true)}
+              className="h-full aspect-square py-2 px-2 rounded bg-zinc-700 hover:bg-zinc-600 text-white flex items-center justify-center"
+              aria-label="Configure Parameters"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+              </svg>
+            </button>
+            {/* Tooltip */}
+            <div className="absolute right-0 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+              <div className="bg-zinc-800 text-white text-xs py-1 px-2 rounded shadow-lg whitespace-nowrap">
+                Configure Parameters
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
-  // Modify the renderOptimizedBanner function
   const renderOptimizedBanner = () => {
     if (!showOptimizedBanner) return null;
     
@@ -1045,6 +1159,103 @@ function TransitMap({
     );
   };
 
+  const renderRouteStopsCarousel = () => {
+    // Only show when a single route is selected and not in multi-select mode
+    if (!selectedRoute || multiSelectMode) return null;
+    
+    // Find the selected route's data
+    const routeData = optimizedRoutes && optimizedRoutes.has(selectedRoute)
+      ? optimizedRoutesData?.features.find(f => 
+          f.properties.route_id === selectedRoute && 
+          f.geometry.type === 'LineString')
+      : data.features.find(f => 
+          f.properties.route_id === selectedRoute && 
+          f.geometry.type === 'LineString');
+    
+    if (!routeData || !routeData.properties.route_stops) return null;
+    
+    // Get all stops for this route
+    const routeStops = routeData.properties.route_stops.map(stopId => {
+      return data.features.find(f => 
+        f.geometry.type === 'Point' && 
+        f.properties.stop_id === stopId
+      );
+    }).filter(stop => stop !== undefined);
+    
+    return (
+      <div className={`fixed bottom-6 ${panelOpen ? 'left-[calc(20%+24px)]' : 'left-[calc(20%+24px)]'} right-[calc(${panelOpen ? '72' : '0'}px+24px)] z-30 rounded-xl overflow-hidden bg-zinc-900/40 backdrop-blur-lg shadow-xl border border-white/10 w-1/2 transition-all duration-300`}>
+        <div className="px-5 py-4 w-full">
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex items-center gap-2">
+              <div className="bg-rose-600/20 p-1.5 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-rose-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}/>
+                </svg>
+              </div>
+              <span className="text-white font-bold text-lg font-heading">
+                Route {selectedRoute}: {routeData.properties.route_long_name}
+              </span>
+              {optimizedRoutes && optimizedRoutes.has(selectedRoute) && (
+                <span className="ml-2 bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full">
+                  Optimized
+                </span>
+              )}
+            </div>
+            <button 
+              onClick={() => setSelectedRoute(null)} 
+              className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-1.5 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="overflow-x-auto pb-2 custom-scrollbar">
+            <div className="flex gap-3">
+              {routeStops.map((stop, index) => (
+                <div 
+                  key={stop.properties.stop_id} 
+                  className="flex-shrink-0 bg-white/10 backdrop-blur-md border border-white/10 rounded-md px-3 py-2 min-w-[160px] cursor-pointer hover:bg-white/15 transition-colors"
+                  onClick={() => {
+                    setPopupInfo({
+                      coordinates: stop.geometry.coordinates,
+                      properties: stop.properties,
+                      type: 'Point',
+                    });
+                    
+                    // Center map on this stop
+                    if (mapRef.current) {
+                      mapRef.current.getMap().flyTo({
+                        center: stop.geometry.coordinates,
+                        zoom: 15,
+                        duration: 1000
+                      });
+                    }
+                  }}
+                >
+                  <div className="flex items-center">
+                    <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center mr-2 text-xs text-white font-bold">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <div className="text-white font-medium text-sm truncate max-w-[120px]">
+                        {stop.properties.stop_name}
+                      </div>
+                      <div className="text-white/60 text-xs">
+                        ID: {stop.properties.stop_id}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <Map
@@ -1069,7 +1280,8 @@ function TransitMap({
         {renderPanel()}
       </Map>
       
-      {/* Add the parameters popup */}
+      {/* Add the route stops carousel here */}
+      {renderRouteStopsCarousel()}
       {renderParametersPopup()}
     </>
   );
