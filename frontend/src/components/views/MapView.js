@@ -41,8 +41,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   // Add multiSelectMode state here
   const [multiSelectMode, setMultiSelectMode] = useState(false);
 
-  // Add state to track routes that have converged early
-  const [earlyConvergedRoutes, setEarlyConvergedRoutes] = useState(new Set());
+  // Add state to track routes that have converged
+  const [convergedRoutes, setConvergedRoutes] = useState(new Set());
 
   // Add state to track if the route carousel is visible
   const [isRouteCarouselVisible, setIsRouteCarouselVisible] = useState(false);
@@ -155,8 +155,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setCurrentEvaluation(null);
       setWebsocketData(null);
       
-      // Clear previously tracked early converged routes
-      setEarlyConvergedRoutes(new Set());
+      // Clear previously tracked converged routes
+      setConvergedRoutes(new Set());
 
       // Create WebSocket connection with unified endpoint
       const routeIdsParam = routesToOptimize.join(',');
@@ -203,22 +203,12 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             console.warn(`Optimization warning: ${data.warning}`);
           }
           
-          // Handle truly converged routes - more accurate convergence detection
-          if (data.truly_converged && data.truly_converged_route) {
-            console.info(`Route ${data.truly_converged_route} has truly converged to optimal solution`);
-            setEarlyConvergedRoutes(prev => {
+          // Handle converged routes
+          if (data.converged && data.converged_route) {
+            console.info(`Route ${data.converged_route} has converged to optimal solution`);
+            setConvergedRoutes(prev => {
               const newSet = new Set(prev);
-              newSet.add(data.truly_converged_route);
-              return newSet;
-            });
-          }
-          
-          // Handle early convergence notification (legacy support) 
-          else if (data.early_convergence && data.current_route) {
-            console.info(`Route ${data.current_route} converged early to optimal solution`);
-            setEarlyConvergedRoutes(prev => {
-              const newSet = new Set(prev);
-              newSet.add(data.current_route);
+              newSet.add(data.converged_route);
               return newSet;
             });
           }
@@ -477,7 +467,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           setUseLiveOptimization={setUseLiveOptimization}
           optimizedRoutes={optimizedRoutes}
           websocketData={websocketData}
-          earlyConvergedRoutes={earlyConvergedRoutes}
+          convergedRoutes={convergedRoutes}
           // Add map control props
           mapStyle={mapStyle}
           show3DRoutes={show3DRoutes}
@@ -525,7 +515,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             optimizationProgress={optimizationProgress}
             selectedRoutes={selectedRoutes}
             websocketData={websocketData}
-            earlyConvergedRoutes={earlyConvergedRoutes}
+            convergedRoutes={convergedRoutes}
             onCancel={cancelOptimization}
           />
         </div>

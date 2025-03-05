@@ -6,9 +6,6 @@ import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
 import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt } from 'react-icons/fa';
 
-// Remove the OptimizationProgress import
-// import OptimizationProgress from './OptimizationProgress';
-
 // Update function parameters to include optimizedRoutes
 function Sidebar({ 
   data, 
@@ -163,8 +160,6 @@ function Sidebar({
           disabled={selectedRoutes?.size === 0 || isOptimizing}
           isLoading={isOptimizing}
         />
-        
-        {/* Remove OptimizationProgress component from here */}
         
         {/* Show error message if optimization failed */}
         {optimizationError && (

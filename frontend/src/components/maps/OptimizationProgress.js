@@ -5,8 +5,8 @@ export default function OptimizationProgress({
   optimizationProgress,
   selectedRoutes,
   websocketData,
-  earlyConvergedRoutes,
-  onCancel // Add cancel function prop
+  convergedRoutes,
+  onCancel
 }) {
   // If not optimizing, don't show anything
   if (!isOptimizing) return null;
@@ -26,8 +26,8 @@ export default function OptimizationProgress({
       routes_count,
       route_iteration,
       iterations_per_route,
-      truly_converged,
-      truly_converged_route,
+      converged,
+      converged_route,
       converged_routes,
       optimize_attempts,
       all_route_ids,
@@ -47,10 +47,8 @@ export default function OptimizationProgress({
           const routeId = all_route_ids[i];
           const isCurrentRoute = i === current_route_index;
           
-          // A route is only truly converged if the backend has marked it as such
-          // or if it's in our earlyConvergedRoutes set (for backward compatibility)
-          const hasConverged = (converged_routes && converged_routes[i]) || 
-                               (earlyConvergedRoutes && earlyConvergedRoutes.has(routeId));
+          // A route is converged if the backend has marked it as such
+          const hasConverged = converged_routes && converged_routes[i];
           
           // Show how many optimization attempts have been made
           const attemptCount = optimize_attempts ? optimize_attempts[i] : 0;
@@ -79,7 +77,7 @@ export default function OptimizationProgress({
         routeStatusElements.push(
           <div key={current_route} className="text-xs mb-2 font-bold">
             Route {current_route_index + 1}/{routes_count}: {current_route}
-            {truly_converged && truly_converged_route === current_route ? (
+            {converged && converged_route === current_route ? (
               <span className="ml-2 text-green-400 font-semibold">
                 ✓ Converged
               </span>

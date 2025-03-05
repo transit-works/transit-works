@@ -560,11 +560,11 @@ impl OptimizationWs {
                     }
                     None => {
                         println!(
-                            "Failed to optimize route {} - marking as truly converged",
+                            "Failed to optimize route {} - marking as converged",
                             route_id
                         );
 
-                        // Mark this route as permanently converged
+                        // Mark this route as converged
                         self.converged_routes[current_route_index] = true;
 
                         // No optimization was performed, but we need to send a message to the client
@@ -581,9 +581,9 @@ impl OptimizationWs {
                             "iterations_per_route": self.iterations_per_route,
                             "converged_routes": self.converged_routes.clone(), // Include which routes have converged
                             "optimize_attempts": self.optimize_attempts_per_route.clone(),
-                            "truly_converged": true,
-                            "truly_converged_route": route_id,
-                            "truly_converged_route_index": current_route_index
+                            "converged": true,
+                            "converged_route": route_id,
+                            "converged_route_index": current_route_index
                         });
 
                         ctx.text(serde_json::to_string(&convergence_msg).unwrap());
