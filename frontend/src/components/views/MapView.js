@@ -172,15 +172,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             setOptimizationProgress(progress);
             console.log(`Optimization progress: ${progress}% (iteration ${data.iteration}/${data.total_iterations})`);
             
-            // If this is the last iteration, make sure we mark optimization as complete
+            // If this is the last iteration, mark optimization as complete
             if (data.iteration === data.total_iterations) {
-              // Add to optimized routes set
-              setOptimizedRoutes(prev => {
-                const newSet = new Set(prev);
-                routesToOptimize.forEach(route => newSet.add(route));
-                return newSet;
-              });
-              
               // Set isOptimizing to false since we're done
               setIsOptimizing(false);
             }
@@ -202,6 +195,14 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           // Update map with latest optimized routes
           if (data.geojson) {
             setOptimizedRoutesData(data.geojson);
+            
+            // Mark routes as optimized as soon as we get any valid geojson data
+            // This ensures routes are considered optimized even if all iterations don't complete
+            setOptimizedRoutes(prev => {
+              const newSet = new Set(prev);
+              routesToOptimize.forEach(route => newSet.add(route));
+              return newSet;
+            });
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
