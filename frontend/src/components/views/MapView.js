@@ -369,6 +369,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           currentEvaluation={currentEvaluation}
           useLiveOptimization={useLiveOptimization}
           setUseLiveOptimization={setUseLiveOptimization}
+          // Add optimizedRoutes prop
+          optimizedRoutes={optimizedRoutes}
           // Add map control props
           mapStyle={mapStyle}
           show3DRoutes={show3DRoutes}

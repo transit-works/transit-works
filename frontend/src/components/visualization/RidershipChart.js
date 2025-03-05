@@ -1,15 +1,17 @@
 'use client';
 
 import { useMemo, useRef, useEffect, useState } from 'react';
-import { Bar } from '@visx/shape';
 import { Group } from '@visx/group';
+import { curveBasis } from '@visx/curve';
+import { LinePath } from '@visx/shape';
+import { Threshold } from '@visx/threshold';
 import { scaleBand, scaleLinear } from '@visx/scale';
 import { AxisBottom, AxisLeft } from '@visx/axis';
-import { GridRows } from '@visx/grid';
+import { GridRows, GridColumns } from '@visx/grid';
 import { useTooltip } from '@visx/tooltip';
 import { LinearGradient } from '@visx/gradient';
 
-export default function RidershipChart({ data, width = 250, height = 160 }) {
+export default function RidershipChart({ ridership = [], optRidership = [], width = 250, height = 160 }) {
   const [dimensions, setDimensions] = useState({ width, height });
   const containerRef = useRef(null);
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop } = useTooltip();
@@ -31,32 +33,48 @@ export default function RidershipChart({ data, width = 250, height = 160 }) {
     
     resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
-  }, []);
+  }, [height, width]);
 
   // Graph dimensions and margins
-  const margin = { top: 20, right: 0, bottom: 40, left: 30 }; // Reduced left margin
+  const margin = { top: 20, right: 10, bottom: 40, left: 40 };
   const innerWidth = dimensions.width - margin.left - margin.right;
   const innerHeight = dimensions.height - margin.top - margin.bottom;
+
+  // Format data for display
+  const data = useMemo(() => {
+    return ridership.map((value, index) => ({
+      index,
+      ridership: value,
+      optRidership: optRidership[index] || 0
+    }));
+  }, [ridership, optRidership]);
 
   // Scales
   const xScale = useMemo(() => {
     return scaleBand({
       range: [0, innerWidth],
-      domain: data.map((_, i) => i),
+      domain: data.map(d => d.index),
       padding: 0.2
     });
   }, [innerWidth, data]);
 
   const yScale = useMemo(() => {
-    const maxValue = Math.max(...data);
+    const allValues = [...ridership, ...optRidership.filter(v => v !== undefined)];
+    const maxValue = Math.max(...allValues);
     return scaleLinear({
       range: [innerHeight, 0],
       domain: [0, maxValue + (maxValue * 0.1)], // Add 10% padding at the top
       nice: true
     });
-  }, [innerHeight, data]);
+  }, [innerHeight, ridership, optRidership]);
 
-  if (!data || data.length === 0) {
+  // Add null check to prevent TypeError when d is undefined
+  const getX = d => {
+    if (!d) return 0;
+    return xScale(d.index) + xScale.bandwidth() / 2;
+  };
+  
+  if (!ridership || ridership.length === 0) {
     return <div className="flex items-center justify-center w-full h-[150px] text-white">No data available</div>;
   }
 
@@ -64,12 +82,36 @@ export default function RidershipChart({ data, width = 250, height = 160 }) {
     <div className="relative" ref={containerRef}>
       <svg width={dimensions.width} height={dimensions.height}>
         <LinearGradient
-          id="bar-gradient"
+          id="ridership-gradient"
           from="#CC0050"
-          to="#ffa826"
+          to="#ff4080"
           vertical={false}
         />
-        <rect width={dimensions.width} height={dimensions.height} fill="rgb(24 24 27 / 0%)" rx={4} />
+        <LinearGradient
+          id="opt-gradient"
+          from="#00CC50" 
+          to="#40ff80"   
+          vertical={false}
+        />
+        {/* Add separate gradients for the threshold areas */}
+        <LinearGradient
+          id="worse-gradient"
+          from="rgba(204, 0, 80, 0.7)"
+          to="rgba(204, 0, 80, 0.5)"
+          vertical={false}
+        />
+        <LinearGradient
+          id="better-gradient"
+          from="rgba(0, 204, 80, 0.7)"
+          to="rgba(0, 204, 80, 0.5)"
+          vertical={false}
+        />
+        <rect 
+          width={dimensions.width} 
+          height={dimensions.height} 
+          fill="rgb(24 24 27 / 0%)" 
+          rx={4} 
+        />
         <Group left={margin.left} top={margin.top}>
           <GridRows
             scale={yScale}
@@ -78,9 +120,16 @@ export default function RidershipChart({ data, width = 250, height = 160 }) {
             stroke="#374151"
             strokeOpacity={0.6}
           />
+          <GridColumns
+            scale={xScale}
+            height={innerHeight}
+            strokeDasharray="2,2"
+            stroke="#374151"
+            strokeOpacity={0.3}
+          />
           <AxisLeft
             scale={yScale}
-            numTicks={4}  // Set this to 3-5 for good spacing
+            numTicks={4}
             tickStroke="#374151"
             stroke="#374151"
             tickLabelProps={() => ({
@@ -107,33 +156,88 @@ export default function RidershipChart({ data, width = 250, height = 160 }) {
               dy: '0.75em',
             })}
           />
-          {data.map((d, i) => {
-            const barWidth = xScale.bandwidth();
-            const barHeight = innerHeight - yScale(d);
-            const barX = xScale(i);
-            const barY = yScale(d);
-            
-            return (
-              <Bar
-                key={`bar-${i}`}
-                x={barX}
-                y={barY}
-                width={barWidth}
-                height={barHeight}
-                fill="url(#bar-gradient)"
-                onMouseLeave={hideTooltip}
-                onMouseMove={() => {
-                  showTooltip({
-                    tooltipData: d,
-                    tooltipLeft: barX + barWidth / 2,
-                    tooltipTop: barY - 10,
-                  });
-                }}
-              />
-            );
-          })}
+          
+          {/* Threshold area for worse performance (red) - where current is higher than optimized */}
+          <Threshold
+            id={`ridership-threshold-worse`}
+            data={data.filter(d => (d.ridership || 0) > (d.optRidership || 0))}
+            x={d => getX(d)}
+            y0={d => yScale(d.optRidership || 0)}
+            y1={d => yScale(d.ridership || 0)}
+            clipAboveTo={0}
+            clipBelowTo={innerHeight}
+            belowAreaProps={{
+              fill: 'url(#worse-gradient)',
+              fillOpacity: 0.7,
+            }}
+          />
+          
+          {/* Threshold area for better performance (green) - where optimized is higher than current */}
+          <Threshold
+            id={`ridership-threshold-better`}
+            data={data.filter(d => (d.optRidership || 0) > (d.ridership || 0))}
+            x={d => getX(d)}
+            y0={d => yScale(d.ridership || 0)}
+            y1={d => yScale(d.optRidership || 0)}
+            clipAboveTo={0}
+            clipBelowTo={innerHeight}
+            belowAreaProps={{
+              fill: 'url(#better-gradient)',
+              fillOpacity: 0.7,
+            }}
+          />
+          
+          {/* Optimized ridership line - drawn FIRST (underneath) */}
+          <LinePath
+            data={data}
+            x={d => getX(d)}
+            y={d => yScale(d.optRidership || 0)}
+            stroke="url(#opt-gradient)"
+            strokeWidth={2}
+            strokeOpacity={0.8}
+            curve={curveBasis}
+          />
+          
+          {/* Original ridership line - drawn LAST (on top) */}
+          <LinePath
+            data={data}
+            x={d => getX(d)}
+            y={d => yScale(d.ridership || 0)}
+            stroke="url(#ridership-gradient)"
+            strokeWidth={2}
+            strokeOpacity={0.8}
+            curve={curveBasis}
+            onTouchStart={(event, d) => {
+              if (!d) return;
+              hideTooltip();
+              showTooltip({
+                tooltipData: d,
+                tooltipLeft: getX(d),
+                tooltipTop: yScale(d.ridership || 0) - 10,
+              });
+            }}
+            onTouchMove={(event, d) => {
+              if (!d) return;
+              showTooltip({
+                tooltipData: d,
+                tooltipLeft: getX(d),
+                tooltipTop: yScale(d.ridership || 0) - 10,
+              });
+            }}
+            onMouseMove={(event, d) => {
+              if (!d) return;
+              showTooltip({
+                tooltipData: d,
+                tooltipLeft: getX(d),
+                tooltipTop: yScale(d.ridership || 0) - 10,
+              });
+            }}
+            onMouseLeave={() => hideTooltip()}
+            onTouchEnd={() => hideTooltip()}
+          />
         </Group>
       </svg>
+      
       {tooltipData && (
         <div
           className="absolute bg-black/85 text-white p-2 rounded text-sm pointer-events-none"
@@ -143,7 +247,8 @@ export default function RidershipChart({ data, width = 250, height = 160 }) {
             transform: 'translate(-50%, -100%)'
           }}
         >
-          <strong>Riders: {tooltipData}</strong>
+          <div>Current: {tooltipData.ridership}</div>
+          <div>Optimized: {tooltipData.optRidership}</div>
         </div>
       )}
     </div>
