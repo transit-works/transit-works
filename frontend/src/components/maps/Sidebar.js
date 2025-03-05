@@ -8,8 +8,8 @@ import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt } from 'react-icons/fa';
 
 function Sidebar({ 
   data, 
-  selectedRoute, 
-  setSelectedRoute, 
+  selectedRoutes,
+  setSelectedRoutes,
   onOptimize, 
   isOptimizing, 
   optimizationError,
@@ -131,8 +131,8 @@ function Sidebar({
         <div className="custom-scrollbar-container my-2 max-h-[calc(100vh-300px)] overflow-y-auto rounded-2xl border border-zinc-800 bg-background-dk px-2 pb-2 custom-scrollbar">
           <RouteList
             data={data}
-            selectedRoute={selectedRoute}
-            setSelectedRoute={setSelectedRoute}
+            selectedRoutes={selectedRoutes}
+            setSelectedRoutes={setSelectedRoutes}
           />
         </div>
         
@@ -141,9 +141,16 @@ function Sidebar({
           text={isOptimizing ? "Optimizing..." : "Optimize"}
           imageSrc="/assets/icons/speed.png"
           onClick={onOptimize}
-          disabled={!selectedRoute || isOptimizing}
+          disabled={selectedRoutes?.size === 0 || isOptimizing}
           isLoading={isOptimizing}
         />
+        
+        {/* Show number of selected routes */}
+        {selectedRoutes?.size > 0 && (
+          <div className="mt-1 text-xs text-white text-center">
+            {selectedRoutes.size} route{selectedRoutes.size > 1 ? 's' : ''} selected
+          </div>
+        )}
         
         {/* Show error message if optimization failed */}
         {optimizationError && (

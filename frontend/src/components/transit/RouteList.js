@@ -1,6 +1,18 @@
-function RouteList({ data, selectedRoute, setSelectedRoute }) {
+function RouteList({ data, selectedRoutes, setSelectedRoutes }) {
   const handleClick = (id) => {
-    setSelectedRoute((prevSelectedRoute) => (prevSelectedRoute === id ? null : id));
+    setSelectedRoutes((prevSelectedRoutes) => {
+      // Create a new Set from previous selections
+      const newSelectedRoutes = new Set(prevSelectedRoutes);
+      
+      // Toggle the selection
+      if (newSelectedRoutes.has(id)) {
+        newSelectedRoutes.delete(id);
+      } else {
+        newSelectedRoutes.add(id);
+      }
+      
+      return newSelectedRoutes;
+    });
   };
 
   return (
@@ -14,7 +26,7 @@ function RouteList({ data, selectedRoute, setSelectedRoute }) {
         ?.filter((feature) => feature.geometry.type !== 'Point')
         .map((route) => {
           const { route_id, route_short_name, route_long_name } = route.properties;
-          const isSelected = selectedRoute === route_id;
+          const isSelected = selectedRoutes?.has(route_id);
 
           return (
             <div key={route_id} className="flex w-full items-center text-left">

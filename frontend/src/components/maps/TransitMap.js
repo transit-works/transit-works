@@ -45,8 +45,10 @@ const busScale = [8, 4, 8];
 
 function TransitMap({ 
   data, 
-  selectedRoute, 
-  setSelectedRoute, 
+  selectedRoute: propsSelectedRoute, 
+  setSelectedRoute: propsSetSelectedRoute, 
+  selectedRoutes,
+  setSelectedRoutes,
   optimizedRoutesData,
   optimizedRoutes, 
   resetOptimization,
@@ -57,12 +59,14 @@ function TransitMap({
   currentEvaluation,
   onOptimize,
   optimizationError,
-  // Add these props
   mapStyle,
   show3DRoutes,
   useRandomColors,
   showPopulationHeatmap
 }) {
+  // Add the missing mapRef
+  const mapRef = useRef(null);
+  
   // Keep other internal state that doesn't need to be shared
   const [popupInfo, setPopupInfo] = useState(null);
   const [busPositions, setBusPositions] = useState(new window.Map());
@@ -71,10 +75,20 @@ function TransitMap({
   const [routeColorMap, setRouteColorMap] = useState({});
   const [ridershipData, setRidershipData] = useState(null);
   const [populationData, setPopulationData] = useState(null);
+  
+  // Add local state for selectedRoute if not provided in props
+  const [localSelectedRoute, setLocalSelectedRoute] = useState(null);
+  
+  // Use either the prop or local state
+  const selectedRoute = propsSelectedRoute || localSelectedRoute;
+  const setSelectedRoute = propsSetSelectedRoute || setLocalSelectedRoute;
+  
   // Add new state for multi-route selection
   const [multiSelectMode, setMultiSelectMode] = useState(false);
-  const [selectedRoutes, setSelectedRoutes] = useState(new Set());
-  const mapRef = useRef(null);
+  // If selectedRoutes is not provided, create a local version
+  const [localSelectedRoutes, setLocalSelectedRoutes] = useState(new Set());
+  const effectiveSelectedRoutes = selectedRoutes || localSelectedRoutes;
+  const effectiveSetSelectedRoutes = setSelectedRoutes || setLocalSelectedRoutes;
 
   // Add these new state variables at the top of your component
   const [showOptimizedBanner, setShowOptimizedBanner] = useState(false);
@@ -144,7 +158,7 @@ function TransitMap({
         
         if (multiSelectMode) {
           // In multi-select mode, toggle the route in the selection set
-          setSelectedRoutes(prevSelectedRoutes => {
+          effectiveSetSelectedRoutes(prevSelectedRoutes => {
             const newSelectedRoutes = new Set(prevSelectedRoutes);
             if (newSelectedRoutes.has(routeId)) {
               newSelectedRoutes.delete(routeId);
@@ -169,7 +183,7 @@ function TransitMap({
           );
           
           // Clear the multi-select set if we're not in multi-select mode
-          setSelectedRoutes(new Set());
+          effectiveSetSelectedRoutes(new Set());
           
           // Fetch ridership data when a route is selected
           fetchRidershipData(routeId);
@@ -319,7 +333,7 @@ function TransitMap({
     
     // Determine which routes to animate - all selected routes in multi-select mode
     const routesToAnimate = multiSelectMode 
-      ? Array.from(selectedRoutes) 
+      ? Array.from(effectiveSelectedRoutes) 
       : (selectedRoute ? [selectedRoute] : []);
       
     // Clean up any buses for routes no longer selected
@@ -422,7 +436,7 @@ function TransitMap({
       // Cancel all animation frames when cleaning up
       animationFrames.forEach(frameId => cancelAnimationFrame(frameId));
     };
-  }, [selectedRoutes, selectedRoute, multiSelectMode, data, optimizedRoutes, optimizedRoutesData]);
+  }, [effectiveSelectedRoutes, selectedRoute, multiSelectMode, data, optimizedRoutes, optimizedRoutesData]);
 
   useEffect(() => {
     fetchPopulationData();
@@ -489,7 +503,7 @@ function TransitMap({
         const routeId = d.properties.route_id;
         
         // In multi-select mode, highlight selected routes
-        if (multiSelectMode && selectedRoutes.has(routeId)) {
+        if (multiSelectMode && effectiveSelectedRoutes.has(routeId)) {
           return [30, 144, 255, 220]; // Blue for selected routes in multi-select (changed from orange)
         }
         
@@ -504,7 +518,7 @@ function TransitMap({
       getLineWidth: d => {
         const routeId = d.properties.route_id;
         // Make selected routes slightly wider in multi-select mode
-        return (multiSelectMode && selectedRoutes.has(routeId)) ? 3 : 2;
+        return (multiSelectMode && effectiveSelectedRoutes.has(routeId)) ? 3 : 2;
       },
       lineWidthMinPixels: 2,
       lineWidthScale: 10,
@@ -605,7 +619,7 @@ function TransitMap({
       let color;
       
       // Multi-select mode - highlight selected routes with blue
-      if (multiSelectMode && selectedRoutes.has(routeId)) {
+      if (multiSelectMode && effectiveSelectedRoutes.has(routeId)) {
         color = [30, 144, 255, 220]; // Blue for selected routes (changed from orange)
       }
       // Check if optimized 
@@ -751,17 +765,17 @@ function TransitMap({
         </div>
         
         {/* Selected Routes Display (only in multi-select mode) */}
-        {multiSelectMode && selectedRoutes.size > 0 && (
+        {multiSelectMode && effectiveSelectedRoutes.size > 0 && (
           <div className="mb-3 py-2 px-3 bg-zinc-800/70 rounded-md">
             <div className="text-sm mb-2">Selected Routes:</div>
             <div className="flex flex-wrap gap-1">
-              {Array.from(selectedRoutes).map(routeId => (
+              {Array.from(effectiveSelectedRoutes).map(routeId => (
                 <span key={routeId} className="text-xs bg-zinc-700 px-2 py-1 rounded-full flex items-center">
                   {routeId}
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedRoutes(prev => {
+                      effectiveSetSelectedRoutes(prev => {
                         const newSet = new Set(prev);
                         newSet.delete(routeId);
                         return newSet;
@@ -795,21 +809,21 @@ function TransitMap({
         <div className="mb-3">
           <button
             onClick={() => {
-              if (multiSelectMode && selectedRoutes.size > 0) {
+              if (multiSelectMode && effectiveSelectedRoutes.size > 0) {
                 // Optimize all selected routes
-                onOptimize(Array.from(selectedRoutes));
+                onOptimize(Array.from(effectiveSelectedRoutes));
               } else if (selectedRoute) {
                 // Optimize single route
                 onOptimize();
               }
             }}
             disabled={
-              (multiSelectMode && selectedRoutes.size === 0) || 
+              (multiSelectMode && effectiveSelectedRoutes.size === 0) || 
               (!multiSelectMode && !selectedRoute) || 
               isOptimizing
             }
             className={`w-full py-2 px-4 rounded flex items-center justify-center gap-2 
-              ${(multiSelectMode && selectedRoutes.size === 0) || (!multiSelectMode && !selectedRoute) || isOptimizing
+              ${(multiSelectMode && effectiveSelectedRoutes.size === 0) || (!multiSelectMode && !selectedRoute) || isOptimizing
                 ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed' 
                 : 'bg-accent hover:bg-accent/90 text-white'}`}
           >
@@ -824,7 +838,7 @@ function TransitMap({
             ) : (
               <>
                 <img src="/assets/icons/speed.png" alt="Speed" className="w-5 h-5" />
-                Optimize {multiSelectMode && selectedRoutes.size > 0 ? `(${selectedRoutes.size} routes)` : ''}
+                Optimize {multiSelectMode && effectiveSelectedRoutes.size > 0 ? `(${effectiveSelectedRoutes.size} routes)` : ''}
               </>
             )}
           </button>
