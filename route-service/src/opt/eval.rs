@@ -213,7 +213,27 @@ pub fn get_route_demand_population_info(route_stops: &Vec<Arc<TransitStop>>) {
 /// Function to evaluate the coverage of a route
 /// Coverage is calculated using the ratio of the ridership over the sum population around a 400m radius of each stop
 pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) -> f64 {
-    
+    let mut curr_populations = 0.0;
+    let mut total_population = 0.0;
+    for stop in route_stops{
+        let (x, y) = (stop.geom.x(), stop.geom.y());
+        let node = od.find_nearest_zone(x, y);
+        if node.is_none(){
+            continue;
+        }
+        let zone = od.get_zone(node.unwrap());
+        curr_populations += zone.population as f64;
+        let env = geo_util::compute_envelope(y, x, 400.0);
+        let nodes_in_envelope = od.rtree.locate_in_envelope_intersecting(&env);
+        let mut total_population_stop = 0.0;
+        for n in nodes_in_envelope{
+            let z = od.get_zone(n.get_node_index());
+            total_population_stop += z.population as f64;
+        }
+        total_population += total_population_stop * 0.6;
+    }
+
+    curr_populations / total_population * 100.0
 }
 
 pub fn evaluate_network_coverage(
@@ -223,7 +243,6 @@ pub fn evaluate_network_coverage(
     let mut total_coverage = 0.0;
     for route in &transit.routes {
         let coverage = evaluate_coverage(&route.outbound_stops, od);
-        println!("Route {} coverage: {}", route.route_id, coverage);
         total_coverage += coverage;
     }
 
