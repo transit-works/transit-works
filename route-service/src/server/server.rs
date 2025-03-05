@@ -376,12 +376,14 @@ struct OptimizationWs {
     current_route_index: usize, // Track which route we're currently optimizing
     iterations_per_route: usize, // Number of iterations to run per route
     converged_routes: Vec<bool>, // Track which routes have converged
+    optimize_attempts_per_route: Vec<usize>, // Track optimization attempts for each route
 }
 
 impl OptimizationWs {
     fn new(app_state: web::Data<AppState>, route_ids: Vec<String>) -> Self {
         let iterations_per_route = 10; // 10 iterations per route
         let total_iterations = iterations_per_route * route_ids.len(); // Total iterations across all routes
+        let routes_count = route_ids.len();
 
         Self {
             app_state,
@@ -391,7 +393,8 @@ impl OptimizationWs {
             heartbeat: Instant::now(),
             current_route_index: 0, // Start with the first route
             iterations_per_route,
-            converged_routes: vec![false; route_ids.len()], // Initialize all routes as not converged
+            converged_routes: vec![false; routes_count], // Initialize all routes as not converged
+            optimize_attempts_per_route: vec![0; routes_count], // Initialize optimization attempts count
         }
     }
 
@@ -446,7 +449,10 @@ impl OptimizationWs {
                         "message": "All routes have converged to optimal solutions",
                         "iteration": self.total_iterations,
                         "total_iterations": self.total_iterations,
-                        "all_converged": true
+                        "all_converged": true,
+                        "early_completion": true,
+                        "converged_routes": self.converged_routes.clone(),
+                        "optimize_attempts": self.optimize_attempts_per_route.clone()
                     }))
                     .unwrap(),
                 );
@@ -534,6 +540,9 @@ impl OptimizationWs {
             if let Some(route) = route {
                 // Create ACO instance for this optimization iteration
                 let aco = aco2::ACO::init();
+                
+                // Increment the optimization attempt counter for this route
+                self.optimize_attempts_per_route[current_route_index] += 1;
 
                 match aco2::run_aco(aco, &route, &city) {
                     Some((opt_route, eval)) => {
@@ -551,7 +560,7 @@ impl OptimizationWs {
                     }
                     None => {
                         println!(
-                            "Failed to optimize route {} - likely reached optimal solution",
+                            "Failed to optimize route {} - marking as converged",
                             route_id
                         );
 
@@ -571,7 +580,10 @@ impl OptimizationWs {
                             "route_iteration": route_iteration, // Current iteration number for this route
                             "iterations_per_route": self.iterations_per_route,
                             "converged_routes": self.converged_routes.clone(), // Include which routes have converged
-                            "early_convergence": true
+                            "optimize_attempts": self.optimize_attempts_per_route.clone(),
+                            "converged": true,
+                            "converged_route": route_id,
+                            "converged_route_index": current_route_index
                         });
 
                         ctx.text(serde_json::to_string(&convergence_msg).unwrap());
@@ -600,6 +612,7 @@ impl OptimizationWs {
                     "route_iteration": route_iteration,
                     "iterations_per_route": self.iterations_per_route,
                     "converged_routes": self.converged_routes.clone(),
+                    "optimize_attempts": self.optimize_attempts_per_route.clone(),
                     "optimized_routes": optimized_count
                 });
 

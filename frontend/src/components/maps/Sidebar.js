@@ -5,7 +5,6 @@ import RouteList from '@/components/transit/RouteList';
 import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
 import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt } from 'react-icons/fa';
-import OptimizationProgress from './OptimizationProgress';
 
 // Update function parameters to include optimizedRoutes
 function Sidebar({ 
@@ -160,15 +159,6 @@ function Sidebar({
           onClick={onOptimize}
           disabled={selectedRoutes?.size === 0 || isOptimizing}
           isLoading={isOptimizing}
-        />
-        
-        {/* Replace simple progress bar with the enhanced component */}
-        <OptimizationProgress 
-          isOptimizing={isOptimizing}
-          optimizationProgress={optimizationProgress}
-          selectedRoutes={selectedRoutes}
-          websocketData={websocketData}
-          earlyConvergedRoutes={earlyConvergedRoutes}
         />
         
         {/* Show error message if optimization failed */}

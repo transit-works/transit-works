@@ -41,8 +41,11 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   // Add multiSelectMode state here
   const [multiSelectMode, setMultiSelectMode] = useState(false);
 
-  // Add state to track routes that have converged early
-  const [earlyConvergedRoutes, setEarlyConvergedRoutes] = useState(new Set());
+  // Add state to track routes that have converged
+  const [convergedRoutes, setConvergedRoutes] = useState(new Set());
+
+  // Add state to track if the route carousel is visible
+  const [isRouteCarouselVisible, setIsRouteCarouselVisible] = useState(false);
 
   // Map control toggle functions
   const toggleMapStyle = () => {
@@ -151,6 +154,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setOptimizationProgress(0);
       setCurrentEvaluation(null);
       setWebsocketData(null);
+      
+      // Clear previously tracked converged routes
+      setConvergedRoutes(new Set());
 
       // Create WebSocket connection with unified endpoint
       const routeIdsParam = routesToOptimize.join(',');
@@ -197,12 +203,12 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             console.warn(`Optimization warning: ${data.warning}`);
           }
           
-          // Handle early convergence notification - store it persistently
-          if (data.early_convergence && data.current_route) {
-            console.info(`Route ${data.current_route} converged early to optimal solution`);
-            setEarlyConvergedRoutes(prev => {
+          // Handle converged routes
+          if (data.converged && data.converged_route) {
+            console.info(`Route ${data.converged_route} has converged to optimal solution`);
+            setConvergedRoutes(prev => {
               const newSet = new Set(prev);
-              newSet.add(data.current_route);
+              newSet.add(data.converged_route);
               return newSet;
             });
           }
@@ -230,7 +236,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             }
             
             // If this is the last iteration, mark optimization as complete
-            if (data.iteration === data.total_iterations) {
+            if (data.iteration === data.total_iterations || data.early_completion) {
               // Set isOptimizing to false since we're done
               setIsOptimizing(false);
             }
@@ -317,6 +323,16 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     } else {
       handleOptimize();
     }
+  };
+
+  // Add a cancel optimization function to close the websocket
+  const cancelOptimization = () => {
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      console.log('Cancelling optimization by closing WebSocket connection');
+      wsRef.current.close();
+    }
+    setIsOptimizing(false);
+    setOptimizationError(null);
   };
 
   // Clean up WebSocket on component unmount
@@ -426,6 +442,12 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     fetchOptimizedRoutes();
   }, []);
 
+  // Listen for route selection to determine if carousel should be visible
+  useEffect(() => {
+    // Carousel shows when a single route is selected and not in multi-select mode
+    setIsRouteCarouselVisible(!!selectedRoute && !multiSelectMode);
+  }, [selectedRoute, multiSelectMode]);
+
   return (
     <div className="flex h-screen">
       <div className="relative z-10 h-full w-1/5 rounded-2xl bg-background-dk bg-opacity-20 backdrop-blur-lg">
@@ -445,7 +467,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           setUseLiveOptimization={setUseLiveOptimization}
           optimizedRoutes={optimizedRoutes}
           websocketData={websocketData}
-          earlyConvergedRoutes={earlyConvergedRoutes}
+          convergedRoutes={convergedRoutes}
           // Add map control props
           mapStyle={mapStyle}
           show3DRoutes={show3DRoutes}
@@ -483,7 +505,20 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           showPopulationHeatmap={showPopulationHeatmap}
           acoParams={acoParams}
           setAcoParams={setAcoParams}
+          setIsRouteCarouselVisible={setIsRouteCarouselVisible}
         />
+
+        {/* Update the floating OptimizationProgress component position to bottom left with higher z-index */}
+        <div className={`absolute ${isRouteCarouselVisible ? 'bottom-48' : 'bottom-6'} left-[calc(20%+24px)] z-50 transition-all duration-300`}>
+          <OptimizationProgress
+            isOptimizing={isOptimizing}
+            optimizationProgress={optimizationProgress}
+            selectedRoutes={selectedRoutes}
+            websocketData={websocketData}
+            convergedRoutes={convergedRoutes}
+            onCancel={cancelOptimization}
+          />
+        </div>
       </div>
     </div>
   );
