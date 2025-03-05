@@ -9,7 +9,7 @@ use actix::prelude::*;
 use actix_web::{get, post, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
 use geo::Centroid;
-use route_service::opt::aco;
+use route_service::opt::{self, aco};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::net::SocketAddr;
@@ -221,17 +221,41 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
     let city_guard = data.city.lock().unwrap();
 
     if let Some(city) = &*city_guard {
+        let optimized_transit_guard = data.optimized_transit.lock().unwrap();
+        let optimized_transit = optimized_transit_guard.as_ref().unwrap();
+        let optimized_route_ids = data.optimized_route_ids.lock().unwrap();
+        
         // Find the route with the given ID
         let route = city.transit.routes.iter().find(|r| r.route_id == route_id);
 
         if let Some(route) = route {
             let (ridership, avg_occupancy) =
                 eval::ridership_over_route(&route.outbound_stops, &city.grid);
-            HttpResponse::Ok().json(serde_json::json!({
+            
+            // Only evaluate the optimized route if it has been optimized
+            if optimized_route_ids.contains(&route_id) {
+                if let Some(opt_route) = optimized_transit.routes.iter().find(|r| r.route_id == route_id) {
+                    let (opt_ridership, opt_avg_occupancy) =
+                        eval::ridership_over_route(&opt_route.outbound_stops, &city.grid);
+                    
+                    return HttpResponse::Ok().json(serde_json::json!({
+                        "route_id": route_id,
+                        "ridership": ridership,
+                        "opt_ridership": opt_ridership,
+                        "average_occupancy": avg_occupancy,
+                        "opt_average_occupancy": opt_avg_occupancy
+                    }));
+                }
+            }
+            
+            // Return just the original route metrics if no optimized version exists
+            return HttpResponse::Ok().json(serde_json::json!({
                 "route_id": route_id,
-                "ridership": ridership,
-                "average_occupancy": avg_occupancy
-            }))
+                "ridership": ridership, 
+                "average_occupancy": avg_occupancy,
+                "opt_ridership": null,
+                "opt_average_occupancy": null
+            }));
         } else {
             HttpResponse::NotFound().json(serde_json::json!({
                 "error": format!("Route {} not found", route_id)

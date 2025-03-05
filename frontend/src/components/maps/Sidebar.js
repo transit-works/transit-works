@@ -6,16 +6,19 @@ import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
 import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt } from 'react-icons/fa';
 
+// Update function parameters to include optimizedRoutes
 function Sidebar({ 
   data, 
   selectedRoutes,
   setSelectedRoutes,
-  selectedRoute, // Add this prop
-  setSelectedRoute, // Add this prop
+  selectedRoute, 
+  setSelectedRoute, 
   onOptimize, 
   isOptimizing, 
   optimizationError,
-  // Add new map control props
+  // Add optimizedRoutes prop
+  optimizedRoutes,
+  // Existing map control props
   mapStyle,
   show3DRoutes,
   useRandomColors,
@@ -24,7 +27,7 @@ function Sidebar({
   onToggle3DRoutes,
   onToggleRandomColors,
   onTogglePopulationHeatmap,
-  multiSelectMode // Add this prop
+  multiSelectMode 
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -54,10 +57,10 @@ function Sidebar({
         {/* Progress Dial Section */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
-            <ProgressDial percentage={20} name="Transit Score" />
+            <ProgressDial percentage={82} name="Transit Score" />
           </div>
           <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
-            <ProgressDial percentage={37} name="Economic Score" />
+            <ProgressDial percentage={77} name="Economic Score" />
           </div>
         </div>
 
@@ -130,15 +133,16 @@ function Sidebar({
           </div>
         </div>
 
-        {/* Routes Section */}
+        {/* Routes Section - pass optimizedRoutes */}
         <div className="custom-scrollbar-container my-2 max-h-[calc(100vh-300px)] overflow-y-auto rounded-2xl border border-zinc-800 bg-background-dk px-2 pb-2 custom-scrollbar">
           <RouteList
             data={data}
             selectedRoutes={selectedRoutes}
             setSelectedRoutes={setSelectedRoutes}
-            selectedRoute={selectedRoute} // Add this prop
-            setSelectedRoute={setSelectedRoute} // Add this prop
-            multiSelectMode={multiSelectMode} // Pass it to RouteList
+            selectedRoute={selectedRoute} 
+            setSelectedRoute={setSelectedRoute} 
+            multiSelectMode={multiSelectMode} 
+            optimizedRoutes={optimizedRoutes}
           />
         </div>
         
@@ -150,13 +154,6 @@ function Sidebar({
           disabled={selectedRoutes?.size === 0 || isOptimizing}
           isLoading={isOptimizing}
         />
-        
-        {/* Show number of selected routes */}
-        {selectedRoutes?.size > 0 && (
-          <div className="mt-1 text-xs text-white text-center">
-            {selectedRoutes.size} route{selectedRoutes.size > 1 ? 's' : ''} selected
-          </div>
-        )}
         
         {/* Show error message if optimization failed */}
         {optimizationError && (
