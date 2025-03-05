@@ -20,6 +20,7 @@
     "@visx/group": "^3.12.0",
     "@visx/mock-data": "^3.12.0",
     "@visx/scale": "^3.12.0",
+    "@visx/threshold": "^3.12.0",
     "@visx/tooltip": "^3.12.0",
     "@visx/vendor": "^3.12.0",
     "d3": "^7.9.0",
@@ -31,8 +32,9 @@
     "react": "^18",
     "react-dom": "^18",
     "react-globe.gl": "^2.33.1",
+    "react-icons": "^5.5.0",
     "react-map-gl": "^7.1.7",
-    "react-simple-maps": "^3.0.0"
+    "topojson-client": "^3.1.0"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

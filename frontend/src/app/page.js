@@ -116,7 +116,7 @@ export default function Home() {
         </div>
       </ParallaxLayer>
 
-      {/* Visualization Section */}
+      {/* Bento Grid Section */}
       <ParallaxLayer offset={2}>
         <div className="flex h-screen items-center justify-center">
           <div className="grid h-5/6 w-5/6 grid-cols-4 grid-rows-6 gap-4 p-4">
@@ -169,7 +169,7 @@ export default function Home() {
           
           <div className="mx-auto flex w-full max-w-7xl flex-col md:flex-row items-center gap-8 md:gap-16">
             {/* Chart container with enhanced styling */}
-            <div className="w-full md:w-1/2 p-4">
+            <div className="w-full md:w-3/5 p-4">
               <div className="rounded-xl bg-background-dk/30 p-6 backdrop-blur-sm shadow-lg border border-accent/10 relative overflow-hidden">
                 {/* Decorative accent */}
                 <div className="absolute -top-10 -right-10 h-20 w-20 rounded-full bg-primary/10 blur-xl"></div>
@@ -191,7 +191,7 @@ export default function Home() {
                 </div>
                 
                 <div className="p-1">
-                  <MultiBarChart width={575} height={420} /> {/* Reduced height slightly to help with text overlap */}
+                  <MultiBarChart width={700} height={420} /> {/* Reduced height slightly to help with text overlap */}
                 </div>
                 
                 <div className="mt-4 flex justify-between items-center">
