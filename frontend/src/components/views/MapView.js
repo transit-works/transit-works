@@ -20,6 +20,16 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   const [useLiveOptimization, setUseLiveOptimization] = useState(true);
   const wsRef = useRef(null);
 
+  const [acoParams, setAcoParams] = useState({
+    'aco_num_ant': '20',
+    'aco_max_gen': '200',
+    'max_gen': '4',
+    'alpha': '2',
+    'beta': '3',
+    'rho': '0.1',
+    'q': '1',
+  });
+
   // Add map control state variables
   const [mapStyle, setMapStyle] = useState('/styles/dark_matter.json');
   const [show3DRoutes, setShow3DRoutes] = useState(false);
@@ -69,7 +79,10 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ routes: routesToOptimize })
+        body: JSON.stringify({
+          routes: routesToOptimize,
+          params: acoParams
+        })
       };
 
       try {
@@ -152,6 +165,10 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
 
       ws.onopen = () => {
         console.log('WebSocket connection established');
+
+        ws.send(JSON.stringify({
+          params: acoParams
+        }));
       };
 
       ws.onmessage = (event) => {
@@ -406,6 +423,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           show3DRoutes={show3DRoutes}
           useRandomColors={useRandomColors}
           showPopulationHeatmap={showPopulationHeatmap}
+          acoParams={acoParams}
+          setAcoParams={setAcoParams}
         />
       </div>
     </div>
