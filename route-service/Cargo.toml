@@ -12,7 +12,7 @@ path = "src/bin/ctl.rs"
 geo-types = { version = "0.7.13", features = ["serde"] }
 petgraph = { version = "0.6.5", features = ["serde-1"] }
 rstar = { version = "0.12.0", features = ["serde"] }
-rusqlite = "0.32.0"
+rusqlite = { version = "0.32.0", features = ["bundled"] }
 wkt = "0.11.0"
 csv = "1.1"
 serde = { version = "1.0", features = ["derive", "rc"] }
