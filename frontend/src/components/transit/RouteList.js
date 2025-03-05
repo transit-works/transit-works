@@ -1,4 +1,4 @@
-function RouteList({ data, selectedRoutes, setSelectedRoutes, multiSelectMode }) {
+function RouteList({ data, selectedRoutes, setSelectedRoutes, multiSelectMode, selectedRoute, setSelectedRoute }) {
   const handleClick = (id) => {
     setSelectedRoutes((prevSelectedRoutes) => {
       // Create a new Set from previous selections
@@ -16,9 +16,13 @@ function RouteList({ data, selectedRoutes, setSelectedRoutes, multiSelectMode })
         // If this route was already the only selected one, deselect it
         if (newSelectedRoutes.size === 1 && newSelectedRoutes.has(id)) {
           newSelectedRoutes.clear();
+          // Also update selectedRoute to null when deselecting
+          if (setSelectedRoute) setSelectedRoute(null);
         } else {
           newSelectedRoutes.clear();
-          newSelectedRoutes.add(id);
+          newSelectedRoutes.add(id); // Make sure to add the selected route to the Set
+          // Update the selectedRoute for consistent map filtering
+          if (setSelectedRoute) setSelectedRoute(id);
         }
       }
       
