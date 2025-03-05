@@ -166,7 +166,7 @@ async fn optimize_routes(
     let mut optimized_transit_guard = data.optimized_transit.lock().unwrap();
     let optimized_transit = optimized_transit_guard.as_mut().unwrap();
     let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
-    
+
     // Track successful optimizations and evaluations
     let mut success_count = 0;
     let mut all_evaluations = Vec::new();
@@ -185,7 +185,7 @@ async fn optimize_routes(
             // Create ACO instance for this optimization
             let mut aco = ACO::init();
 
-            if let Some((opt_route, eval)) = 
+            if let Some((opt_route, eval)) =
                 aco.optimize_route(&city.grid, &city.road, &city.transit, &route)
             {
                 // Update the optimized transit with the new route

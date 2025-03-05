@@ -1,4 +1,7 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use geo::{Bearing, Geodesic};
 use rand::{
@@ -54,7 +57,7 @@ impl ACO {
             rho: 0.1,
             q0: 1.0,
             num_ant: 20,
-            max_gen: 10,
+            max_gen: 30,
             pheromone_max: 30.0,
             pheromone_min: 5.0,
             init_pheromone: 20.0,
@@ -63,7 +66,7 @@ impl ACO {
             max_route_len: 100,
             min_stop_dist: 100.0,
             max_stop_dist: 500.0,
-            max_nonlinearity: 1.5,
+            max_nonlinearity: 2.5,
             avg_stop_dist: 200.0,
         }
     }
@@ -146,6 +149,9 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     let mut pheromone_map = PheromoneMap::new(aco.clone());
     let mut heuristic_map = HashMap::new();
 
+    // get the stop choices
+    let stops = filter_stops_by_route_bbox(route, city, 250.0);
+
     // Run the ACO algorithm
     let mut gen_best_route = route.clone();
     let mut gen_best_eval = evaluate_route(&aco, &gen_best_route, &city).0;
@@ -160,7 +166,14 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
         for ant_i in 0..aco.num_ant {
             println!("  Ant: {}", ant_i);
             // each ant attempts to build a better route
-            if let Some(new_route) = adjust_route(&aco, &gen_best_route, &city, &pheromone_map, &mut heuristic_map) {
+            if let Some(new_route) = adjust_route(
+                &aco,
+                &gen_best_route,
+                &city,
+                &pheromone_map,
+                &mut heuristic_map,
+                &stops,
+            ) {
                 let new_route_eval = evaluate_route(&aco, &new_route, &city).0;
                 if new_route_eval > curr_best_eval {
                     curr_best_route = new_route;
@@ -244,13 +257,21 @@ fn evaluate_route(params: &ACO, route: &TransitRoute, city: &City) -> (f64, f64)
     if stops.len() > params.max_route_len {
         punishment_factor += PUNISHMENT_ROUTE_LEN;
     }
-    println!("  Score: {}, Punishment: {}, Nonlinearity: {}, Duplicate Nodes: {}", score, punishment_factor, nonlinearity, duplicate_nodes);
+    println!(
+        "  Score: {}, Punishment: {}, Nonlinearity: {}, Duplicate Nodes: {}",
+        score, punishment_factor, nonlinearity, duplicate_nodes
+    );
 
     (score * (1.0 - punishment_factor), punishment_factor)
 }
 
 // Compute the heuristic score for selecting a stop
-fn compute_heuristic(from: &TransitStop, to: &TransitStop, city: &City, heuristic_map: &mut HashMap<(String, String), f64>) -> f64 {
+fn compute_heuristic(
+    from: &TransitStop,
+    to: &TransitStop,
+    city: &City,
+    heuristic_map: &mut HashMap<(String, String), f64>,
+) -> f64 {
     if let Some(val) = heuristic_map.get(&(from.stop_id.clone(), to.stop_id.clone())) {
         return *val;
     }
@@ -273,6 +294,7 @@ fn adjust_route(
     city: &City,
     pheromone_map: &PheromoneMap,
     heuristic_map: &mut HashMap<(String, String), f64>,
+    stops: &Vec<Arc<TransitStop>>,
 ) -> Option<TransitRoute> {
     let first = route.outbound_stops.first().unwrap();
     let last = route.outbound_stops.last().unwrap();
@@ -282,8 +304,48 @@ fn adjust_route(
     visited.insert(first.stop_id.clone());
     let mut radius = params.max_stop_dist;
     loop {
-        if new_stops.len() >= params.max_route_len {
+        if geo_util::haversine(
+            new_stops.last().unwrap().geom.x(),
+            new_stops.last().unwrap().geom.y(),
+            last.geom.x(),
+            last.geom.y(),
+        ) < 300.0
+        {
+            new_stops.push(last.clone());
             break;
+        }
+        if new_stops.len() >= params.max_route_len {
+            println!("    Max route length reached");
+            break;
+        }
+        let choices = valid_next_stops(
+            params,
+            new_stops.last().unwrap(),
+            last,
+            city,
+            &stops,
+            radius,
+            new_stops.len(),
+        );
+        // let choices = filter_stops_by_dir(params, new_stops.last().unwrap(), last, city, radius);
+        if choices.is_empty() {
+            if radius > 2000.0 {
+                println!(
+                    "    No choices found after {} stops, location: {:?}, distance to end {}",
+                    new_stops.len(),
+                    new_stops.last().unwrap().geom,
+                    geo_util::haversine(
+                        new_stops.last().unwrap().geom.x(),
+                        new_stops.last().unwrap().geom.y(),
+                        last.geom.x(),
+                        last.geom.y()
+                    )
+                );
+                break;
+            } else {
+                radius += 500.0;
+                continue;
+            }
         }
         if let Some(next) = select_next_stop_from_choices(
             params,
@@ -291,15 +353,20 @@ fn adjust_route(
             city,
             pheromone_map,
             heuristic_map,
-            &filter_stops_by_dir(params, new_stops.last().unwrap(), last, city, radius),
+            &choices,
             &visited,
         ) {
             visited.insert(next.stop_id.clone());
             new_stops.push(next);
-        } else if radius > 1000.0 {
-            break;
+            // reset radius
+            radius = params.max_stop_dist;
         } else {
-            radius += 250.0;
+            println!("    No stops found");
+            radius += 500.0;
+            if radius > 2000.0 {
+                break;
+            }
+            continue;
         }
     }
 
@@ -348,58 +415,75 @@ fn select_next_stop_from_choices(
     Some(next.clone())
 }
 
-fn filter_stops_by_dir(
+///
+fn filter_stops_by_route_bbox(
+    route: &TransitRoute,
+    city: &City,
+    padding_meters: f64,
+) -> Vec<Arc<TransitStop>> {
+    let (mut min_lat, mut min_lon, mut max_lat, mut max_lon) = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for stop in &route.outbound_stops {
+        let lat = stop.geom.y();
+        let lon = stop.geom.x();
+        if lat < min_lat {
+            min_lat = lat;
+        }
+        if lon < min_lon {
+            min_lon = lon;
+        }
+        if lat > max_lat {
+            max_lat = lat;
+        }
+        if lon > max_lon {
+            max_lon = lon;
+        }
+    }
+    let envelope =
+        geo_util::compute_envelope_rect(min_lat, min_lon, max_lat, max_lon, padding_meters);
+
+    println!(
+        "wkt: POLYGON(({} {}, {} {}, {} {}, {} {}))",
+        min_lon, min_lat, max_lon, min_lat, max_lon, max_lat, min_lon, max_lat
+    );
+
+    city.transit
+        .outbound_stops
+        .locate_in_envelope(&envelope)
+        .map(|s| s.stop.clone())
+        .collect::<Vec<_>>()
+}
+
+fn valid_next_stops(
     params: &ACO,
     curr: &Arc<TransitStop>,
     last: &Arc<TransitStop>,
     city: &City,
+    stops: &Vec<Arc<TransitStop>>,
     radius: f64,
+    stops_so_far: usize,
 ) -> Vec<Arc<TransitStop>> {
-    let dist = curr.road_distance(last, &city.road).0;
-    if dist < params.avg_stop_dist {
-        return vec![last.clone()];
-    }
-
-    let envelope = geo_util::compute_envelope(curr.geom.y(), curr.geom.x(), radius);
-    let stops = city.transit.outbound_stops.locate_in_envelope(&envelope);
-
-    // only select the stops that have a bearing towards the last stop within 90 degrees
     stops
-        .map(|s| s.stop.clone())
+        .iter()
         .filter(|stop| {
             let dist =
                 geo_util::haversine(curr.geom.x(), curr.geom.y(), stop.geom.x(), stop.geom.y());
-            if dist < params.min_stop_dist {
+            if dist < params.min_stop_dist || dist > radius {
                 return false;
             }
             let bearing = Geodesic::bearing(curr.geom, stop.geom);
             let normalized_bearing = (bearing + 360.0) % 360.0;
             let bearing_to_last = Geodesic::bearing(stop.geom, last.geom);
             let normalized_bearing_to_last = (bearing_to_last + 360.0) % 360.0;
-            let diff = (normalized_bearing - normalized_bearing_to_last).abs();
-            diff < 110.0
+            let diff = ((normalized_bearing - normalized_bearing_to_last + 540.0) % 360.0) - 180.0;
+            // diff ranges from 180 to 30 depending on distance from end
+            let allowed_diff = 120.0 - (stops_so_far as f64 / params.max_route_len as f64) * 80.0;
+            diff.abs() < allowed_diff
         })
-        .collect::<Vec<_>>()
-}
-
-/// 
-fn filter_stops_by_bbox(
-    curr: &Arc<TransitStop>,
-    last: &Arc<TransitStop>,
-    city: &City,
-    padding_meters: f64,
-) -> Vec<Arc<TransitStop>> {
-    let envelope = geo_util::compute_envelope_rect(
-        curr.geom.y(),
-        curr.geom.x(),
-        last.geom.y(),
-        last.geom.x(),
-        padding_meters,
-    );
-    city
-        .transit
-        .outbound_stops
-        .locate_in_envelope(&envelope)
-        .map(|s| s.stop.clone())
-        .collect::<Vec<_>>()
+        .cloned()
+        .collect()
 }

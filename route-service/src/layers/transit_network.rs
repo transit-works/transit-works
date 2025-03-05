@@ -170,10 +170,7 @@ impl TransitNetwork {
         }
     }
 
-    pub fn to_gtfs_copy(
-        target_routes: Vec<&TransitRoute>,
-        src_gtfs: &Gtfs,
-    ) -> Gtfs {
+    pub fn to_gtfs_copy(target_routes: Vec<&TransitRoute>, src_gtfs: &Gtfs) -> Gtfs {
         let mut stops: HashMap<String, Arc<Stop>> = HashMap::new();
         let mut trips: HashMap<String, Vec<Trip>> = HashMap::new();
         let mut routes: HashMap<String, Route> = HashMap::new();
@@ -209,8 +206,7 @@ impl TransitNetwork {
         let src_route = src_gtfs.routes.get(&route.route_id).unwrap();
         routes.insert(src_route.route_id.clone(), (*src_route).clone());
         let trip = {
-            let (trip1, trip2) =
-                pick_inbound_outbound_trips(&route.route_id, src_gtfs).unwrap();
+            let (trip1, trip2) = pick_inbound_outbound_trips(&route.route_id, src_gtfs).unwrap();
             if trip_is_outbound(trip1) {
                 trip1
             } else {
