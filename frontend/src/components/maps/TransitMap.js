@@ -995,7 +995,7 @@ function TransitMap({
                         step={step}
                         value={acoParams[item.name]}
                         onChange={(e) => handleChange(item.name, e.target.value)}
-                        className={`w-96 h-2 rounded-lg transition-all ease-in-out`}
+                        className={`w-96 h-2 rounded-lg transition-all ease-in-out accent-accent`}
                         style={{
                           background: `linear-gradient(to right, ${acoParams[item.name]}%, #2e2e2e ${acoParams[item.name]}%)`,
                         }}
