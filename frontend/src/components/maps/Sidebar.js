@@ -10,6 +10,8 @@ function Sidebar({
   data, 
   selectedRoutes,
   setSelectedRoutes,
+  selectedRoute, // Add this prop
+  setSelectedRoute, // Add this prop
   onOptimize, 
   isOptimizing, 
   optimizationError,
@@ -134,6 +136,8 @@ function Sidebar({
             data={data}
             selectedRoutes={selectedRoutes}
             setSelectedRoutes={setSelectedRoutes}
+            selectedRoute={selectedRoute} // Add this prop
+            setSelectedRoute={setSelectedRoute} // Add this prop
             multiSelectMode={multiSelectMode} // Pass it to RouteList
           />
         </div>

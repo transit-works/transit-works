@@ -8,7 +8,8 @@ import Sidebar from '../maps/Sidebar';
 const TransitMap = dynamic(() => import('../maps/TransitMap'), { ssr: false });
 
 export default function MapView({ data, initialOptimizedRoutesData, initialOptimizedRoutes }) {
-  // Update selectedRoute to selectedRoutes (a Set)
+  // Keep track of both selectedRoute and selectedRoutes
+  const [selectedRoute, setSelectedRoute] = useState(null);
   const [selectedRoutes, setSelectedRoutes] = useState(new Set());
   const [optimizedRoutesData, setOptimizedRoutesData] = useState(initialOptimizedRoutesData);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -374,8 +375,10 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         <Sidebar 
           data={data} 
           selectedRoutes={selectedRoutes} 
-          setSelectedRoutes={setSelectedRoutes} 
-          multiSelectMode={multiSelectMode} // Add this prop
+          setSelectedRoutes={setSelectedRoutes}
+          selectedRoute={selectedRoute} // Add this prop 
+          setSelectedRoute={setSelectedRoute} // Add this prop
+          multiSelectMode={multiSelectMode}
           onOptimize={handleOptimizeRoute}
           isOptimizing={isOptimizing}
           optimizationError={optimizationError}
@@ -398,9 +401,11 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         <TransitMap 
           data={data} 
           selectedRoutes={selectedRoutes} 
-          setSelectedRoutes={setSelectedRoutes} 
-          multiSelectMode={multiSelectMode} // Add this prop
-          setMultiSelectMode={setMultiSelectMode} // Add this prop
+          setSelectedRoutes={setSelectedRoutes}
+          selectedRoute={selectedRoute} // Add this prop
+          setSelectedRoute={setSelectedRoute} // Add this prop
+          multiSelectMode={multiSelectMode}
+          setMultiSelectMode={setMultiSelectMode}
           optimizedRoutesData={optimizedRoutesData}
           optimizedRoutes={optimizedRoutes}
           resetOptimization={resetOptimization}
