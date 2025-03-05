@@ -1,7 +1,12 @@
 use core::f64;
 use std::{collections::HashMap, collections::HashSet, sync::Arc};
+use actix_web::cookie::time::convert;
 
+use geo::Area;
 use serde::{Deserialize, Serialize};
+use geo::{Point, Polygon, Intersects};
+use geo_types::Coord;
+
 
 use crate::layers::{
     geo_util,
@@ -206,34 +211,24 @@ pub fn get_route_demand_population_info(route_stops: &Vec<Arc<TransitStop>>) {
 }
 
 /// Function to evaluate the coverage of a route
-/// Coverage is calculated using the ratio of the ridership over the sum demand around a 400m radius of each stop
+/// Coverage is calculated using the ratio of the ridership over the sum population around a 400m radius of each stop
 pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) -> f64 {
-    let mut total_demand = 0.0;
+    
+}
 
-    // Locate zones within the envelope using the rtree
-    let mut visited_zones = HashSet::new();
-    for stop in route_stops {
-        let (x, y) = (stop.geom.x(), stop.geom.y());
-        let zone = od.find_nearest_zone(x, y);
-        let nodes_within_envelope = od.rtree.locate_within_distance([x, y], 400.0);
-        for node in nodes_within_envelope {
-            let new_zone = od.get_zone(node.get_node_index());
-            if visited_zones.insert(new_zone.zoneid) {
-                total_demand += od.demand_between_zones(zone.unwrap(), node.get_node_index());
-            }
-        }
+pub fn evaluate_network_coverage(
+    transit: &TransitNetwork,
+    od: &GridNetwork,
+) -> f64 {
+    let mut total_coverage = 0.0;
+    for route in &transit.routes {
+        let coverage = evaluate_coverage(&route.outbound_stops, od);
+        println!("Route {} coverage: {}", route.route_id, coverage);
+        total_coverage += coverage;
     }
 
-    // Calculate the ridership over the route
-    let (total_ridership , avrage_ridership) = ridership_over_route(route_stops, od);
-    let mut s = 0.0;
-    for r in total_ridership {
-        s += r.min(consts::BUS_CAPACITY as f64);
-    }
-    // Calculate the coverage as the ratio of ridership to demand
-    println!("avrage ridership: {}", s);
-    println!("total demand: {}", total_demand);
-    (s / total_demand) * 100.0
+    println!("Total coverage: {}", total_coverage / transit.routes.len() as f64);
+    total_coverage / transit.routes.len() as f64
 }
 
 pub fn evaluate_transit_network(

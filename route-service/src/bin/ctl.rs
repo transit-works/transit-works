@@ -10,6 +10,7 @@ use route_service::layers::{
     grid::GridNetwork, road_network::RoadNetwork, transit_network::TransitNetwork,
 };
 use route_service::opt::aco::ACO;
+use route_service::opt::eval::{evaluate_coverage, evaluate_network_coverage};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -50,6 +51,19 @@ fn main() {
         &format!("{}/before.geojson", args.output_dir),
     );
 
+    let target_routes = transit
+        .routes
+        .iter()
+        .filter(|r| {
+            r.route_id == "73672"
+            // || r.route_id == "73705"
+            // || r.route_id == "73688"
+            // || r.route_id == "73682"
+            // || r.route_id == "73770"
+        })
+        .collect::<Vec<_>>();
+
+    let res = evaluate_network_coverage(&transit, grid);
     return ();
 
     // Only consider non-bus routes
