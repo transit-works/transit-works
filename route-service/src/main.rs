@@ -13,14 +13,14 @@ struct Args {
     /// Path to GTFS data
     #[clap(
         long,
-        default_value = "/Users/jrayappa/transit-works/transit-works/scripts/city_data/toronto/gtfs"
+        default_value = "/Users/jeevanopel/workspace/transit-works/scripts/city_data/toronto/gtfs"
     )]
     gtfs_path: String,
 
     /// Path to database
     #[clap(
         long,
-        default_value = "/Users/jrayappa/transit-works/transit-works/scripts/city_db/toronto.db"
+        default_value = "/Users/jeevanopel/workspace/transit-works/scripts/city_db/toronto.db"
     )]
     db_path: String,
 
