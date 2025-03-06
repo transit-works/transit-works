@@ -20,7 +20,7 @@ struct Args {
     /// Path to database
     #[clap(
         long,
-        default_value = "/Users/jeevanopel/workspace/transit-works/scripts/city_db/toronto.db"
+        default_value = "/Users/jeevanopel/workspace/transit-works/scripts/city_db/toronto2.db"
     )]
     db_path: String,
 
