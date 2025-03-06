@@ -1,10 +1,16 @@
 use core::f64;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, collections::HashSet, sync::Arc};
+use actix_web::cookie::time::convert;
 
+use geo::Area;
 use serde::{Deserialize, Serialize};
+use geo::{Point, Polygon, Intersects};
+use geo_types::Coord;
+
 
 use crate::layers::{
-    grid::{GridNetwork, Link, Zone},
+    geo_util,
+    grid::{self, GridNetwork, Link, Zone},
     road_network::RoadNetwork,
     transit_network::{TransitNetwork, TransitStop},
 };
@@ -78,6 +84,7 @@ pub fn ridership_over_route(
                 net_at_stop += demand;
             }
         }
+
         zone_prev_outer = Some(zone);
         ridership.push(net_at_stop);
     }
@@ -103,7 +110,10 @@ pub fn ridership_over_route(
     for i in 1..ridership.len() {
         ridership[i] += ridership[i - 1];
     }
-    let average_ridership = ridership.iter().sum::<f64>() / ridership.len() as f64;
+
+    let s : f64 = ridership.iter().filter(|&&r| !r.is_nan()).sum();
+
+    let average_ridership = s / ridership.len() as f64;
     (ridership, average_ridership / consts::BUS_CAPACITY as f64)
 }
 
@@ -198,6 +208,46 @@ pub fn get_city_grid_info(od: &GridNetwork) -> CityGridInfo {
 pub fn get_route_demand_population_info(route_stops: &Vec<Arc<TransitStop>>) {
     // TODO: get OSM building pop density data available through Sqlite
     panic!("Not implemented");
+}
+
+/// Function to evaluate the coverage of a route
+/// Coverage is calculated using the ratio of the ridership over the sum population around a 400m radius of each stop
+pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) -> f64 {
+    let mut curr_populations = 0.0;
+    let mut total_population = 0.0;
+    for stop in route_stops{
+        let (x, y) = (stop.geom.x(), stop.geom.y());
+        let node = od.find_nearest_zone(x, y);
+        if node.is_none(){
+            continue;
+        }
+        let zone = od.get_zone(node.unwrap());
+        curr_populations += zone.population as f64;
+        let env = geo_util::compute_envelope(y, x, 400.0);
+        let nodes_in_envelope = od.rtree.locate_in_envelope_intersecting(&env);
+        let mut total_population_stop = 0.0;
+        for n in nodes_in_envelope{
+            let z = od.get_zone(n.get_node_index());
+            total_population_stop += z.population as f64;
+        }
+        total_population += total_population_stop * 0.6;
+    }
+
+    curr_populations / total_population * 100.0
+}
+
+pub fn evaluate_network_coverage(
+    transit: &TransitNetwork,
+    od: &GridNetwork,
+) -> f64 {
+    let mut total_coverage = 0.0;
+    for route in &transit.routes {
+        let coverage = evaluate_coverage(&route.outbound_stops, od);
+        total_coverage += coverage;
+    }
+
+    println!("Total coverage: {}", total_coverage / transit.routes.len() as f64);
+    total_coverage / transit.routes.len() as f64
 }
 
 pub fn evaluate_transit_network(

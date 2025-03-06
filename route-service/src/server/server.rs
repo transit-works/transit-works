@@ -275,6 +275,35 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
     }
 }
 
+#[get("/evaluate-coverage/{route_id}")]
+async fn evaluate_coverage(route_id: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    let route_id = route_id.into_inner();
+    println!("Evaluating coverage for route: {}", route_id);
+
+    let city_guard = data.city.lock().unwrap();
+
+    if let Some(city) = &*city_guard {
+        let route = city.transit.routes.iter().find(|r| r.route_id == route_id);
+
+        if let Some(route) = route {
+            let coverage = eval::evaluate_coverage(&route.outbound_stops, &city.grid);
+
+            return HttpResponse::Ok().json(serde_json::json!({
+                "route_id": route_id,
+                "coverage": coverage
+            }));
+        } else {
+            HttpResponse::NotFound().json(serde_json::json!({
+                "error": format!("Route {} not found", route_id)
+            }))
+        }
+    } else {
+        HttpResponse::InternalServerError().json(serde_json::json!({
+            "error": "City data not loaded"
+        }))
+    }
+}
+
 #[get("/grid")]
 async fn get_grid(data: web::Data<AppState>) -> impl Responder {
     println!("Getting grid data");
@@ -808,6 +837,7 @@ pub async fn start_server(
             .service(optimize_route)
             .service(optimize_routes)
             .service(evaluate_route)
+            .service(evaluate_coverage) // Add the new service
             .service(get_grid)
             .service(reset_optimizations)
             .service(optimize_live) // Replace the previous WebSocket endpoints with this unified one

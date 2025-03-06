@@ -1,3 +1,11 @@
+use crate::layers::{
+    geo_util,
+    grid::GridNetwork,
+    road_network::RoadNetwork,
+    transit_network::{
+        RTreeNode, TransitNetwork, TransitRoute, TransitRouteType, TransitStop,
+    },
+};
 use env_logger::init;
 use geo::{Distance, Haversine, Length, LineString, Point};
 use rand::rngs::StdRng;
@@ -6,15 +14,6 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
     time::Instant,
-};
-
-use crate::layers::{
-    geo_util,
-    grid::GridNetwork,
-    road_network::{Node, RoadNetwork},
-    transit_network::{
-        self, RTreeNode, TransitNetwork, TransitRoute, TransitRouteType, TransitStop,
-    },
 };
 
 use petgraph::graph::NodeIndex;

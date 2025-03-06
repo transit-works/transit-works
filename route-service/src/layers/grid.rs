@@ -122,6 +122,12 @@ pub struct RTreeNode {
     node_index: NodeIndex,
 }
 
+impl RTreeNode {
+    pub fn get_node_index(&self) -> NodeIndex {
+        self.node_index
+    }
+}
+
 impl rstar::PointDistance for RTreeNode {
     fn distance_2(&self, point: &[f64; 2]) -> f64 {
         self.envelope.distance_2(point)
