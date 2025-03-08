@@ -73,23 +73,23 @@ impl ACO {
     }
 
     pub fn print_stats(&self) {
-        println!("ACO Parameters:");
-        println!("  alpha: {}", self.alpha);
-        println!("  beta: {}", self.beta);
-        println!("  rho: {}", self.rho);
-        println!("  q0: {}", self.q0);
-        println!("  num_ant: {}", self.num_ant);
-        println!("  max_gen: {}", self.max_gen);
-        println!("  pheromone_max: {}", self.pheromone_max);
-        println!("  pheromone_min: {}", self.pheromone_min);
-        println!("  init_pheromone: {}", self.init_pheromone);
-        println!("  bus_capacity: {}", self.bus_capacity);
-        println!("  min_route_len: {}", self.min_route_len);
-        println!("  max_route_len: {}", self.max_route_len);
-        println!("  min_stop_dist: {}", self.min_stop_dist);
-        println!("  max_stop_dist: {}", self.max_stop_dist);
-        println!("  max_nonlinearity: {}", self.max_nonlinearity);
-        println!("  avg_stop_dist: {}", self.avg_stop_dist);
+        log::debug!("ACO Parameters:");
+        log::debug!("  alpha: {}", self.alpha);
+        log::debug!("  beta: {}", self.beta);
+        log::debug!("  rho: {}", self.rho);
+        log::debug!("  q0: {}", self.q0);
+        log::debug!("  num_ant: {}", self.num_ant);
+        log::debug!("  max_gen: {}", self.max_gen);
+        log::debug!("  pheromone_max: {}", self.pheromone_max);
+        log::debug!("  pheromone_min: {}", self.pheromone_min);
+        log::debug!("  init_pheromone: {}", self.init_pheromone);
+        log::debug!("  bus_capacity: {}", self.bus_capacity);
+        log::debug!("  min_route_len: {}", self.min_route_len);
+        log::debug!("  max_route_len: {}", self.max_route_len);
+        log::debug!("  min_stop_dist: {}", self.min_stop_dist);
+        log::debug!("  max_stop_dist: {}", self.max_stop_dist);
+        log::debug!("  max_nonlinearity: {}", self.max_nonlinearity);
+        log::debug!("  avg_stop_dist: {}", self.avg_stop_dist);
     }
 }
 
@@ -160,14 +160,14 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     let mut gen_best_eval = evaluate_route(&aco, &gen_best_route, &city, &zone_to_zone_coverage).0;
     let init_eval = gen_best_eval;
     for gen_i in 0..aco.max_gen {
-        println!("Generation: {}", gen_i);
+        log::debug!("Generation: {}", gen_i);
         // pheromone evaporation
         pheromone_map.decay();
         pheromone_map.update_route(&gen_best_route, gen_best_eval);
         let mut curr_best_route = gen_best_route.clone();
         let mut curr_best_eval = gen_best_eval;
         for ant_i in 0..aco.num_ant {
-            println!("  Ant: {}", ant_i);
+            log::debug!("  Ant: {}", ant_i);
             // each ant attempts to build a better route
             if let Some(new_route) = adjust_route(
                 &aco,
@@ -183,7 +183,7 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
                 if new_route_eval > curr_best_eval {
                     curr_best_route = new_route;
                     curr_best_eval = new_route_eval;
-                    println!("    New best route found: {}", new_route_eval);
+                    log::debug!("    New best route found: {}", new_route_eval);
                 }
             }
         }
@@ -273,7 +273,7 @@ fn evaluate_route(
     if stops.len() > params.max_route_len {
         punishment_factor += PUNISHMENT_ROUTE_LEN;
     }
-    println!(
+    log::debug!(
         "  Score: {}, Punishment: {}, Nonlinearity: {}, Duplicate Nodes: {}",
         score, punishment_factor, nonlinearity, duplicate_nodes
     );
@@ -348,7 +348,7 @@ fn adjust_route(
             break;
         }
         if new_stops.len() >= params.max_route_len {
-            println!("    Max route length reached");
+            log::debug!("    Max route length reached");
             break;
         }
         let choices = valid_next_stops(
@@ -363,7 +363,7 @@ fn adjust_route(
         // let choices = filter_stops_by_dir(params, new_stops.last().unwrap(), last, city, radius);
         if choices.is_empty() {
             if radius > 2000.0 {
-                println!(
+                log::debug!(
                     "    No choices found after {} stops, location: {:?}, distance to end {}",
                     new_stops.len(),
                     new_stops.last().unwrap().geom,
@@ -383,6 +383,7 @@ fn adjust_route(
         if let Some(next) = select_next_stop_from_choices(
             params,
             new_stops.last().unwrap(),
+            new_stops.get(new_stops.len() - 2),
             city,
             pheromone_map,
             heuristic_map,
@@ -395,7 +396,7 @@ fn adjust_route(
             // reset radius
             radius = params.max_stop_dist;
         } else {
-            println!("    No stops found");
+            log::debug!("    No stops found");
             radius += 500.0;
             if radius > 2000.0 {
                 break;
@@ -420,6 +421,7 @@ fn adjust_route(
 fn select_next_stop_from_choices(
     params: &ACO,
     curr: &Arc<TransitStop>,
+    prev: Option<&Arc<TransitStop>>,
     city: &City,
     pheromone_map: &PheromoneMap,
     heuristic_map: &mut HashMap<(String, String), f64>,
@@ -433,6 +435,20 @@ fn select_next_stop_from_choices(
         if visited.contains(&stop.stop_id) {
             continue;
         }
+        // ensure there is no u turn prev -> curr -> stop
+        if let Some(prev) = prev {
+            let prev_bearing = Geodesic::bearing(prev.geom, curr.geom);
+            let next_bearing = Geodesic::bearing(curr.geom, stop.geom);
+            let normalized_prev_bearing = (prev_bearing + 360.0) % 360.0;
+            let normalized_next_bearing = (next_bearing + 360.0) % 360.0;
+            let diff =
+                ((normalized_next_bearing - normalized_prev_bearing + 540.0) % 360.0) - 180.0;
+            // if angle is > 120, then it is a u turn
+            if diff.abs() > 120.0 {
+                continue;
+            }
+        }
+
         let heuristic = compute_heuristic(curr, stop, city, heuristic_map, &zone_to_zone_coverage);
         let pheromone = pheromone_map.get(&curr.stop_id, &stop.stop_id);
         let weight = heuristic.powf(params.alpha) * pheromone.powf(params.beta);
@@ -481,7 +497,7 @@ fn filter_stops_by_route_bbox(
     let envelope =
         geo_util::compute_envelope_rect(min_lat, min_lon, max_lat, max_lon, padding_meters);
 
-    println!(
+    log::debug!(
         "wkt: POLYGON(({} {}, {} {}, {} {}, {} {}))",
         min_lon, min_lat, max_lon, min_lat, max_lon, max_lat, min_lon, max_lat
     );
