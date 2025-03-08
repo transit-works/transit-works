@@ -1,18 +1,17 @@
+use actix_web::cookie::time::convert;
 use core::f64;
 use std::{collections::HashMap, collections::HashSet, sync::Arc};
-use actix_web::cookie::time::convert;
 
-use geo::Area;
-use serde::{Deserialize, Serialize};
-use geo::{Point, Polygon, Intersects};
+use geo::{Area, Contains};
+use geo::{Intersects, Point, Polygon};
 use geo_types::Coord;
-
+use serde::{Deserialize, Serialize};
 
 use crate::layers::{
     geo_util,
     grid::{self, GridNetwork, Link, Zone},
     road_network::RoadNetwork,
-    transit_network::{TransitNetwork, TransitStop},
+    transit_network::{TransitNetwork, TransitRoute, TransitStop},
 };
 
 use super::consts;
@@ -33,9 +32,13 @@ use super::consts;
 /// - Ridership is distributed equally over all stops in the same zone
 /// - TODO: Distribute ridership over other nearby routes if they service the same zone-to-zone demand
 pub fn ridership_over_route(
-    route_stops: &Vec<Arc<TransitStop>>,
+    transit: &TransitNetwork,
+    route: &TransitRoute,
     od: &GridNetwork,
 ) -> (Vec<f64>, f64) {
+    // get other routes serving demand
+    let zone_to_zone_coverage = determine_routes_zone_to_zone_coverage(transit, od, route);
+    let route_stops = &route.outbound_stops;
     let mut ridership = vec![];
     let mut zone_prev_outer = None;
     // populate the net change at each stop for ridership
@@ -69,6 +72,10 @@ pub fn ridership_over_route(
                 }
                 zone_prev = Some(zone_curr);
                 let demand = od.demand_between_zones(zone, zone_curr);
+                // divide demand by the number of routes serving the demand (assume evenly distributed)
+                let (u, v) = (od.get_zone(zone).zoneid, od.get_zone(zone_curr).zoneid);
+                let num_routes = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1);
+                let demand = demand / (num_routes as f64);
                 net_at_stop -= demand;
             }
         }
@@ -81,6 +88,9 @@ pub fn ridership_over_route(
                 }
                 zone_prev = Some(zone_curr);
                 let demand = od.demand_between_zones(zone, zone_curr);
+                let (u, v) = (od.get_zone(zone).zoneid, od.get_zone(zone_curr).zoneid);
+                let num_routes = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1);
+                let demand = demand / (num_routes as f64);
                 net_at_stop += demand;
             }
         }
@@ -111,7 +121,7 @@ pub fn ridership_over_route(
         ridership[i] += ridership[i - 1];
     }
 
-    let s : f64 = ridership.iter().filter(|&&r| !r.is_nan()).sum();
+    let s: f64 = ridership.iter().filter(|&&r| !r.is_nan()).sum();
 
     let average_ridership = s / ridership.len() as f64;
     (ridership, average_ridership / consts::BUS_CAPACITY as f64)
@@ -215,10 +225,10 @@ pub fn get_route_demand_population_info(route_stops: &Vec<Arc<TransitStop>>) {
 pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) -> f64 {
     let mut curr_populations = 0.0;
     let mut total_population = 0.0;
-    for stop in route_stops{
+    for stop in route_stops {
         let (x, y) = (stop.geom.x(), stop.geom.y());
         let node = od.find_nearest_zone(x, y);
-        if node.is_none(){
+        if node.is_none() {
             continue;
         }
         let zone = od.get_zone(node.unwrap());
@@ -226,7 +236,7 @@ pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) 
         let env = geo_util::compute_envelope(y, x, 400.0);
         let nodes_in_envelope = od.rtree.locate_in_envelope_intersecting(&env);
         let mut total_population_stop = 0.0;
-        for n in nodes_in_envelope{
+        for n in nodes_in_envelope {
             let z = od.get_zone(n.get_node_index());
             total_population_stop += z.population as f64;
         }
@@ -236,17 +246,17 @@ pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) 
     curr_populations / total_population * 100.0
 }
 
-pub fn evaluate_network_coverage(
-    transit: &TransitNetwork,
-    od: &GridNetwork,
-) -> f64 {
+pub fn evaluate_network_coverage(transit: &TransitNetwork, od: &GridNetwork) -> f64 {
     let mut total_coverage = 0.0;
     for route in &transit.routes {
         let coverage = evaluate_coverage(&route.outbound_stops, od);
         total_coverage += coverage;
     }
 
-    println!("Total coverage: {}", total_coverage / transit.routes.len() as f64);
+    println!(
+        "Total coverage: {}",
+        total_coverage / transit.routes.len() as f64
+    );
     total_coverage / transit.routes.len() as f64
 }
 
@@ -257,4 +267,48 @@ pub fn evaluate_transit_network(
 ) -> f64 {
     // TODO: come up with some microsim approach to evaluate the entire transit network
     panic!("Not implemented");
+}
+
+pub fn determine_routes_zone_to_zone_coverage(
+    transit: &TransitNetwork,
+    grid: &GridNetwork,
+    opt_route: &TransitRoute,
+) -> HashMap<(u32, u32), u32> {
+    let mut num_routes = HashMap::new();
+    let mut zones = vec![];
+    for stop in &opt_route.outbound_stops {
+        let (x, y) = (stop.geom.x(), stop.geom.y());
+        let zone = grid.find_nearest_zone(x, y);
+        if let Some(zone) = zone {
+            if !zones.contains(&zone) {
+                zones.push(zone);
+            }
+        }
+    }
+    for i in 0..zones.len() {
+        for j in i + 1..zones.len() {
+            for route in transit.routes.iter() {
+                if route.route_id == opt_route.route_id {
+                    continue;
+                }
+                if route
+                    .outbound_stops
+                    .iter()
+                    .any(|s| grid.get_zone(zones[i]).polygon.contains(&s.geom))
+                    && route
+                        .outbound_stops
+                        .iter()
+                        .any(|s| grid.get_zone(zones[j]).polygon.contains(&s.geom))
+                {
+                    let (u, v) = (
+                        grid.get_zone(zones[i]).zoneid,
+                        grid.get_zone(zones[j]).zoneid,
+                    );
+                    *num_routes.entry((u, v)).or_insert(0) += 1;
+                    *num_routes.entry((v, u)).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    num_routes
 }

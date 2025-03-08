@@ -233,7 +233,7 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
 
         if let Some(route) = route {
             let (ridership, avg_occupancy) =
-                eval::ridership_over_route(&route.outbound_stops, &city.grid);
+                eval::ridership_over_route(&city.transit, &route, &city.grid);
 
             // Only evaluate the optimized route if it has been optimized
             if optimized_route_ids.contains(&route_id) {
@@ -243,7 +243,7 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
                     .find(|r| r.route_id == route_id)
                 {
                     let (opt_ridership, opt_avg_occupancy) =
-                        eval::ridership_over_route(&opt_route.outbound_stops, &city.grid);
+                        eval::ridership_over_route(&optimized_transit, &opt_route, &city.grid);
 
                     return HttpResponse::Ok().json(serde_json::json!({
                         "route_id": route_id,
@@ -276,7 +276,10 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
 }
 
 #[get("/evaluate-coverage/{route_id}")]
-async fn evaluate_coverage(route_id: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+async fn evaluate_coverage(
+    route_id: web::Path<String>,
+    data: web::Data<AppState>,
+) -> impl Responder {
     let route_id = route_id.into_inner();
     println!("Evaluating coverage for route: {}", route_id);
 
@@ -569,7 +572,7 @@ impl OptimizationWs {
             if let Some(route) = route {
                 // Create ACO instance for this optimization iteration
                 let aco = aco2::ACO::init();
-                
+
                 // Increment the optimization attempt counter for this route
                 self.optimize_attempts_per_route[current_route_index] += 1;
 
