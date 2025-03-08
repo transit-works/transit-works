@@ -174,7 +174,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           // Send a small message to keep the connection active
           ws.send('ping');
         }
-      }, 15000); // Send ping every 15 seconds
+      }, 10000); // Send ping every 10 seconds
 
       ws.onopen = () => {
         console.log('WebSocket connection established');
@@ -186,11 +186,24 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
 
       ws.onmessage = (event) => {
         try {
+          console.log('Raw WebSocket message received:', event.data);
+          
           const data = JSON.parse(event.data);
-          console.log('Received WebSocket message:', data);
+          console.log('Parsed WebSocket message:', data);
           
           // Store the complete websocket data for detailed UI rendering
           setWebsocketData(data);
+          
+          // Handle connection confirmation message - check with more detailed logging
+          if (data.status) {
+            console.log(`Message has status field: ${data.status}`);
+          }
+          
+          if (data.status === "connected") {
+            console.log(`WebSocket connection confirmed: ${data.message}`);
+            setOptimizationProgress(0.1);
+            return; // return here to avoid processing this as an optimization message
+          }
           
           if (data.error) {
             setOptimizationError(data.error);
