@@ -13,10 +13,7 @@ use rand::{
 
 use crate::{
     layers::{
-        city::City,
-        geo_util,
-        grid::GridNetwork,
-        transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
+        city::City, geo_util, grid::GridNetwork, road_network, transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop}
     },
     opt::eval,
 };
@@ -45,9 +42,10 @@ pub struct ACO {
 }
 
 // should be less than 1.0
-const PUNISHMENT_NONLINEARITY: f64 = 0.3;
-const PUNISHMENT_ROUTE_LEN: f64 = 0.3;
-const PUNISHMENT_STOP_DIST: f64 = 0.4;
+const PUNISHMENT_NONLINEARITY: f64 = 0.2;
+const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
+const PUNISHMENT_BAD_TURN: f64 = 0.4;
+const PUNISHMENT_STOP_DIST: f64 = 0.2;
 
 impl ACO {
     // function to initialize the ACO struct with default values
@@ -213,18 +211,30 @@ fn evaluate_route(
     // 1 - Compute nonlinearity Z_r
     let stops = &route.outbound_stops;
     let mut road_dist = 0.0;
-    let mut encountered_nodes = HashSet::new();
-    let mut duplicate_nodes = 0;
+    let mut bad_turn_count = 0;
+    let mut path_pi = vec![];
     for w in stops.windows(2) {
         let (from, to) = (&w[0], &w[1]);
-        let (dist_ij, mut path_ij) = from.road_distance(to, &city.road);
-        road_dist += dist_ij;
-        for node in path_ij.drain(0..) {
-            if encountered_nodes.contains(&node) {
-                duplicate_nodes += 1;
+        let (dist_ij, path_ij) = from.road_distance(to, &city.road);
+        // check if path_ij is a u-turn or large detour from path_pi
+        let (p0, p1) = (path_pi.get(path_pi.len() - 2), path_pi.last());
+        let (c0, c1) = (path_ij.first(), path_ij.get(1));
+        if let (Some(p0), Some(p1), Some(c0), Some(c1)) = (p0, p1, c0, c1) {
+            let (p0, p1) = (city.road.get_node(*p0).geom, city.road.get_node(*p1).geom);
+            let (c0, c1) = (city.road.get_node(*c0).geom, city.road.get_node(*c1).geom);
+            let bearing_p = Geodesic::bearing(p0, p1);
+            let bearing_c = Geodesic::bearing(c0, c1);
+            let normalized_bearing_p = (bearing_p + 360.0) % 360.0;
+            let normalized_bearing_c = (bearing_c + 360.0) % 360.0;
+            let diff =
+                ((normalized_bearing_c - normalized_bearing_p + 540.0) % 360.0) - 180.0;
+            if diff.abs() > 175.0 {
+                bad_turn_count += 1;
             }
-            encountered_nodes.insert(node);
         }
+        // add the distance to the total road distance
+        road_dist += dist_ij;
+        path_pi = path_ij;
     }
     let straight_line_dist = geo_util::haversine(
         stops.first().unwrap().geom.x(),
@@ -273,12 +283,15 @@ fn evaluate_route(
     if stops.len() > params.max_route_len {
         punishment_factor += PUNISHMENT_ROUTE_LEN;
     }
-    log::debug!(
-        "  Score: {}, Punishment: {}, Nonlinearity: {}, Duplicate Nodes: {}",
-        score, punishment_factor, nonlinearity, duplicate_nodes
+    // if bad_turn_count > 0 {
+    //     punishment_factor += PUNISHMENT_BAD_TURN * (bad_turn_count as f64 / 10.0).max(1.0);
+    // }
+    log::info!(
+        "  Score: {}, Punishment: {}, Nonlinearity: {}, Bad Turn: {}",
+        score, punishment_factor, nonlinearity, bad_turn_count
     );
 
-    (score * (1.0 - punishment_factor), punishment_factor)
+    (score * (1.0 - punishment_factor).max(0.0), punishment_factor)
 }
 
 // Compute the heuristic score for selecting a stop
@@ -436,18 +449,18 @@ fn select_next_stop_from_choices(
             continue;
         }
         // ensure there is no u turn prev -> curr -> stop
-        if let Some(prev) = prev {
-            let prev_bearing = Geodesic::bearing(prev.geom, curr.geom);
-            let next_bearing = Geodesic::bearing(curr.geom, stop.geom);
-            let normalized_prev_bearing = (prev_bearing + 360.0) % 360.0;
-            let normalized_next_bearing = (next_bearing + 360.0) % 360.0;
-            let diff =
-                ((normalized_next_bearing - normalized_prev_bearing + 540.0) % 360.0) - 180.0;
-            // if angle is > 120, then it is a u turn
-            if diff.abs() > 120.0 {
-                continue;
-            }
-        }
+        // if let Some(prev) = prev {
+        //     let prev_bearing = Geodesic::bearing(prev.geom, curr.geom);
+        //     let next_bearing = Geodesic::bearing(curr.geom, stop.geom);
+        //     let normalized_prev_bearing = (prev_bearing + 360.0) % 360.0;
+        //     let normalized_next_bearing = (next_bearing + 360.0) % 360.0;
+        //     let diff =
+        //         ((normalized_next_bearing - normalized_prev_bearing + 540.0) % 360.0) - 180.0;
+        //     // if angle is > 120, then it is a u turn
+        //     if diff.abs() > 120.0 {
+        //         continue;
+        //     }
+        // }
 
         let heuristic = compute_heuristic(curr, stop, city, heuristic_map, &zone_to_zone_coverage);
         let pheromone = pheromone_map.get(&curr.stop_id, &stop.stop_id);
