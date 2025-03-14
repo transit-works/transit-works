@@ -71,23 +71,23 @@ impl ACO {
     }
 
     pub fn print_stats(&self) {
-        log::debug!("ACO Parameters:");
-        log::debug!("  alpha: {}", self.alpha);
-        log::debug!("  beta: {}", self.beta);
-        log::debug!("  rho: {}", self.rho);
-        log::debug!("  q0: {}", self.q0);
-        log::debug!("  num_ant: {}", self.num_ant);
-        log::debug!("  max_gen: {}", self.max_gen);
-        log::debug!("  pheromone_max: {}", self.pheromone_max);
-        log::debug!("  pheromone_min: {}", self.pheromone_min);
-        log::debug!("  init_pheromone: {}", self.init_pheromone);
-        log::debug!("  bus_capacity: {}", self.bus_capacity);
-        log::debug!("  min_route_len: {}", self.min_route_len);
-        log::debug!("  max_route_len: {}", self.max_route_len);
-        log::debug!("  min_stop_dist: {}", self.min_stop_dist);
-        log::debug!("  max_stop_dist: {}", self.max_stop_dist);
-        log::debug!("  max_nonlinearity: {}", self.max_nonlinearity);
-        log::debug!("  avg_stop_dist: {}", self.avg_stop_dist);
+        println!("ACO Parameters:");
+        println!("  alpha: {}", self.alpha);
+        println!("  beta: {}", self.beta);
+        println!("  rho: {}", self.rho);
+        println!("  q0: {}", self.q0);
+        println!("  num_ant: {}", self.num_ant);
+        println!("  max_gen: {}", self.max_gen);
+        println!("  pheromone_max: {}", self.pheromone_max);
+        println!("  pheromone_min: {}", self.pheromone_min);
+        println!("  init_pheromone: {}", self.init_pheromone);
+        println!("  bus_capacity: {}", self.bus_capacity);
+        println!("  min_route_len: {}", self.min_route_len);
+        println!("  max_route_len: {}", self.max_route_len);
+        println!("  min_stop_dist: {}", self.min_stop_dist);
+        println!("  max_stop_dist: {}", self.max_stop_dist);
+        println!("  max_nonlinearity: {}", self.max_nonlinearity);
+        println!("  avg_stop_dist: {}", self.avg_stop_dist);
     }
 }
 
