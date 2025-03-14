@@ -109,6 +109,21 @@ CITY_MAP = {
         osm_name='London, UK',
         gtfs_src='https://www.londontransit.ca/gtfsfeed/google_transit.zip'
     ),
+    'amsterdam': City(
+        key_name='amsterdam',
+        osm_name='Amsterdam, Netherlands',
+        gtfs_src='https://gtfs.ovapi.nl/gtfs-nl.zip'
+    ),
+    'berlin': City(
+        key_name='berlin',
+        osm_name='Berlin, Germany',
+        gtfs_src='https://www.vbb.de/fileadmin/user_upload/VBB/Dokumente/API-Datensaetze/gtfs-mastscharf/GTFS.zip'
+    ),
+    'madrid': City(
+        key_name='madrid',
+        osm_name='Madrid, Spain',
+        gtfs_src='' # too many files
+    ),
 }
 
 def load_libspatialite(conn: sqlite3.Connection, init: bool = True):
