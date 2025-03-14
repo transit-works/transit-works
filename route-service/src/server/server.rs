@@ -233,7 +233,7 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
 
         if let Some(route) = route {
             let (ridership, avg_occupancy) =
-                eval::ridership_over_route(&route.outbound_stops, &city.grid);
+                eval::ridership_over_route(&city.transit, &route, &city.grid);
 
             // Only evaluate the optimized route if it has been optimized
             if optimized_route_ids.contains(&route_id) {
@@ -243,7 +243,7 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
                     .find(|r| r.route_id == route_id)
                 {
                     let (opt_ridership, opt_avg_occupancy) =
-                        eval::ridership_over_route(&opt_route.outbound_stops, &city.grid);
+                        eval::ridership_over_route(&optimized_transit, &opt_route, &city.grid);
 
                     return HttpResponse::Ok().json(serde_json::json!({
                         "route_id": route_id,
@@ -276,7 +276,10 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
 }
 
 #[get("/evaluate-coverage/{route_id}")]
-async fn evaluate_coverage(route_id: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+async fn evaluate_coverage(
+    route_id: web::Path<String>,
+    data: web::Data<AppState>,
+) -> impl Responder {
     let route_id = route_id.into_inner();
     println!("Evaluating coverage for route: {}", route_id);
 
@@ -569,7 +572,7 @@ impl OptimizationWs {
             if let Some(route) = route {
                 // Create ACO instance for this optimization iteration
                 let aco = aco2::ACO::init();
-                
+
                 // Increment the optimization attempt counter for this route
                 self.optimize_attempts_per_route[current_route_index] += 1;
 
@@ -678,7 +681,7 @@ impl OptimizationWs {
 
     // Heartbeat to keep connection alive
     fn heartbeat(&self, ctx: &mut ws::WebsocketContext<Self>) {
-        ctx.run_interval(Duration::from_secs(5), |act, ctx| {
+        ctx.run_interval(Duration::from_secs(10), |act, ctx| {
             if Instant::now().duration_since(act.heartbeat) > Duration::from_secs(120) {
                 println!("Websocket connection timeout, disconnecting");
                 ctx.stop();
@@ -729,8 +732,28 @@ impl Actor for OptimizationWs {
             "WebSocket connection started for routes {:?}",
             self.route_ids
         );
+        
+        // Send immediate confirmation that the WebSocket connection is established
+        // This prevents client timeout if the first optimization takes a long time
+        let connection_msg = serde_json::json!({
+            "status": "connected",
+            "message": "WebSocket connection established, optimization starting",
+            "routes": self.route_ids,
+        });
+        
+        println!("Sending WebSocket connection confirmation: {:?}", connection_msg);
+        
+        // Send the confirmation message immediately
+        ctx.text(serde_json::to_string(&connection_msg).unwrap());
+        
+        // Setup heartbeat first, optimization second
         self.heartbeat(ctx);
-        self.run_optimization_iteration(ctx);
+        
+        // Short delay before starting optimization to ensure connection message is received
+        let addr = ctx.address();
+        ctx.run_later(Duration::from_millis(100), move |_, _| {
+            addr.do_send(RunNextIteration { iteration: 0 });
+        });
     }
 }
 
@@ -747,11 +770,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for OptimizationWs {
                 self.heartbeat = Instant::now();
             }
             Ok(ws::Message::Text(_)) => {
-                // We don't expect text messages from client
+                println!("Received text message");
                 self.heartbeat = Instant::now();
             }
             Ok(ws::Message::Binary(_)) => {
-                // We don't handle binary messages
+                println!("Received binary message");
                 self.heartbeat = Instant::now();
             }
             Ok(ws::Message::Close(reason)) => {

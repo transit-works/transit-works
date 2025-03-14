@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use geo::{Bearing, Geodesic};
+use geo::{Bearing, Contains, Geodesic};
 use rand::{
     distributions::WeightedIndex,
     prelude::Distribution,
@@ -13,9 +13,7 @@ use rand::{
 
 use crate::{
     layers::{
-        city::City,
-        geo_util,
-        transit_network::{TransitRoute, TransitRouteType, TransitStop},
+        city::City, geo_util, grid::GridNetwork, road_network, transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop}
     },
     opt::eval,
 };
@@ -44,9 +42,10 @@ pub struct ACO {
 }
 
 // should be less than 1.0
-const PUNISHMENT_NONLINEARITY: f64 = 0.3;
-const PUNISHMENT_ROUTE_LEN: f64 = 0.3;
-const PUNISHMENT_STOP_DIST: f64 = 0.4;
+const PUNISHMENT_NONLINEARITY: f64 = 0.2;
+const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
+const PUNISHMENT_BAD_TURN: f64 = 0.4;
+const PUNISHMENT_STOP_DIST: f64 = 0.2;
 
 impl ACO {
     // function to initialize the ACO struct with default values
@@ -151,20 +150,22 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
 
     // get the stop choices
     let stops = filter_stops_by_route_bbox(route, city, 250.0);
+    // can speed up by precomputing stops to zone mapping in city struct?
+    let zone_to_zone_coverage = filter_zones_by_stops(&stops, city);
 
     // Run the ACO algorithm
     let mut gen_best_route = route.clone();
-    let mut gen_best_eval = evaluate_route(&aco, &gen_best_route, &city).0;
+    let mut gen_best_eval = evaluate_route(&aco, &gen_best_route, &city, &zone_to_zone_coverage).0;
     let init_eval = gen_best_eval;
     for gen_i in 0..aco.max_gen {
-        println!("Generation: {}", gen_i);
+        log::debug!("Generation: {}", gen_i);
         // pheromone evaporation
         pheromone_map.decay();
         pheromone_map.update_route(&gen_best_route, gen_best_eval);
         let mut curr_best_route = gen_best_route.clone();
         let mut curr_best_eval = gen_best_eval;
         for ant_i in 0..aco.num_ant {
-            println!("  Ant: {}", ant_i);
+            log::debug!("  Ant: {}", ant_i);
             // each ant attempts to build a better route
             if let Some(new_route) = adjust_route(
                 &aco,
@@ -173,12 +174,14 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
                 &pheromone_map,
                 &mut heuristic_map,
                 &stops,
+                &zone_to_zone_coverage,
             ) {
-                let new_route_eval = evaluate_route(&aco, &new_route, &city).0;
+                let new_route_eval =
+                    evaluate_route(&aco, &new_route, &city, &zone_to_zone_coverage).0;
                 if new_route_eval > curr_best_eval {
                     curr_best_route = new_route;
                     curr_best_eval = new_route_eval;
-                    println!("    New best route found: {}", new_route_eval);
+                    log::debug!("    New best route found: {}", new_route_eval);
                 }
             }
         }
@@ -199,22 +202,39 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
 // Helpers for ACO
 
 // Computes a score for the route and a punishment factor for the route
-fn evaluate_route(params: &ACO, route: &TransitRoute, city: &City) -> (f64, f64) {
+fn evaluate_route(
+    params: &ACO,
+    route: &TransitRoute,
+    city: &City,
+    zone_to_zone_coverage: &HashMap<(u32, u32), u32>,
+) -> (f64, f64) {
     // 1 - Compute nonlinearity Z_r
     let stops = &route.outbound_stops;
     let mut road_dist = 0.0;
-    let mut encountered_nodes = HashSet::new();
-    let mut duplicate_nodes = 0;
+    let mut bad_turn_count = 0;
+    let mut path_pi = vec![];
     for w in stops.windows(2) {
         let (from, to) = (&w[0], &w[1]);
-        let (dist_ij, mut path_ij) = from.road_distance(to, &city.road);
-        road_dist += dist_ij;
-        for node in path_ij.drain(0..) {
-            if encountered_nodes.contains(&node) {
-                duplicate_nodes += 1;
+        let (dist_ij, path_ij) = from.road_distance(to, &city.road);
+        // check if path_ij is a u-turn or large detour from path_pi
+        let (p0, p1) = (path_pi.get(path_pi.len() - 2), path_pi.last());
+        let (c0, c1) = (path_ij.first(), path_ij.get(1));
+        if let (Some(p0), Some(p1), Some(c0), Some(c1)) = (p0, p1, c0, c1) {
+            let (p0, p1) = (city.road.get_node(*p0).geom, city.road.get_node(*p1).geom);
+            let (c0, c1) = (city.road.get_node(*c0).geom, city.road.get_node(*c1).geom);
+            let bearing_p = Geodesic::bearing(p0, p1);
+            let bearing_c = Geodesic::bearing(c0, c1);
+            let normalized_bearing_p = (bearing_p + 360.0) % 360.0;
+            let normalized_bearing_c = (bearing_c + 360.0) % 360.0;
+            let diff =
+                ((normalized_bearing_c - normalized_bearing_p + 540.0) % 360.0) - 180.0;
+            if diff.abs() > 175.0 {
+                bad_turn_count += 1;
             }
-            encountered_nodes.insert(node);
         }
+        // add the distance to the total road distance
+        road_dist += dist_ij;
+        path_pi = path_ij;
     }
     let straight_line_dist = geo_util::haversine(
         stops.first().unwrap().geom.x(),
@@ -238,8 +258,14 @@ fn evaluate_route(params: &ACO, route: &TransitRoute, city: &City) -> (f64, f64)
     let mut demand = 0.0;
     for i in 0..zones.len() {
         for j in i + 1..zones.len() {
-            demand += city.grid.demand_between_zones(zones[i], zones[j])
-                + city.grid.demand_between_zones(zones[j], zones[i]);
+            let (u, v) = (
+                city.grid.get_zone(zones[i]).zoneid,
+                city.grid.get_zone(zones[j]).zoneid,
+            );
+            let coverage = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1) as f64;
+            demand += (city.grid.demand_between_zones(zones[i], zones[j])
+                + city.grid.demand_between_zones(zones[j], zones[i]))
+                / coverage;
         }
     }
 
@@ -257,12 +283,15 @@ fn evaluate_route(params: &ACO, route: &TransitRoute, city: &City) -> (f64, f64)
     if stops.len() > params.max_route_len {
         punishment_factor += PUNISHMENT_ROUTE_LEN;
     }
-    println!(
-        "  Score: {}, Punishment: {}, Nonlinearity: {}, Duplicate Nodes: {}",
-        score, punishment_factor, nonlinearity, duplicate_nodes
+    if bad_turn_count > 0 {
+        punishment_factor += PUNISHMENT_BAD_TURN * (bad_turn_count as f64 / 4.0).max(1.0);
+    }
+    log::info!(
+        "  Score: {}, Punishment: {}, Nonlinearity: {}, Bad Turn: {}",
+        score, punishment_factor, nonlinearity, bad_turn_count
     );
 
-    (score * (1.0 - punishment_factor), punishment_factor)
+    (score * (1.0 - punishment_factor).max(0.0), punishment_factor)
 }
 
 // Compute the heuristic score for selecting a stop
@@ -271,6 +300,7 @@ fn compute_heuristic(
     to: &TransitStop,
     city: &City,
     heuristic_map: &mut HashMap<(String, String), f64>,
+    zone_to_zone_coverage: &HashMap<(u32, u32), u32>,
 ) -> f64 {
     if let Some(val) = heuristic_map.get(&(from.stop_id.clone(), to.stop_id.clone())) {
         return *val;
@@ -282,8 +312,23 @@ fn compute_heuristic(
     let demand_ji =
         city.grid
             .demand_between_coords(to.geom.x(), to.geom.y(), from.geom.x(), from.geom.y());
-    // TODO other routes
-    let h = (demand_ij + demand_ji + 0.1) / (road_dist * 2.0);
+    let zone_i = city
+        .grid
+        .find_nearest_zone(from.geom.x(), from.geom.y())
+        .unwrap();
+    let zone_i = city.grid.get_zone(zone_i);
+    let zone_j = city
+        .grid
+        .find_nearest_zone(to.geom.x(), to.geom.y())
+        .unwrap();
+    let zone_j = city.grid.get_zone(zone_j);
+    let coverage_ij = *zone_to_zone_coverage
+        .get(&(zone_i.zoneid, zone_j.zoneid))
+        .unwrap_or(&1) as f64;
+    let coverage_ji = *zone_to_zone_coverage
+        .get(&(zone_j.zoneid, zone_i.zoneid))
+        .unwrap_or(&1) as f64;
+    let h = (demand_ij + demand_ji + 0.1) / ((road_dist * 2.0) * (coverage_ij + coverage_ji + 1.0));
     heuristic_map.insert((from.stop_id.clone(), to.stop_id.clone()), h);
     h
 }
@@ -295,6 +340,7 @@ fn adjust_route(
     pheromone_map: &PheromoneMap,
     heuristic_map: &mut HashMap<(String, String), f64>,
     stops: &Vec<Arc<TransitStop>>,
+    zone_to_zone_coverage: &HashMap<(u32, u32), u32>,
 ) -> Option<TransitRoute> {
     let first = route.outbound_stops.first().unwrap();
     let last = route.outbound_stops.last().unwrap();
@@ -315,7 +361,7 @@ fn adjust_route(
             break;
         }
         if new_stops.len() >= params.max_route_len {
-            println!("    Max route length reached");
+            log::debug!("    Max route length reached");
             break;
         }
         let choices = valid_next_stops(
@@ -330,7 +376,7 @@ fn adjust_route(
         // let choices = filter_stops_by_dir(params, new_stops.last().unwrap(), last, city, radius);
         if choices.is_empty() {
             if radius > 2000.0 {
-                println!(
+                log::debug!(
                     "    No choices found after {} stops, location: {:?}, distance to end {}",
                     new_stops.len(),
                     new_stops.last().unwrap().geom,
@@ -350,18 +396,20 @@ fn adjust_route(
         if let Some(next) = select_next_stop_from_choices(
             params,
             new_stops.last().unwrap(),
+            new_stops.get(new_stops.len() - 2),
             city,
             pheromone_map,
             heuristic_map,
             &choices,
             &visited,
+            &zone_to_zone_coverage,
         ) {
             visited.insert(next.stop_id.clone());
             new_stops.push(next);
             // reset radius
             radius = params.max_stop_dist;
         } else {
-            println!("    No stops found");
+            log::debug!("    No stops found");
             radius += 500.0;
             if radius > 2000.0 {
                 break;
@@ -386,11 +434,13 @@ fn adjust_route(
 fn select_next_stop_from_choices(
     params: &ACO,
     curr: &Arc<TransitStop>,
+    prev: Option<&Arc<TransitStop>>,
     city: &City,
     pheromone_map: &PheromoneMap,
     heuristic_map: &mut HashMap<(String, String), f64>,
     choices: &Vec<Arc<TransitStop>>,
     visited: &HashSet<String>,
+    zone_to_zone_coverage: &HashMap<(u32, u32), u32>,
 ) -> Option<Arc<TransitStop>> {
     // compute probability of visiting each stop
     let mut weights = vec![];
@@ -398,7 +448,20 @@ fn select_next_stop_from_choices(
         if visited.contains(&stop.stop_id) {
             continue;
         }
-        let heuristic = compute_heuristic(curr, stop, city, heuristic_map);
+        // ensure there is no u turn prev -> curr -> stop
+        if let Some(prev) = prev {
+            let prev_bearing = Geodesic::bearing(prev.geom, curr.geom);
+            let next_bearing = Geodesic::bearing(curr.geom, stop.geom);
+            let normalized_prev_bearing = (prev_bearing + 360.0) % 360.0;
+            let normalized_next_bearing = (next_bearing + 360.0) % 360.0;
+            let diff =
+                ((normalized_next_bearing - normalized_prev_bearing + 540.0) % 360.0) - 180.0;
+            if diff.abs() > 140.0 {
+                continue;
+            }
+        }
+
+        let heuristic = compute_heuristic(curr, stop, city, heuristic_map, &zone_to_zone_coverage);
         let pheromone = pheromone_map.get(&curr.stop_id, &stop.stop_id);
         let weight = heuristic.powf(params.alpha) * pheromone.powf(params.beta);
         weights.push(weight);
@@ -446,7 +509,7 @@ fn filter_stops_by_route_bbox(
     let envelope =
         geo_util::compute_envelope_rect(min_lat, min_lon, max_lat, max_lon, padding_meters);
 
-    println!(
+    log::debug!(
         "wkt: POLYGON(({} {}, {} {}, {} {}, {} {}))",
         min_lon, min_lat, max_lon, min_lat, max_lon, max_lat, min_lon, max_lat
     );
@@ -456,6 +519,43 @@ fn filter_stops_by_route_bbox(
         .locate_in_envelope(&envelope)
         .map(|s| s.stop.clone())
         .collect::<Vec<_>>()
+}
+
+fn filter_zones_by_stops(stops: &Vec<Arc<TransitStop>>, city: &City) -> HashMap<(u32, u32), u32> {
+    let mut zone_to_zone_coverage = HashMap::new();
+    let mut zones = vec![];
+    for stop in stops {
+        let (x, y) = (stop.geom.x(), stop.geom.y());
+        let zone = city.grid.find_nearest_zone(x, y);
+        if let Some(zone) = zone {
+            if !zones.contains(&zone) {
+                zones.push(zone);
+            }
+        }
+    }
+    for i in 0..zones.len() {
+        for j in i + 1..zones.len() {
+            for route in city.transit.routes.iter() {
+                if route
+                    .outbound_stops
+                    .iter()
+                    .any(|stop| city.grid.get_zone(zones[i]).polygon.contains(&stop.geom))
+                    && route
+                        .outbound_stops
+                        .iter()
+                        .any(|stop| city.grid.get_zone(zones[j]).polygon.contains(&stop.geom))
+                {
+                    *zone_to_zone_coverage
+                        .entry((
+                            city.grid.get_zone(zones[i]).zoneid,
+                            city.grid.get_zone(zones[j]).zoneid,
+                        ))
+                        .or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    zone_to_zone_coverage
 }
 
 fn valid_next_stops(

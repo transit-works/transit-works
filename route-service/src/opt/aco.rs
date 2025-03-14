@@ -2,9 +2,7 @@ use crate::layers::{
     geo_util,
     grid::GridNetwork,
     road_network::RoadNetwork,
-    transit_network::{
-        RTreeNode, TransitNetwork, TransitRoute, TransitRouteType, TransitStop,
-    },
+    transit_network::{RTreeNode, TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
 };
 use env_logger::init;
 use geo::{Distance, Haversine, Length, LineString, Point};
