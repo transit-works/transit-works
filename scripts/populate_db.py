@@ -78,7 +78,37 @@ CITY_MAP = {
         key_name='toronto',
         osm_name='Toronto, ON, Canada', 
         gtfs_src='http://opendata.toronto.ca/toronto.transit.commission/ttc-routes-and-schedules/OpenData_TTC_Schedules.zip'
-    )
+    ),
+    'sanfrancisco': City(
+        key_name='sanfrancisco',
+        osm_name='San Francisco, CA, USA',
+        gtfs_src='https://muni-gtfs.apps.sfmta.com/data/muni_gtfs-current.zip'
+    ),
+    'austin': City(
+        key_name='austin',
+        osm_name='Austin, TX, USA',
+        gtfs_src='https://data.texas.gov/download/r4v4-vz24/application%2Fzip' # capmetro.zip
+    ),
+    'vancover': City(
+        key_name='vancover',
+        osm_name='Vancouver, BC, Canada',
+        gtfs_src='https://gtfs-static.translink.ca/gtfs/History/2025-03-14/google_transit.zip'
+    ),
+    'singapore': City(
+        key_name='singapore',
+        osm_name='Singapore',
+        gtfs_src='' # No GTFS data
+    ),
+    'newyorkcity': City(
+        key_name='newyorkcity',
+        osm_name='New York City, NY, USA',
+        gtfs_src='' # too many files
+    ),
+    'london': City(
+        key_name='london',
+        osm_name='London, UK',
+        gtfs_src='https://www.londontransit.ca/gtfsfeed/google_transit.zip'
+    ),
 }
 
 def load_libspatialite(conn: sqlite3.Connection, init: bool = True):
