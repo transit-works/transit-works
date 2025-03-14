@@ -283,9 +283,9 @@ fn evaluate_route(
     if stops.len() > params.max_route_len {
         punishment_factor += PUNISHMENT_ROUTE_LEN;
     }
-    // if bad_turn_count > 0 {
-    //     punishment_factor += PUNISHMENT_BAD_TURN * (bad_turn_count as f64 / 10.0).max(1.0);
-    // }
+    if bad_turn_count > 0 {
+        punishment_factor += PUNISHMENT_BAD_TURN * (bad_turn_count as f64 / 4.0).max(1.0);
+    }
     log::info!(
         "  Score: {}, Punishment: {}, Nonlinearity: {}, Bad Turn: {}",
         score, punishment_factor, nonlinearity, bad_turn_count
@@ -449,18 +449,17 @@ fn select_next_stop_from_choices(
             continue;
         }
         // ensure there is no u turn prev -> curr -> stop
-        // if let Some(prev) = prev {
-        //     let prev_bearing = Geodesic::bearing(prev.geom, curr.geom);
-        //     let next_bearing = Geodesic::bearing(curr.geom, stop.geom);
-        //     let normalized_prev_bearing = (prev_bearing + 360.0) % 360.0;
-        //     let normalized_next_bearing = (next_bearing + 360.0) % 360.0;
-        //     let diff =
-        //         ((normalized_next_bearing - normalized_prev_bearing + 540.0) % 360.0) - 180.0;
-        //     // if angle is > 120, then it is a u turn
-        //     if diff.abs() > 120.0 {
-        //         continue;
-        //     }
-        // }
+        if let Some(prev) = prev {
+            let prev_bearing = Geodesic::bearing(prev.geom, curr.geom);
+            let next_bearing = Geodesic::bearing(curr.geom, stop.geom);
+            let normalized_prev_bearing = (prev_bearing + 360.0) % 360.0;
+            let normalized_next_bearing = (next_bearing + 360.0) % 360.0;
+            let diff =
+                ((normalized_next_bearing - normalized_prev_bearing + 540.0) % 360.0) - 180.0;
+            if diff.abs() > 140.0 {
+                continue;
+            }
+        }
 
         let heuristic = compute_heuristic(curr, stop, city, heuristic_map, &zone_to_zone_coverage);
         let pheromone = pheromone_map.get(&curr.stop_id, &stop.stop_id);
