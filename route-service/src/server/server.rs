@@ -3,22 +3,19 @@ use crate::layers::city::City;
 use crate::layers::transit_network::{TransitNetwork, TransitRoute};
 use crate::opt::aco::ACO;
 use crate::opt::{aco2, eval};
-use crate::server::cors::cors_middleware;
 
 use actix::prelude::*;
 use actix_web::{get, post, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
 use geo::Centroid;
-use route_service::opt::{self, aco};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-// Updated application state with immutable city and mutable optimized transit
 struct AppState {
-    city: Mutex<Option<City>>, // Immutable after initialization
+    city: Mutex<Option<City>>,
     optimized_transit: Mutex<Option<TransitNetwork>>, // Stores optimized routes
     optimized_route_ids: Mutex<Vec<String>>, // Tracks which routes have been optimized
 }
@@ -26,11 +23,6 @@ struct AppState {
 #[derive(Deserialize)]
 struct RouteIds {
     routes: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct GridResponse {
-    message: String,
 }
 
 fn get_optimized_geojson(
@@ -734,7 +726,6 @@ impl Actor for OptimizationWs {
         );
         
         // Send immediate confirmation that the WebSocket connection is established
-        // This prevents client timeout if the first optimization takes a long time
         let connection_msg = serde_json::json!({
             "status": "connected",
             "message": "WebSocket connection established, optimization starting",
@@ -790,13 +781,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for OptimizationWs {
     }
 }
 
-// Define a struct for the query parameters
 #[derive(Deserialize)]
 struct RouteIdParams {
     route_ids: String, // Comma-separated list of route IDs
 }
 
-// Single unified endpoint for live route optimization - replaces both previous endpoints
 #[get("/optimize-live")]
 async fn optimize_live(
     req: HttpRequest,
@@ -854,16 +843,15 @@ pub async fn start_server(
     println!("Starting server on {}:{}", host, port);
     HttpServer::new(move || {
         App::new()
-            .wrap(cors_middleware()) // Apply CORS middleware to all routes
             .app_data(app_state.clone()) // Pass the state to all routes
             .service(get_data)
             .service(optimize_route)
             .service(optimize_routes)
             .service(evaluate_route)
-            .service(evaluate_coverage) // Add the new service
+            .service(evaluate_coverage) 
             .service(get_grid)
             .service(reset_optimizations)
-            .service(optimize_live) // Replace the previous WebSocket endpoints with this unified one
+            .service(optimize_live) 
             .service(get_optimizations)
     })
     .bind(addr)?
