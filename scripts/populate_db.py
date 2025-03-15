@@ -227,8 +227,8 @@ def add_travel_demand_gravity_model(
         city_file=city.city_file,
         nodes_file=city.nodes_file,
         edges_file=city.edges_file,
-        num_rows=20,
-        num_cols=20,
+        num_rows=40,
+        num_cols=40,
         conn=conn,
     )
 
@@ -236,33 +236,47 @@ def add_gtfs_data(
     city: City,
     conn: sqlite3.Connection,
 ):
-    print(f'Downloading GTFS data from {city.gtfs_src}')
-    response = requests.get(city.gtfs_src)
-    response.raise_for_status()
-
     file_name = city.gtfs_src.split('/')[-1]
     file_name = f'{city.gtfs_dir}/{file_name}'
-    print(f'Extracting GTFS data into {file_name}')
-    with open(file_name, 'wb') as f:
-        f.write(response.content)
-    
-    with zipfile.ZipFile(file_name, 'r') as zip_ref:
-        zip_ref.extractall(path=city.gtfs_dir)
+    if not os.path.exists(file_name):
+        print(f'Downloading GTFS data from {city.gtfs_src}')
+        response = requests.get(city.gtfs_src)
+        response.raise_for_status()
+        print(f'Extracting GTFS data into {file_name}')
+        with open(file_name, 'wb') as f:
+            f.write(response.content)
+        with zipfile.ZipFile(file_name, 'r') as zip_ref:
+            zip_ref.extractall(path=city.gtfs_dir)
+    else:
+        print(f'GTFS data already exists at {file_name}')
 
-    # TODO Handle if a table is missing or already filled
     print('Loading GTFS files to database')
     cursor = conn.cursor()
     # copy all the .txt files in the extracted folder to the database
     for file in os.listdir(path=city.gtfs_dir):
-        if file.endswith('.txt'):
+        if file in [
+            'agency.txt',
+            'calendar.txt',
+            'calendar_dates.txt',
+            'routes.txt',
+            'shapes.txt',
+            'stop_times.txt',
+            'stops.txt',
+            'trips.txt',
+            'fare_attributes.txt',
+            'fare_rules.txt',
+            'frequencies.txt',
+        ]:
             file_path = f'{city.gtfs_dir}/{file}'
             print(f'Loading {file_path} to database')
             with open(file_path, 'r') as f:
                 reader = csv.reader(f)
                 columns = next(reader)
                 table_name = f'gtfs_{file.split(".")[0]}'
+                # Clear the table
+                cursor.execute(f'DELETE FROM {table_name};')
                 # Insert all the data from the file
-                cursor.executemany(f"INSERT INTO {table_name} VALUES ({','.join(['?'] * len(columns))})", reader)
+                cursor.executemany(f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({','.join(['?'] * len(columns))})", reader)
 
     conn.commit()
 

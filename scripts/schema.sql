@@ -61,7 +61,68 @@ CREATE TABLE gtfs_agency (
     agency_timezone TEXT, 
     agency_lang TEXT, 
     agency_phone TEXT, 
-    agency_fare_url TEXT
+    agency_fare_url TEXT, 
+    agency_email TEXT
+);
+
+CREATE TABLE gtfs_stops (
+    stop_id TEXT, 
+    stop_code TEXT, 
+    stop_name TEXT, 
+    stop_desc TEXT, 
+    stop_lat TEXT, 
+    stop_lon TEXT, 
+    zone_id TEXT, 
+    stop_url TEXT, 
+    location_type TEXT, 
+    parent_station TEXT, 
+    stop_timezone TEXT, 
+    wheelchair_boarding TEXT, 
+    platform_code TEXT
+);
+
+CREATE TABLE gtfs_routes (
+    route_id TEXT, 
+    agency_id TEXT, 
+    route_short_name TEXT, 
+    route_long_name TEXT, 
+    route_desc TEXT, 
+    route_type TEXT, 
+    route_url TEXT, 
+    route_color TEXT, 
+    route_text_color TEXT, 
+    route_sort_order TEXT,
+    continuous_pickup TEXT, 
+    continuous_drop_off TEXT, 
+    network_id TEXT
+);
+
+CREATE TABLE gtfs_trips (
+    route_id TEXT, 
+    service_id TEXT, 
+    trip_id TEXT, 
+    trip_headsign TEXT, 
+    trip_short_name TEXT, 
+    direction_id TEXT, 
+    block_id TEXT, 
+    shape_id TEXT, 
+    wheelchair_accessible TEXT, 
+    bikes_allowed TEXT
+);
+
+CREATE TABLE gtfs_stop_times (
+    trip_id TEXT, 
+    arrival_time TEXT, 
+    departure_time TEXT, 
+    stop_id TEXT, 
+    stop_sequence TEXT, 
+    stop_headsign TEXT, 
+    pickup_type TEXT, 
+    drop_off_type TEXT, 
+    continuous_pickup TEXT, 
+    continuous_drop_off TEXT, 
+    shape_dist_traveled TEXT, 
+    timepoint TEXT
 );
 
 CREATE TABLE gtfs_calendar (
@@ -83,66 +144,6 @@ CREATE TABLE gtfs_calendar_dates (
     exception_type TEXT
 );
 
-CREATE TABLE gtfs_routes (
-    route_id TEXT, 
-    agency_id TEXT, 
-    route_short_name TEXT, 
-    route_long_name TEXT, 
-    route_desc TEXT, 
-    route_type TEXT, 
-    route_url TEXT, 
-    route_color TEXT, 
-    route_text_color TEXT
-);
-
-CREATE TABLE gtfs_shapes (
-    shape_id TEXT, 
-    shape_pt_lat TEXT, 
-    shape_pt_lon TEXT, 
-    shape_pt_sequence TEXT, 
-    shape_dist_traveled TEXT
-);
-
-CREATE TABLE gtfs_stop_times (
-    trip_id TEXT, 
-    arrival_time TEXT, 
-    departure_time TEXT, 
-    stop_id TEXT, 
-    stop_sequence TEXT, 
-    stop_headsign TEXT, 
-    pickup_type TEXT, 
-    drop_off_type TEXT, 
-    shape_dist_traveled TEXT
-);
-
-CREATE TABLE gtfs_stops (
-    stop_id TEXT, 
-    stop_code TEXT, 
-    stop_name TEXT, 
-    stop_desc TEXT, 
-    stop_lat TEXT, 
-    stop_lon TEXT, 
-    zone_id TEXT, 
-    stop_url TEXT, 
-    location_type TEXT, 
-    parent_station TEXT, 
-    stop_timezone TEXT, 
-    wheelchair_boarding TEXT
-);
-
-CREATE TABLE gtfs_trips (
-    route_id TEXT, 
-    service_id TEXT, 
-    trip_id TEXT, 
-    trip_headsign TEXT, 
-    trip_short_name TEXT, 
-    direction_id TEXT, 
-    block_id TEXT, 
-    shape_id TEXT, 
-    wheelchair_accessible TEXT, 
-    bikes_allowed TEXT
-);
-
 CREATE TABLE gtfs_fare_attributes (
     fare_id TEXT, 
     price TEXT, 
@@ -159,6 +160,14 @@ CREATE TABLE gtfs_fare_rules (
     origin_id TEXT, 
     destination_id TEXT, 
     contains_id TEXT
+);
+
+CREATE TABLE gtfs_shapes (
+    shape_id TEXT, 
+    shape_pt_lat TEXT, 
+    shape_pt_lon TEXT, 
+    shape_pt_sequence TEXT, 
+    shape_dist_traveled TEXT
 );
 
 CREATE TABLE gtfs_frequencies (
@@ -234,7 +243,9 @@ CREATE TABLE gtfs_feed_info (
     feed_lang TEXT, 
     feed_start_date TEXT, 
     feed_end_date TEXT, 
-    feed_version TEXT
+    feed_version TEXT, 
+    feed_contact_email TEXT, 
+    feed_contact_url TEXT
 );
 
 CREATE TABLE gtfs_attributions (
