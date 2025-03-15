@@ -1,8 +1,18 @@
+use actix_codec::Framed;
 use actix_web::{web, App, HttpServer, HttpResponse, HttpRequest};
-use awc::{body::MessageBody, Client};
-use futures::{SinkExt, StreamExt};
+
+use awc::{body::MessageBody, ws::Codec, Client, ClientResponse, BoxedSocket, error::WsProtocolError};
+use futures::{FutureExt, SinkExt, StreamExt};
 use std::collections::HashMap;
-use log::{info, error};
+use log::{info, error, debug, warn};
+
+// Add WebSocket related imports
+use actix_web_actors::ws;
+use actix::{Actor, ActorContext, ActorFutureExt, AsyncContext, StreamHandler, WrapFuture};
+use std::time::{Duration, Instant};
+use awc::ws::{Frame, Message};
+use std::pin::Pin;
+use futures::Stream;
 
 use crate::server::cors::cors_middleware;
 
@@ -25,6 +35,245 @@ impl CityConfig {
     }
 }
 
+// WebSocket proxy actor
+struct WebSocketProxy {
+    // Fix the type to properly separate sink and stream
+    sink: Option<futures::stream::SplitSink<Framed<BoxedSocket, Codec>, Message>>,
+    heartbeat: Instant,
+    city: String,
+    port: u16,
+    path: String,
+    query_string: String,
+}
+
+impl WebSocketProxy {
+    fn new(city: String, port: u16, path: String, query_string: String) -> Self {
+        WebSocketProxy {
+            sink: None,
+            heartbeat: Instant::now(),
+            city,
+            port,
+            path,
+            query_string,
+        }
+    }
+    
+    fn heartbeat(&self, ctx: &mut ws::WebsocketContext<Self>) {
+        ctx.run_interval(Duration::from_secs(30), |act, ctx| {
+            // Check client websocket timeout
+            if Instant::now().duration_since(act.heartbeat) > Duration::from_secs(60) {
+                info!("WebSocket client timeout, disconnecting");
+                ctx.stop();
+                return;
+            }
+            
+            // Send ping to keep connection alive
+            ctx.ping(b"");
+        });
+    }
+}
+
+impl Actor for WebSocketProxy {
+    type Context = ws::WebsocketContext<Self>;
+    
+    fn started(&mut self, ctx: &mut Self::Context) {
+        info!("WebSocket proxy started for city '{}' at port {}", self.city, self.port);
+        
+        // Start heartbeat
+        self.heartbeat(ctx);
+        
+        // Build WebSocket target URL
+        let ws_url = format!(
+            "ws://127.0.0.1:{}{}{}",
+            self.port, 
+            self.path,
+            if !self.query_string.is_empty() { format!("?{}", self.query_string) } else { String::new() }
+        );
+        
+        info!("Connecting to WebSocket at: {}", ws_url);
+        
+        // Connect to target WebSocket
+        let client = awc::Client::default();
+        let req = client.ws(ws_url);
+        
+        // Add the X-Forwarded-City header
+        let city_clone = self.city.clone();
+        let req = req.header("X-Forwarded-City", city_clone);
+        
+        // Connect to the server WebSocket
+        let fut = req.connect().map(move |res| res.ok());
+        
+        // Handle the future completion
+        ctx.spawn(fut.into_actor(self).then(|res, act, ctx| {
+            if let Some(connect_res) = res {
+                // Split the connection into sink and stream
+                let (sink, stream) = connect_res.1.split();
+                act.sink = Some(sink);
+                
+                // Process messages coming from the server - properly return Result type
+                ctx.add_stream(stream.map(|msg| -> Result<ws::Message, ws::ProtocolError> {
+                    match msg {
+                        Ok(Frame::Continuation(_)) => {
+                            debug!("Received continuation frame from server, ignoring");
+                            Ok(ws::Message::Nop)
+                        }
+                        Ok(Frame::Text(text)) => {
+                            debug!("Received text from server, forwarding to client");
+                            Ok(ws::Message::Text(String::from_utf8_lossy(&text).into_owned().into()))
+                        }
+                        Ok(Frame::Binary(bin)) => {
+                            debug!("Received binary from server, forwarding to client");
+                            Ok(ws::Message::Binary(bin))
+                        }
+                        Ok(Frame::Ping(msg)) => {
+                            debug!("Received ping from server, forwarding to client");
+                            Ok(ws::Message::Ping(msg))
+                        }
+                        Ok(Frame::Pong(msg)) => {
+                            debug!("Received pong from server, updating heartbeat");
+                            Ok(ws::Message::Pong(msg))
+                        }
+                        Ok(Frame::Close(reason)) => {
+                            info!("Server closed WebSocket connection: {:?}", reason);
+                            Ok(ws::Message::Close(reason))
+                        }
+                        Err(e) => {
+                            error!("Error in WebSocket stream from server: {}", e);
+                            // When there's an error from server, propagate to client
+                            Err(ws::ProtocolError::Io(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("Server error: {}", e),
+                            )))
+                        }
+                    }
+                }));
+                
+                info!("WebSocket connection established with server");
+            } else {
+                error!("Failed to connect to target WebSocket");
+                ctx.close(None);
+                ctx.stop();
+            }
+            
+            futures::future::ready(())
+        }));
+    }
+    
+    fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
+        info!("WebSocket proxy stopping");
+        actix::Running::Stop
+    }
+}
+
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketProxy {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        // Handle messages from client
+        match msg {
+            Ok(ws::Message::Ping(msg)) => {
+                debug!("Received ping from client");
+                self.heartbeat = Instant::now();
+                ctx.pong(&msg);
+                
+                // Forward ping to server if connected
+                if let Some(sink) = &mut self.sink {
+                    if let Err(e) = futures::executor::block_on(sink.send(Message::Ping(msg))) {
+                        error!("Error forwarding ping to server: {}", e);
+                    }
+                }
+            }
+            Ok(ws::Message::Pong(msg)) => {
+                debug!("Received pong from client");
+                self.heartbeat = Instant::now();
+                
+                // Forward pong to server if connected
+                if let Some(sink) = &mut self.sink {
+                    if let Err(e) = futures::executor::block_on(sink.send(Message::Pong(msg))) {
+                        error!("Error forwarding pong to server: {}", e);
+                    }
+                }
+            }
+            Ok(ws::Message::Text(text)) => {
+                debug!("Received text message from client");
+                self.heartbeat = Instant::now();
+                
+                // Forward text to server if connected
+                if let Some(sink) = &mut self.sink {
+                    if let Err(e) = futures::executor::block_on(sink.send(Message::Text(text.into()))) {
+                        error!("Error forwarding text to server: {}", e);
+                    }
+                }
+            }
+            Ok(ws::Message::Binary(bin)) => {
+                debug!("Received binary message from client");
+                self.heartbeat = Instant::now();
+                
+                // Forward binary to server if connected
+                if let Some(sink) = &mut self.sink {
+                    if let Err(e) = futures::executor::block_on(sink.send(Message::Binary(bin))) {
+                        error!("Error forwarding binary to server: {}", e);
+                    }
+                }
+            }
+            Ok(ws::Message::Close(reason)) => {
+                info!("Client closed WebSocket connection: {:?}", reason);
+                
+                // Forward close to server if connected
+                if let Some(sink) = &mut self.sink {
+                    if let Err(e) = futures::executor::block_on(sink.send(Message::Close(reason.clone()))) {
+                        error!("Error forwarding close message to server: {}", e);
+                    }
+                }
+                
+                ctx.close(reason);
+                ctx.stop();
+            }
+            Ok(ws::Message::Continuation(_)) => {
+                debug!("Received continuation frame from client");
+                // Handle continuation frame if needed
+            }
+            Ok(ws::Message::Nop) => {
+                debug!("Received Nop frame from client");
+                // Handle Nop frame if needed
+            }
+            Err(e) => {
+                error!("WebSocket protocol error from client: {}", e);
+                ctx.stop();
+            }
+        }
+    }
+}
+
+// Helper function to check if a request is a WebSocket upgrade request
+fn is_websocket_request(req: &HttpRequest) -> bool {
+    if let Some(upgrade) = req.headers().get("upgrade") {
+        if upgrade.as_bytes().eq_ignore_ascii_case(b"websocket") {
+            if let Some(connection) = req.headers().get("connection") {
+                if connection.as_bytes().windows(b"upgrade".len()).any(|window| window.eq_ignore_ascii_case(b"upgrade")) {
+                    if req.headers().contains_key("sec-websocket-key") {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+// Handle WebSocket connections
+async fn websocket_proxy(
+    req: HttpRequest, 
+    stream: web::Payload,
+    city: String,
+    port: u16,
+    path: String,
+    query_string: String,
+) -> Result<HttpResponse, actix_web::Error> {
+    info!("Handling WebSocket request to city '{}' at path '{}'", city, path);
+    
+    let ws_proxy = WebSocketProxy::new(city, port, path, query_string);
+    ws::start(ws_proxy, &req, stream)
+}
+
 // Main proxy handler that forwards requests to the appropriate city server
 async fn proxy_handler(
     req: HttpRequest,
@@ -43,7 +292,7 @@ async fn proxy_handler(
     let city = match query_params.remove("city") {
         Some(city) => city,
         None => {
-            log::warn!("City parameter not found in query string");
+            warn!("City parameter not found in query string");
             // Use default city if available
             match &city_config.default_city {
                 Some(default_city) => default_city.clone(),
@@ -64,6 +313,37 @@ async fn proxy_handler(
         }
     };
     
+    // Check if this is a WebSocket connection request
+    if is_websocket_request(&req) {
+        info!("Detected WebSocket upgrade request for city '{}' at path '{}'", city, req.uri().path());
+        
+        // Rebuild query string without the city parameter
+        let new_query_string = if !query_params.is_empty() {
+            url::form_urlencoded::Serializer::new(String::new())
+                .extend_pairs(query_params.iter())
+                .finish()
+        } else {
+            String::new()
+        };
+        
+        return match websocket_proxy(
+            req.clone(), 
+            payload, 
+            city, 
+            port,
+            req.uri().path().to_string(),
+            new_query_string,
+        )
+        .await {
+            Ok(res) => res,
+            Err(e) => {
+                error!("Failed to establish WebSocket proxy: {:?}", e);
+                HttpResponse::InternalServerError().body("WebSocket proxy error")
+            }
+        };
+    }
+    
+    // For regular HTTP requests, continue with the existing logic
     // Rebuild query string without the city parameter
     let new_query_string = if !query_params.is_empty() {
         let new_qs = url::form_urlencoded::Serializer::new(String::new())
