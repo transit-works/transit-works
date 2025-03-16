@@ -4,18 +4,12 @@ use std::{
 };
 
 use geo::{Bearing, Contains, Geodesic};
-use rand::{
-    distributions::WeightedIndex,
-    prelude::Distribution,
-    rngs::ThreadRng,
-};
+use rand::{distributions::WeightedIndex, prelude::Distribution, rngs::ThreadRng};
 
-use crate::{
-    layers::{
-        city::City,
-        geo_util,
-        transit_network::{TransitRoute, TransitRouteType, TransitStop},
-    }
+use crate::layers::{
+    city::City,
+    geo_util,
+    transit_network::{TransitRoute, TransitRouteType, TransitStop},
 };
 
 // struct to store all the tunable parameters for the ACO algorithm
@@ -333,7 +327,8 @@ fn compute_heuristic(
     let coverage_ji = *zone_to_zone_coverage
         .get(&(zone_j.zoneid, zone_i.zoneid))
         .unwrap_or(&1) as f64;
-    let h = (demand_ij + demand_ji + 0.01) / ((road_dist * 2.0) * (coverage_ij + coverage_ji + 1.0) + 0.01);
+    let h = (demand_ij + demand_ji + 0.01)
+        / ((road_dist * 2.0) * (coverage_ij + coverage_ji + 1.0) + 0.01);
     heuristic_map.insert((from.stop_id.clone(), to.stop_id.clone()), h);
     h
 }
