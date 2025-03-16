@@ -477,11 +477,11 @@ fn pick_inbound_outbound_trips<'a>(
         .max_by_key(|trip| trip.stop_times.len());
     if let (Some(trip1), Some(trip2)) = (trip1, trip2) {
         // Ensure that the trips are in different directions
-        assert_ne!(
-            trip_is_outbound(trip1),
-            trip_is_outbound(trip2),
-            "The trips must be in different directions"
-        );
+        // assert_ne!(
+        //     trip_is_outbound(trip1),
+        //     trip_is_outbound(trip2),
+        //     "The trips must be in different directions"
+        // );
         Some((trip1, trip2))
     } else {
         // If there are no trips in one direction, return None

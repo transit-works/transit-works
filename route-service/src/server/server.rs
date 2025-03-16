@@ -817,6 +817,7 @@ async fn optimize_live(
 }
 
 pub async fn start_server(
+    city_name: &str,
     gtfs_path: &str,
     db_path: &str,
     host: &str,
@@ -829,9 +830,14 @@ pub async fn start_server(
     println!("Loading city data from {} and {}", gtfs_path, db_path);
     // Try loading the city data upfront
     let city_result = City::load_with_cached_transit(
-        "toronto", gtfs_path, db_path, true,  // set cache
+        city_name, gtfs_path, db_path, true,  // set cache
         false, // don't invalidate cache
     );
+
+    if city_result.is_err() {
+        log::error!("Failed to load city data: {:?}", city_result.err());
+        return Ok(());
+    }
 
     // Initialize application state with the city and a copy of transit for optimizations
     let app_state = web::Data::new(AppState {

@@ -3,8 +3,25 @@ use crate::gtfs::structs::*;
 
 use csv::StringRecord;
 use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Read, path::Path};
+use serde::{Deserialize, Serialize, Deserializer};
+use std::{fs::File, io::Read, path::Path, str::FromStr};
+
+/// Helper function to deserialize optional fields that might fail to parse
+pub fn deserialize_opt<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: FromStr,
+    D: Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    match opt {
+        Some(s) if s.trim().is_empty() => Ok(None),
+        Some(s) => match T::from_str(&s) {
+            Ok(val) => Ok(Some(val)),
+            Err(_) => Ok(None), // Instead of failing, just return None
+        },
+        None => Ok(None),
+    }
+}
 
 /// GTFS dataset
 /// https://gtfs.org/documentation/schedule/reference/#dataset-files

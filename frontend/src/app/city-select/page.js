@@ -156,11 +156,24 @@ export default function CountrySelectPage() {
     }).filter(Boolean);
   }, [cities]);
 
-  // Replace the existing handleCityClick function
+  // Add a function to convert city name to URL-friendly format
+  const getCitySlug = (cityName) => {
+    if (!cityName) return '';
+    return cityName.toLowerCase().replace(/\s+/g, '');
+  };
+
+  // Update the handleCityClick function to store the selected city slug
   const handleCityClick = useCallback((city) => {
     if (!city || !city.coordinates) return;
     
     setSelectedCity(city);
+    
+    // Store the city slug and coordinates in localStorage for persistence
+    if (city.name) {
+      const citySlug = getCitySlug(city.name);
+      localStorage.setItem('selectedCity', citySlug);
+      localStorage.setItem('selectedCityCoordinates', JSON.stringify(city.coordinates));
+    }
     
     // Add ripple effect
     setRippleData([{
@@ -456,9 +469,12 @@ export default function CountrySelectPage() {
               </div>
             </div>
 
-            {/* Update the popup buttons - remove Details button */}
+            {/* Update the popup buttons with city parameter */}
             <div className="w-full flex justify-center mt-5">
-              <Link href="/" passHref>
+              <Link 
+                href={`/map?city=${getCitySlug(selectedCity.name)}`} 
+                passHref
+              >
                 <button
                   className="bg-white px-4 py-1.5 rounded-xl text-black font-body text-sm hover:bg-opacity-90 transition">
                   Explore Map &rarr;

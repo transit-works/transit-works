@@ -4,12 +4,12 @@ import { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from '../maps/Sidebar';
 import OptimizationProgress from '../maps/OptimizationProgress';
+import { fetchFromAPI, createWebSocket } from '@/utils/api';
 
 // Dynamically import MapView with no SSR to ensure it runs only on the client
 const TransitMap = dynamic(() => import('../maps/TransitMap'), { ssr: false });
 
-export default function MapView({ data, initialOptimizedRoutesData, initialOptimizedRoutes }) {
-  // Keep track of both selectedRoute and selectedRoutes
+export default function MapView({ data, initialOptimizedRoutesData, initialOptimizedRoutes, city = 'toronto' }) {
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [selectedRoutes, setSelectedRoutes] = useState(new Set());
   const [optimizedRoutesData, setOptimizedRoutesData] = useState(initialOptimizedRoutesData);
@@ -80,27 +80,17 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setIsOptimizing(true);
       setOptimizationError(null);
       
-      const endpoint = 'http://localhost:8080/optimize-routes';
-      
-      const requestOptions = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          routes: routesToOptimize,
-          params: acoParams
-        })
-      };
-
       try {
-        const response = await fetch(endpoint, requestOptions);
-        
-        if (!response.ok) {
-          throw new Error(`Optimization failed with status: ${response.status}`);
-        }
-        
-        const result = await response.json();
+        const result = await fetchFromAPI('/optimize-routes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            routes: routesToOptimize,
+            params: acoParams
+          })
+        });
         
         if (result && result.geojson) {
           // Store the optimized route data
@@ -133,7 +123,6 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     }
   };
 
-  // Update handleLiveOptimize to work with the new unified endpoint
   const handleLiveOptimize = () => {
     if (selectedRoutes.size === 0) {
       setOptimizationError('Please select at least one route to optimize');
@@ -158,13 +147,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       // Clear previously tracked converged routes
       setConvergedRoutes(new Set());
 
-      // Create WebSocket connection with unified endpoint
+      // Create WebSocket connection
       const routeIdsParam = routesToOptimize.join(',');
-      const wsUrl = `ws://localhost:8080/optimize-live?route_ids=${encodeURIComponent(routeIdsParam)}`;
-      
-      console.log(`Connecting to WebSocket at ${wsUrl}`);
-      
-      const ws = new WebSocket(wsUrl);
+      const ws = createWebSocket(`/optimize-live?route_ids=${encodeURIComponent(routeIdsParam)}`, city);
       wsRef.current = ws;
 
       // Set up ping interval to keep connection alive
@@ -375,35 +360,28 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setIsOptimizing(true);
       setOptimizationError(null);
 
-      const response = await fetch('http://localhost:8080/reset-optimizations', {
+      const response = await fetchFromAPI('/reset-optimizations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         }
       });
 
-      if (!response.ok) {
-        throw new Error(`Reset failed with status: ${response.status}`);
-      }
-      
       // Clear optimized routes data
       setOptimizedRoutes(new Set());
       setOptimizedRoutesData(null);
       
       // Verify the reset worked by checking with the server
-      const verifyResponse = await fetch('http://localhost:8080/get-optimizations');
-      if (verifyResponse.ok) {
-        const verifyData = await verifyResponse.json();
-        if (verifyData.routes && verifyData.routes.length > 0) {
-          console.warn('Warning: Server still has optimized routes after reset');
-          // Force another reset if needed
-          await fetch('http://localhost:8080/reset-optimizations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
-        } else {
-          console.log('Reset verification successful - server confirms no optimized routes');
-        }
+      const verifyData = await fetchFromAPI('/get-optimizations');
+      if (verifyData.routes && verifyData.routes.length > 0) {
+        console.warn('Warning: Server still has optimized routes after reset');
+        // Force another reset if needed
+        await fetchFromAPI('/reset-optimizations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } else {
+        console.log('Reset verification successful - server confirms no optimized routes');
       }
     } catch (error) {
       console.error('Error resetting optimizations:', error);
@@ -416,13 +394,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   // Add this function to MapView.js
   const fetchOptimizedRoutes = async () => {
     try {
-      const response = await fetch('http://localhost:8080/get-optimizations');
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch optimized routes: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      // Use the fetchFromAPI utility
+      const data = await fetchFromAPI('/get-optimizations');
       
       // Check if there are any optimized routes
       if (data.geojson && data.geojson.features && data.geojson.features.length > 0) {
@@ -490,6 +463,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           onToggle3DRoutes={toggle3DRoutes}
           onToggleRandomColors={toggleRandomColors}
           onTogglePopulationHeatmap={togglePopulationHeatmap}
+          city={city} // Pass city prop to Sidebar
         />
       </div>
       <div className="absolute inset-0 z-0 h-full w-full">
@@ -519,6 +493,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           acoParams={acoParams}
           setAcoParams={setAcoParams}
           setIsRouteCarouselVisible={setIsRouteCarouselVisible}
+          city={city} // Pass city prop to TransitMap
         />
 
         {/* Update the floating OptimizationProgress component position to bottom left with higher z-index */}

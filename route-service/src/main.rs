@@ -101,7 +101,7 @@ async fn main() -> std::io::Result<()> {
         
         actix_web::rt::spawn(async move {
             info!("Starting server for {} on port {}", name, port);
-            if let Err(e) = start_server(&gtfs_path, &db_path, &host, port).await {
+            if let Err(e) = start_server(&name, &gtfs_path, &db_path, &host, port).await {
                 eprintln!("Failed to start server for {}: {}", name, e);
             }
             Ok::<_, std::io::Error>(())
