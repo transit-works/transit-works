@@ -52,25 +52,25 @@ class Building(enum.Enum):
     HOUSE = 'house'
     SEMIDETACHED_HOUSE = 'semidetached_house'
 
-# Trips generated in the city every hour for each time period
+# Share of trips generated in the city every hour for each time period
 TRIPS_GENERATED = {
-    TimePeriod.MORNING: 20_000.0,
-    TimePeriod.AM_RUSH: 150_000.0,
-    TimePeriod.MID_DAY: 60_0000.0,
-    TimePeriod.PM_RUSH: 150_000.0,
-    TimePeriod.EVENING: 20_000.0,
+    TimePeriod.MORNING: 0.01,
+    TimePeriod.AM_RUSH: 0.1,
+    TimePeriod.MID_DAY: 0.03,
+    TimePeriod.PM_RUSH: 0.1,
+    TimePeriod.EVENING: 0.02,
 }
 
 # Rough estimate of the number of people living in each building type PER UNIT
 BUILDING_OCCUPANCY = {
     Building.APARTMENTS.value: 2.5,
-    Building.BARRACKS.value: 300,
-    Building.BUNGALOW.value: 4,
-    Building.DETACHED.value: 4,
-    Building.DORMITORY.value: 3,
-    Building.HOTEL.value: 2,
-    Building.HOUSE.value: 4,
-    Building.SEMIDETACHED_HOUSE.value: 4,
+    Building.BARRACKS.value: 300.0,
+    Building.BUNGALOW.value: 4.0,
+    Building.DETACHED.value: 4.0,
+    Building.DORMITORY.value: 3.0,
+    Building.HOTEL.value: 2.0,
+    Building.HOUSE.value: 4.0,
+    Building.SEMIDETACHED_HOUSE.value: 4.0,
 }
 
 # All building types that have more than 2 floor
@@ -216,10 +216,10 @@ def populate_zone_attributes(city: City, zones: gpd.GeoDataFrame) -> gpd.GeoData
                     num_floors = int(num_floors)
                     population += BUILDING_OCCUPANCY.get(building_type, 0) * 10 * num_floors
                 else:
-                    population += 50
+                    population += 50.0
 
             else:
-                population += BUILDING_OCCUPANCY.get(building_type, 0)
+                population += BUILDING_OCCUPANCY.get(building_type, 4.0)
         
         # determine the proportion of each landuse type by area in the zone
         area_by_type = {x.value: 0 for x in Landuse}
@@ -319,11 +319,13 @@ def calculate_zone_production(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return zones
 
 def normalize_zone_production_and_attraction(zones: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    population = zones['population'].sum()
+    print('Total population:', population)
     # sum of all production should be equal to sum of all attraction
     for time_period in TimePeriod:
         ttl_production = zones['production'].apply(lambda x: x[time_period]).sum()
         ttl_attraction = zones['attraction'].apply(lambda x: x[time_period]).sum()
-        trips_per_hour = TRIPS_GENERATED[time_period]
+        trips_per_hour = population * TRIPS_GENERATED[time_period]
         zones['production'] = zones['production'].apply(lambda x: x.update({time_period: x[time_period] / ttl_production * trips_per_hour}) or x)
         zones['attraction'] = zones['attraction'].apply(lambda x: x.update({time_period: x[time_period] / ttl_attraction * trips_per_hour}) or x)
         # check the sum
@@ -415,7 +417,7 @@ def load_data_from_files(file_path: str, nodes_file, edges_file) -> City:
     nodes.set_index('osmid', inplace=True)
     pois = osm.get_pois(custom_filter={'amenity': True})
     landuse = osm.get_landuse(custom_filter={'landuse': [x.value for x in Landuse]})
-    buildings = osm.get_buildings(custom_filter={'building': [x.value for x in Building]})
+    buildings = osm.get_buildings()
 
     # repaire all the geometries
     print("Repairing geometries...")

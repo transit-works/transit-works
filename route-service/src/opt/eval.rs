@@ -57,10 +57,7 @@ pub fn ridership_over_route(
     for i in 0..zones.len() {
         // people getting off
         for j in 0..i {
-            let (u, v) = (
-                od.get_zone(zones[i]).zoneid,
-                od.get_zone(zones[j]).zoneid,
-            );
+            let (u, v) = (od.get_zone(zones[i]).zoneid, od.get_zone(zones[j]).zoneid);
             let coverage = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1) as f64;
             let demand_ij = od.link_between_zones(zones[i], zones[j]).unwrap();
             let ridership_ij = demand_ij.weight / coverage;
@@ -68,10 +65,7 @@ pub fn ridership_over_route(
         }
         // people getting on
         for j in i + 1..zones.len() {
-            let (u, v) = (
-                od.get_zone(zones[i]).zoneid,
-                od.get_zone(zones[j]).zoneid,
-            );
+            let (u, v) = (od.get_zone(zones[i]).zoneid, od.get_zone(zones[j]).zoneid);
             let coverage = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1) as f64;
             let demand_ij = od.link_between_zones(zones[i], zones[j]).unwrap();
             let ridership_ij = demand_ij.weight / coverage;
@@ -81,9 +75,13 @@ pub fn ridership_over_route(
 
     let mut ridership = vec![];
     for stop in stops {
-        let zone = stop_to_zone.get(&stop.stop_id).unwrap();
-        let ridership_stop = *zone_to_ridership.get(zone).unwrap() / *zone_to_count.get(zone).unwrap() as f64;
-        ridership.push(ridership_stop);
+        if let Some(zone) = stop_to_zone.get(&stop.stop_id) {
+            let ridership_stop =
+                *zone_to_ridership.get(zone).unwrap() / *zone_to_count.get(zone).unwrap() as f64;
+            ridership.push(ridership_stop);
+        } else {
+            ridership.push(0.0);
+        }
     }
 
     for i in 1..ridership.len() {

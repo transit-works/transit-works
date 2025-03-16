@@ -4,18 +4,12 @@ use std::{
 };
 
 use geo::{Bearing, Contains, Geodesic};
-use rand::{
-    distributions::WeightedIndex,
-    prelude::Distribution,
-    rngs::{StdRng, ThreadRng},
-    SeedableRng,
-};
+use rand::{distributions::WeightedIndex, prelude::Distribution, rngs::ThreadRng};
 
-use crate::{
-    layers::{
-        city::City, geo_util, grid::GridNetwork, road_network, transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop}
-    },
-    opt::eval,
+use crate::layers::{
+    city::City,
+    geo_util,
+    transit_network::{TransitRoute, TransitRouteType, TransitStop},
 };
 
 // struct to store all the tunable parameters for the ACO algorithm
@@ -226,8 +220,7 @@ fn evaluate_route(
             let bearing_c = Geodesic::bearing(c0, c1);
             let normalized_bearing_p = (bearing_p + 360.0) % 360.0;
             let normalized_bearing_c = (bearing_c + 360.0) % 360.0;
-            let diff =
-                ((normalized_bearing_c - normalized_bearing_p + 540.0) % 360.0) - 180.0;
+            let diff = ((normalized_bearing_c - normalized_bearing_p + 540.0) % 360.0) - 180.0;
             if diff.abs() > 175.0 {
                 bad_turn_count += 1;
             }
@@ -288,10 +281,16 @@ fn evaluate_route(
     }
     log::info!(
         "  Score: {}, Punishment: {}, Nonlinearity: {}, Bad Turn: {}",
-        score, punishment_factor, nonlinearity, bad_turn_count
+        score,
+        punishment_factor,
+        nonlinearity,
+        bad_turn_count
     );
 
-    (score * (1.0 - punishment_factor).max(0.0), punishment_factor)
+    (
+        score * (1.0 - punishment_factor).max(0.0),
+        punishment_factor,
+    )
 }
 
 // Compute the heuristic score for selecting a stop
@@ -328,7 +327,8 @@ fn compute_heuristic(
     let coverage_ji = *zone_to_zone_coverage
         .get(&(zone_j.zoneid, zone_i.zoneid))
         .unwrap_or(&1) as f64;
-    let h = (demand_ij + demand_ji + 0.1) / ((road_dist * 2.0) * (coverage_ij + coverage_ji + 1.0));
+    let h = (demand_ij + demand_ji + 0.01)
+        / ((road_dist * 2.0) * (coverage_ij + coverage_ji + 1.0) + 0.01);
     heuristic_map.insert((from.stop_id.clone(), to.stop_id.clone()), h);
     h
 }
@@ -511,7 +511,14 @@ fn filter_stops_by_route_bbox(
 
     log::debug!(
         "wkt: POLYGON(({} {}, {} {}, {} {}, {} {}))",
-        min_lon, min_lat, max_lon, min_lat, max_lon, max_lat, min_lon, max_lat
+        min_lon,
+        min_lat,
+        max_lon,
+        min_lat,
+        max_lon,
+        max_lat,
+        min_lon,
+        max_lat
     );
 
     city.transit

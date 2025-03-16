@@ -14,12 +14,33 @@ import { PathLayer } from '@deck.gl/layers';
 import { HeatmapLayer } from '@deck.gl/aggregation-layers';
 import lerpColor from '../../utils/colorUtils';
 import RidershipChart from '../../components/visualization/RidershipChart';
+import { fetchFromAPI, createWebSocket } from '@/utils/api';
 
-const INITIAL_VIEW_STATE = {
-  latitude: 43.647667,
-  longitude: -79.385611,
-  zoom: 12,
-  bearing: 0,
+const getInitialViewState = (city) => {
+  // Default to Toronto if no city is specified
+  const defaultState = {
+    latitude: 43.647667,
+    longitude: -79.385611,
+    zoom: 12,
+    bearing: 0,
+  };
+
+  const storedCoordinates = localStorage.getItem('selectedCityCoordinates');
+  if (storedCoordinates) {
+    try {
+      const [longitude, latitude] = JSON.parse(storedCoordinates);
+      return {
+        latitude,
+        longitude,
+        zoom: 12,
+        bearing: 0,
+      };
+    } catch (error) {
+      console.error("Error parsing city coordinates from localStorage:", error);
+    }
+  }
+  
+  return defaultState;
 };
 
 const STYLE_3D = '/styles/dark_matter_3d.json';
@@ -67,10 +88,14 @@ function TransitMap({
   setMultiSelectMode,
   acoParams,
   setAcoParams,
-  setIsRouteCarouselVisible
+  setIsRouteCarouselVisible,
+  city // Add city prop
 }) {
   // Add the missing mapRef
   const mapRef = useRef(null);
+  
+  // Get initial view state based on the city
+  const [initialViewState] = useState(getInitialViewState(city));
   
   // Keep other internal state that doesn't need to be shared
   const [popupInfo, setPopupInfo] = useState(null);
@@ -111,14 +136,7 @@ function TransitMap({
     if (!routeId) return;
     
     try {
-      // Call the backend route evaluation endpoint
-      const response = await fetch(`http://localhost:8080/evaluate-route/${routeId}`);
-      
-      if (!response.ok) {
-        throw new Error(`API returned status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await fetchFromAPI(`/evaluate-route/${routeId}`);
       setRidershipData(data.ridership);
       setOptRidershipData(data.opt_ridership);
     } catch (error) {
@@ -130,14 +148,7 @@ function TransitMap({
 
   const fetchPopulationData = async () => {
     try {
-      // Call the backend endpoint
-      const response = await fetch('http://localhost:8080/grid');
-      
-      if (!response.ok) {
-        throw new Error(`API returned status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await fetchFromAPI('/grid');
       setPopulationData(data);
     } catch (error) {
       console.error('Error fetching population data:', error);
@@ -1270,7 +1281,7 @@ useEffect(() => {
     <>
       <Map
         ref={mapRef}
-        initialViewState={INITIAL_VIEW_STATE}
+        initialViewState={initialViewState}
         mapStyle={mapStyle}
         onLoad={handleMapLoad}
       >

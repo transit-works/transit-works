@@ -1,3 +1,4 @@
+use crate::gtfs::raw_gtfs::deserialize_opt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -43,7 +44,9 @@ pub struct Stop {
     pub stop_name: Option<String>,
     pub tts_stop_name: Option<String>,
     pub stop_desc: Option<String>,
+    #[serde(deserialize_with = "deserialize_opt")]
     pub stop_lat: Option<f64>,
+    #[serde(deserialize_with = "deserialize_opt")]
     pub stop_lon: Option<f64>,
     pub zone_id: Option<String>,
     pub stop_url: Option<String>,
@@ -66,7 +69,7 @@ impl Id for Stop {
 }
 
 /// Location type for a stop.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum LocationType {
     #[serde(rename = "0")]
     StopOrPlatform,
@@ -78,10 +81,13 @@ pub enum LocationType {
     GenericNode,
     #[serde(rename = "4")]
     BoardingArea,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Accessibility of a stop.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum WheelchairBoarding {
     #[serde(rename = "0")]
     NoInformation,
@@ -89,6 +95,9 @@ pub enum WheelchairBoarding {
     SomeVehiclesAccessible,
     #[serde(rename = "2")]
     NotAccessible,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// A transportation route.
@@ -166,7 +175,7 @@ impl Id for Trip {
 }
 
 /// Accessibility of a trip for wheelchairs.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum WheelchairAccessible {
     #[serde(rename = "0")]
     NoInformation,
@@ -174,10 +183,13 @@ pub enum WheelchairAccessible {
     Accessible,
     #[serde(rename = "2")]
     NotAccessible,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Bike allowance for a trip.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum BikesAllowed {
     #[serde(rename = "0")]
     NoInformation,
@@ -185,6 +197,9 @@ pub enum BikesAllowed {
     Allowed,
     #[serde(rename = "2")]
     NotAllowed,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Scheduled stop time for a trip.
@@ -201,6 +216,7 @@ pub struct StopTime {
     pub drop_off_type: Option<PickupDropoffType>,
     pub continuous_pickup: Option<ContinuousPickupDropoff>,
     pub continuous_drop_off: Option<ContinuousPickupDropoff>,
+    #[serde(deserialize_with = "deserialize_opt")]
     pub shape_dist_traveled: Option<f64>,
     pub timepoint: Option<Timepoint>,
     #[serde(skip)]
@@ -208,7 +224,7 @@ pub struct StopTime {
 }
 
 /// Pickup or drop-off type for a stop.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum PickupDropoffType {
     #[serde(rename = "0")]
     Regular,
@@ -218,10 +234,13 @@ pub enum PickupDropoffType {
     PhoneAgency,
     #[serde(rename = "3")]
     CoordinateWithDriver,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Continuous pickup or drop-off type for a route.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum ContinuousPickupDropoff {
     #[serde(rename = "0")]
     Continuous,
@@ -231,15 +250,21 @@ pub enum ContinuousPickupDropoff {
     PhoneAgency,
     #[serde(rename = "3")]
     CoordinateWithDriver,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Whether time is a precise point or an estimate.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum Timepoint {
     #[serde(rename = "0")]
     Approximate,
     #[serde(rename = "1")]
     Exact,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Weekly schedule of service.
@@ -274,12 +299,15 @@ pub struct CalendarDate {
 }
 
 /// Type of schedule exception.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum ExceptionType {
     #[serde(rename = "1")]
     Added,
     #[serde(rename = "2")]
     Removed,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Represents a level in a station.
@@ -305,6 +333,7 @@ pub struct Shape {
     pub shape_pt_lat: f64,
     pub shape_pt_lon: f64,
     pub shape_pt_sequence: i32,
+    #[serde(deserialize_with = "deserialize_opt")]
     pub shape_dist_traveled: Option<f64>,
 }
 
@@ -334,16 +363,19 @@ impl Id for FareAttribute {
 }
 
 /// Payment method for a fare.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum PaymentMethod {
     #[serde(rename = "0")]
     OnBoard,
     #[serde(rename = "1")]
     PreBoard,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Number of transfers allowed with a fare.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum Transfers {
     #[serde(rename = "0")]
     NoTransfers,
@@ -353,6 +385,9 @@ pub enum Transfers {
     TwoTransfers,
     #[serde(rename = "unlimited")]
     UnlimitedTransfers,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Rules that define the application of fares to routes or zones.
@@ -404,7 +439,7 @@ pub struct Transfer {
 }
 
 /// Type of transfer between stops.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum TransferType {
     #[serde(rename = "0")]
     Recommended,
@@ -414,6 +449,9 @@ pub enum TransferType {
     MinimumTime,
     #[serde(rename = "3")]
     NotPossible,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Pathways within stations to guide passengers between locations.
@@ -425,10 +463,13 @@ pub struct Pathway {
     pub to_stop_id: String,
     pub pathway_mode: PathwayMode,
     pub is_bidirectional: Directionality,
+    #[serde(deserialize_with = "deserialize_opt")]
     pub length: Option<f64>,
     pub traversal_time: Option<i64>,
     pub stair_count: Option<i32>,
+    #[serde(deserialize_with = "deserialize_opt")]
     pub max_slope: Option<f64>,
+    #[serde(deserialize_with = "deserialize_opt")]
     pub min_width: Option<f64>,
     pub signposted_as: Option<String>,
     pub reversed_signposted_as: Option<String>,
@@ -441,7 +482,7 @@ impl Id for Pathway {
 }
 
 /// Type of pathway within a station.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum PathwayMode {
     #[serde(rename = "1")]
     Walkway,
@@ -457,15 +498,21 @@ pub enum PathwayMode {
     FareGate,
     #[serde(rename = "7")]
     ExitGate,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Directionality of a pathway.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub enum Directionality {
     #[serde(rename = "0")]
     Unidirectional,
     #[serde(rename = "1")]
     Bidirectional,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// Translations for customer-facing dataset fields.

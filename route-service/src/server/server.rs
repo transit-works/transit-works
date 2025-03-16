@@ -3,34 +3,26 @@ use crate::layers::city::City;
 use crate::layers::transit_network::{TransitNetwork, TransitRoute};
 use crate::opt::aco::ACO;
 use crate::opt::{aco2, eval};
-use crate::server::cors::cors_middleware;
 
 use actix::prelude::*;
 use actix_web::{get, post, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
 use geo::Centroid;
-use route_service::opt::{self, aco};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-// Updated application state with immutable city and mutable optimized transit
 struct AppState {
-    city: Mutex<Option<City>>, // Immutable after initialization
+    city: Mutex<Option<City>>,
     optimized_transit: Mutex<Option<TransitNetwork>>, // Stores optimized routes
-    optimized_route_ids: Mutex<Vec<String>>, // Tracks which routes have been optimized
+    optimized_route_ids: Mutex<Vec<String>>,          // Tracks which routes have been optimized
 }
 
 #[derive(Deserialize)]
 struct RouteIds {
     routes: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct GridResponse {
-    message: String,
 }
 
 fn get_optimized_geojson(
@@ -732,23 +724,25 @@ impl Actor for OptimizationWs {
             "WebSocket connection started for routes {:?}",
             self.route_ids
         );
-        
+
         // Send immediate confirmation that the WebSocket connection is established
-        // This prevents client timeout if the first optimization takes a long time
         let connection_msg = serde_json::json!({
             "status": "connected",
             "message": "WebSocket connection established, optimization starting",
             "routes": self.route_ids,
         });
-        
-        println!("Sending WebSocket connection confirmation: {:?}", connection_msg);
-        
+
+        println!(
+            "Sending WebSocket connection confirmation: {:?}",
+            connection_msg
+        );
+
         // Send the confirmation message immediately
         ctx.text(serde_json::to_string(&connection_msg).unwrap());
-        
+
         // Setup heartbeat first, optimization second
         self.heartbeat(ctx);
-        
+
         // Short delay before starting optimization to ensure connection message is received
         let addr = ctx.address();
         ctx.run_later(Duration::from_millis(100), move |_, _| {
@@ -790,13 +784,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for OptimizationWs {
     }
 }
 
-// Define a struct for the query parameters
 #[derive(Deserialize)]
 struct RouteIdParams {
     route_ids: String, // Comma-separated list of route IDs
 }
 
-// Single unified endpoint for live route optimization - replaces both previous endpoints
 #[get("/optimize-live")]
 async fn optimize_live(
     req: HttpRequest,
@@ -828,6 +820,7 @@ async fn optimize_live(
 }
 
 pub async fn start_server(
+    city_name: &str,
     gtfs_path: &str,
     db_path: &str,
     host: &str,
@@ -840,9 +833,14 @@ pub async fn start_server(
     println!("Loading city data from {} and {}", gtfs_path, db_path);
     // Try loading the city data upfront
     let city_result = City::load_with_cached_transit(
-        "toronto", gtfs_path, db_path, true,  // set cache
+        city_name, gtfs_path, db_path, true,  // set cache
         false, // don't invalidate cache
     );
+
+    if city_result.is_err() {
+        log::error!("Failed to load city data: {:?}", city_result.err());
+        return Ok(());
+    }
 
     // Initialize application state with the city and a copy of transit for optimizations
     let app_state = web::Data::new(AppState {
@@ -854,16 +852,15 @@ pub async fn start_server(
     println!("Starting server on {}:{}", host, port);
     HttpServer::new(move || {
         App::new()
-            .wrap(cors_middleware()) // Apply CORS middleware to all routes
             .app_data(app_state.clone()) // Pass the state to all routes
             .service(get_data)
             .service(optimize_route)
             .service(optimize_routes)
             .service(evaluate_route)
-            .service(evaluate_coverage) // Add the new service
+            .service(evaluate_coverage)
             .service(get_grid)
             .service(reset_optimizations)
-            .service(optimize_live) // Replace the previous WebSocket endpoints with this unified one
+            .service(optimize_live)
             .service(get_optimizations)
     })
     .bind(addr)?
