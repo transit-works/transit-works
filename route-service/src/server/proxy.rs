@@ -3,13 +3,12 @@ use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 
 use awc::{ws::Codec, BoxedSocket, Client};
 use futures::{FutureExt, SinkExt, StreamExt};
-use log::{debug, error, info, log_enabled, warn};
+use log::{debug, error, log_enabled, warn};
 use std::collections::HashMap;
 
-// Add WebSocket related imports
 use actix::{
-    Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, Context, Message as ActixMessage,
-    StreamHandler, WrapFuture,
+    Actor, ActorContext, ActorFutureExt, AsyncContext, Message as ActixMessage, StreamHandler,
+    WrapFuture,
 };
 use actix_web_actors::ws;
 use awc::ws::{Frame, Message};
@@ -156,7 +155,6 @@ impl Actor for WebSocketProxy {
                                     };
                                     debug!("Text preview: {}", preview);
                                 }
-                                // Send message to actor instead of using ctx directly
                                 addr.do_send(InternalMessage::TextMessage(text));
                             } else {
                                 error!("Invalid UTF-8 in server text message");

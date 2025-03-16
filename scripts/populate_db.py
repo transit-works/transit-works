@@ -66,6 +66,15 @@ class City:
             return f'{self.data_dir}/{self.key_name}.osm.pbf'
 
     @property
+    def gtfs_zip_file(self):
+        try:
+            file = next(f for f in os.listdir(self.gtfs_dir) if f.endswith('.zip'))
+            file = f'{self.gtfs_dir}/{file}'
+            return file
+        except:
+            return f'{self.gtfs_dir}/{self.gtfs_src.split("/")[-1]}'
+
+    @property
     def nodes_file(self):
         return f'{self.data_dir}/nodes.gpkg'
 
@@ -224,6 +233,7 @@ def add_travel_demand_gravity_model(
 ):
     from gravity_model import run_gravity_model
     run_gravity_model(
+        city_name=city.key_name,
         city_file=city.city_file,
         nodes_file=city.nodes_file,
         edges_file=city.edges_file,
@@ -236,8 +246,7 @@ def add_gtfs_data(
     city: City,
     conn: sqlite3.Connection,
 ):
-    file_name = city.gtfs_src.split('/')[-1]
-    file_name = f'{city.gtfs_dir}/{file_name}'
+    file_name = city.gtfs_zip_file
     if not os.path.exists(file_name):
         print(f'Downloading GTFS data from {city.gtfs_src}')
         response = requests.get(city.gtfs_src)
@@ -276,7 +285,8 @@ def add_gtfs_data(
                 # Clear the table
                 cursor.execute(f'DELETE FROM {table_name};')
                 # Insert all the data from the file
-                cursor.executemany(f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({','.join(['?'] * len(columns))})", reader)
+                cursor.executemany(
+                    f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({','.join(['?'] * len(columns))})", reader)
 
     conn.commit()
 
