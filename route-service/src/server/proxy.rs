@@ -1,20 +1,20 @@
 use actix_codec::Framed;
 use actix_web::{web, App, HttpServer, HttpResponse, HttpRequest};
 
-use awc::{body::MessageBody, ws::Codec, Client, ClientResponse, BoxedSocket, error::WsProtocolError};
+use awc::{ws::Codec, Client, BoxedSocket};
 use futures::{FutureExt, SinkExt, StreamExt};
-use std::{collections::HashMap, sync::Arc};
-use log::{info, error, debug, warn};
+use std::collections::HashMap;
+use log::{debug, error, info, log_enabled, warn};
 
 // Add WebSocket related imports
 use actix_web_actors::ws;
 use actix::{Actor, ActorContext, ActorFutureExt, AsyncContext, StreamHandler, WrapFuture, Addr, Context, Message as ActixMessage};
 use std::time::{Duration, Instant};
 use awc::ws::{Frame, Message};
-use std::pin::Pin;
-use futures::Stream;
 
 use crate::server::cors::cors_middleware;
+
+const MAX_PAYLOAD_SIZE: usize = 20 * 1024 * 1024;
 
 // Define the city-to-port mapping
 pub struct CityConfig {
@@ -54,8 +54,6 @@ struct WebSocketProxy {
     port: u16,
     path: String,
     query_string: String,
-    // Add a message size limit for the proxy
-    max_size: usize,
 }
 
 impl WebSocketProxy {
@@ -67,7 +65,6 @@ impl WebSocketProxy {
             port,
             path,
             query_string,
-            max_size: 20 * 1024 * 1024, // 20MB limit
         }
     }
     
@@ -90,7 +87,7 @@ impl Actor for WebSocketProxy {
     type Context = ws::WebsocketContext<Self>;
     
     fn started(&mut self, ctx: &mut Self::Context) {
-        warn!("WebSocket proxy started for city '{}' at port {}", self.city, self.port);
+        debug!("WebSocket proxy started for city '{}' at port {}", self.city, self.port);
         
         // Start heartbeat
         self.heartbeat(ctx);
@@ -103,11 +100,13 @@ impl Actor for WebSocketProxy {
             if !self.query_string.is_empty() { format!("?{}", self.query_string) } else { String::new() }
         );
         
-        warn!("Connecting to WebSocket at: {}", ws_url);
+        debug!("Connecting to WebSocket at: {}", ws_url);
         
         // Connect to target WebSocket
         let client = awc::Client::default();
-        let req = client.ws(ws_url);
+            
+        let req = client.ws(ws_url)
+            .max_frame_size(MAX_PAYLOAD_SIZE);
         
         // Add the X-Forwarded-City header
         let city_clone = self.city.clone();
@@ -126,24 +125,26 @@ impl Actor for WebSocketProxy {
                 // Get the actor address to send messages back
                 let addr = ctx.address();
                 
-                // Process messages coming from the server using a direct approach
+                // Process messages coming from the server
                 let stream_future = stream
                     .for_each(move |msg| {
                         match msg {
                             Ok(Frame::Continuation(_)) => {
-                                warn!("Received continuation frame from server, ignoring");
+                                debug!("Received continuation frame from server, ignoring");
                             }
                             Ok(Frame::Text(bytes)) => {
                                 // Directly forward the exact bytes as a String to preserve JSON format
                                 if let Ok(text) = String::from_utf8(bytes.to_vec()) {
-                                    warn!("Received text from server ({}B), forwarding to client", bytes.len());
-                                    let preview = if text.len() > 100 {
-                                        format!("{}... (truncated)", &text[..100])
-                                    } else {
-                                        text.clone()
-                                    };
-                                    warn!("Text preview: {}", preview);
-                                    
+                                    // check if log debug enabled
+                                    if log_enabled!(log::Level::Debug) {
+                                        debug!("Received text from server ({}B), forwarding to client", bytes.len());
+                                        let preview = if text.len() > 100 {
+                                            format!("{}... (truncated)", &text[..100])
+                                        } else {
+                                            text.clone()
+                                        };
+                                        debug!("Text preview: {}", preview);
+                                    }
                                     // Send message to actor instead of using ctx directly
                                     addr.do_send(InternalMessage::TextMessage(text));
                                 } else {
@@ -154,19 +155,19 @@ impl Actor for WebSocketProxy {
                                 }
                             }
                             Ok(Frame::Binary(bin)) => {
-                                warn!("Received binary from server ({}B), forwarding to client", bin.len());
+                                debug!("Received binary from server ({}B), forwarding to client", bin.len());
                                 addr.do_send(InternalMessage::BinaryMessage(bin.to_vec()));
                             }
                             Ok(Frame::Ping(msg)) => {
-                                warn!("Received ping from server, forwarding to client");
+                                debug!("Received ping from server, forwarding to client");
                                 addr.do_send(InternalMessage::PingMessage(msg.to_vec()));
                             }
                             Ok(Frame::Pong(msg)) => {
-                                warn!("Received pong from server");
+                                debug!("Received pong from server");
                                 addr.do_send(InternalMessage::PongMessage(msg.to_vec()));
                             }
                             Ok(Frame::Close(reason)) => {
-                                warn!("Server closed WebSocket connection: {:?}", reason);
+                                debug!("Server closed WebSocket connection: {:?}", reason);
                                 addr.do_send(InternalMessage::CloseMessage(reason));
                             }
                             Err(e) => {
@@ -183,7 +184,7 @@ impl Actor for WebSocketProxy {
                 // Spawn the forwarding future
                 ctx.spawn(stream_future.into_actor(act));
                 
-                warn!("WebSocket connection established with server");
+                debug!("WebSocket connection established with server");
             } else {
                 error!("Failed to connect to target WebSocket");
                 ctx.close(None);
@@ -195,7 +196,7 @@ impl Actor for WebSocketProxy {
     }
     
     fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
-        warn!("WebSocket proxy stopping");
+        debug!("WebSocket proxy stopping");
         actix::Running::Stop
     }
 }
@@ -231,7 +232,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketProxy {
         // Handle messages from client
         match msg {
             Ok(ws::Message::Ping(msg)) => {
-                warn!("Received ping from client");
+                debug!("Received ping from client");
                 self.heartbeat = Instant::now();
                 ctx.pong(&msg);
                 
@@ -243,7 +244,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketProxy {
                 }
             }
             Ok(ws::Message::Pong(msg)) => {
-                warn!("Received pong from client");
+                debug!("Received pong from client");
                 self.heartbeat = Instant::now();
                 
                 // Forward pong to server if connected
@@ -254,7 +255,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketProxy {
                 }
             }
             Ok(ws::Message::Text(text)) => {
-                warn!("Received text message from client");
+                debug!("Received text message from client");
                 self.heartbeat = Instant::now();
                 
                 // Forward text to server if connected
@@ -265,7 +266,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketProxy {
                 }
             }
             Ok(ws::Message::Binary(bin)) => {
-                warn!("Received binary message from client");
+                debug!("Received binary message from client");
                 self.heartbeat = Instant::now();
                 
                 // Forward binary to server if connected
@@ -276,7 +277,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketProxy {
                 }
             }
             Ok(ws::Message::Close(reason)) => {
-                warn!("Client closed WebSocket connection: {:?}", reason);
+                debug!("Client closed WebSocket connection: {:?}", reason);
                 
                 // Forward close to server if connected
                 if let Some(sink) = &mut self.sink {
@@ -289,12 +290,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketProxy {
                 ctx.stop();
             }
             Ok(ws::Message::Continuation(_)) => {
-                warn!("Received continuation frame from client");
-                // Handle continuation frame if needed
+                debug!("Received continuation frame from client");
             }
             Ok(ws::Message::Nop) => {
-                warn!("Received Nop frame from client");
-                // Handle Nop frame if needed
+                debug!("Received Nop frame from client");
             }
             Err(e) => {
                 error!("WebSocket protocol error from client: {}", e);
@@ -329,11 +328,10 @@ async fn websocket_proxy(
     path: String,
     query_string: String,
 ) -> Result<HttpResponse, actix_web::Error> {
-    warn!("Handling WebSocket request to city '{}' at path '{}'", city, path);
+    debug!("Handling WebSocket request to city '{}' at path '{}'", city, path);
     
     let ws_proxy = WebSocketProxy::new(city, port, path, query_string);
-    
-    // Configure the WebSocket with a larger max size
+
     ws::start(
         ws_proxy,
         &req,
@@ -359,7 +357,7 @@ async fn proxy_handler(
     let city = match query_params.remove("city") {
         Some(city) => city,
         None => {
-            warn!("City parameter not found in query string");
+            debug!("City parameter not found in query string");
             // Use default city if available
             match &city_config.default_city {
                 Some(default_city) => default_city.clone(),
@@ -382,7 +380,7 @@ async fn proxy_handler(
     
     // Check if this is a WebSocket connection request
     if is_websocket_request(&req) {
-        warn!("Detected WebSocket upgrade request for city '{}' at path '{}'", city, req.uri().path());
+        debug!("Detected WebSocket upgrade request for city '{}' at path '{}'", city, req.uri().path());
         
         // Rebuild query string without the city parameter
         let new_query_string = if !query_params.is_empty() {
@@ -409,8 +407,7 @@ async fn proxy_handler(
             }
         };
     }
-    
-    // For regular HTTP requests, continue with the existing logic
+
     // Rebuild query string without the city parameter
     let new_query_string = if !query_params.is_empty() {
         let new_qs = url::form_urlencoded::Serializer::new(String::new())
@@ -429,7 +426,7 @@ async fn proxy_handler(
         new_query_string
     );
     
-    warn!("Proxying HTTP request to city '{}' at {}", city, forwarding_url);
+    debug!("Proxying HTTP request to city '{}' at {}", city, forwarding_url);
     
     // Create a client for this request with increased payload limit
     let client = Client::default();
@@ -467,7 +464,7 @@ async fn proxy_handler(
             }
             
             // Stream body from city server to client
-            match res.body().limit(20 * 1024 * 1024).await {
+            match res.body().limit(MAX_PAYLOAD_SIZE).await {
                 Ok(body) => client_res.body(body),
                 Err(e) => {
                     error!("Failed to get response body: {}", e);
@@ -486,14 +483,14 @@ async fn proxy_handler(
 pub async fn start_proxy_server(host: &str, port: u16, city_ports: HashMap<String, u16>) -> std::io::Result<()> {
     let city_config = web::Data::new(CityConfig::new(city_ports));
     
-    warn!("Starting proxy server on {}:{}", host, port);
+    debug!("Starting proxy server on {}:{}", host, port);
     
     HttpServer::new(move || {
         App::new()
             .wrap(cors_middleware())
             .app_data(city_config.clone())
-            .app_data(web::PayloadConfig::new(20 * 1024 * 1024))  // 20MB payload limit for incoming requests
-            .app_data(web::JsonConfig::default().limit(20 * 1024 * 1024))  // 20MB limit for JSON payload
+            .app_data(web::PayloadConfig::new(MAX_PAYLOAD_SIZE))  
+            .app_data(web::JsonConfig::default().limit(MAX_PAYLOAD_SIZE)) 
             .default_service(web::route().to(proxy_handler))
     })
     .bind(format!("{}:{}", host, port))?
