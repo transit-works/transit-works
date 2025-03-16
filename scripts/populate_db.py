@@ -98,8 +98,8 @@ CITY_MAP = {
         osm_name='Austin, TX, USA',
         gtfs_src='https://data.texas.gov/download/r4v4-vz24/application%2Fzip' # capmetro.zip
     ),
-    'vancover': City(
-        key_name='vancover',
+    'vancouver': City(
+        key_name='vancouver',
         osm_name='Vancouver, BC, Canada',
         gtfs_src='https://gtfs-static.translink.ca/gtfs/History/2025-03-14/google_transit.zip'
     ),
