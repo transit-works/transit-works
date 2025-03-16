@@ -75,10 +75,13 @@ pub fn ridership_over_route(
 
     let mut ridership = vec![];
     for stop in stops {
-        let zone = stop_to_zone.get(&stop.stop_id).unwrap();
-        let ridership_stop =
-            *zone_to_ridership.get(zone).unwrap() / *zone_to_count.get(zone).unwrap() as f64;
-        ridership.push(ridership_stop);
+        if let Some(zone) = stop_to_zone.get(&stop.stop_id) {
+            let ridership_stop =
+                *zone_to_ridership.get(zone).unwrap() / *zone_to_count.get(zone).unwrap() as f64;
+            ridership.push(ridership_stop);
+        } else {
+            ridership.push(0.0);
+        }
     }
 
     for i in 1..ridership.len() {
