@@ -3,7 +3,7 @@ use crate::gtfs::structs::*;
 
 use csv::StringRecord;
 use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{fs::File, io::Read, path::Path, str::FromStr};
 
 /// Helper function to deserialize optional fields that might fail to parse

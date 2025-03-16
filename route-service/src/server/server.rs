@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 struct AppState {
     city: Mutex<Option<City>>,
     optimized_transit: Mutex<Option<TransitNetwork>>, // Stores optimized routes
-    optimized_route_ids: Mutex<Vec<String>>, // Tracks which routes have been optimized
+    optimized_route_ids: Mutex<Vec<String>>,          // Tracks which routes have been optimized
 }
 
 #[derive(Deserialize)]
@@ -724,22 +724,25 @@ impl Actor for OptimizationWs {
             "WebSocket connection started for routes {:?}",
             self.route_ids
         );
-        
+
         // Send immediate confirmation that the WebSocket connection is established
         let connection_msg = serde_json::json!({
             "status": "connected",
             "message": "WebSocket connection established, optimization starting",
             "routes": self.route_ids,
         });
-        
-        println!("Sending WebSocket connection confirmation: {:?}", connection_msg);
-        
+
+        println!(
+            "Sending WebSocket connection confirmation: {:?}",
+            connection_msg
+        );
+
         // Send the confirmation message immediately
         ctx.text(serde_json::to_string(&connection_msg).unwrap());
-        
+
         // Setup heartbeat first, optimization second
         self.heartbeat(ctx);
-        
+
         // Short delay before starting optimization to ensure connection message is received
         let addr = ctx.address();
         ctx.run_later(Duration::from_millis(100), move |_, _| {
@@ -854,10 +857,10 @@ pub async fn start_server(
             .service(optimize_route)
             .service(optimize_routes)
             .service(evaluate_route)
-            .service(evaluate_coverage) 
+            .service(evaluate_coverage)
             .service(get_grid)
             .service(reset_optimizations)
-            .service(optimize_live) 
+            .service(optimize_live)
             .service(get_optimizations)
     })
     .bind(addr)?

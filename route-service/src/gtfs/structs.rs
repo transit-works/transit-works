@@ -1,6 +1,6 @@
+use crate::gtfs::raw_gtfs::deserialize_opt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use crate::gtfs::raw_gtfs::deserialize_opt;
 
 pub trait Id {
     fn id(&self) -> &str;

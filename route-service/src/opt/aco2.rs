@@ -13,7 +13,11 @@ use rand::{
 
 use crate::{
     layers::{
-        city::City, geo_util, grid::GridNetwork, road_network, transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop}
+        city::City,
+        geo_util,
+        grid::GridNetwork,
+        road_network,
+        transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
     },
     opt::eval,
 };
@@ -226,8 +230,7 @@ fn evaluate_route(
             let bearing_c = Geodesic::bearing(c0, c1);
             let normalized_bearing_p = (bearing_p + 360.0) % 360.0;
             let normalized_bearing_c = (bearing_c + 360.0) % 360.0;
-            let diff =
-                ((normalized_bearing_c - normalized_bearing_p + 540.0) % 360.0) - 180.0;
+            let diff = ((normalized_bearing_c - normalized_bearing_p + 540.0) % 360.0) - 180.0;
             if diff.abs() > 175.0 {
                 bad_turn_count += 1;
             }
@@ -288,10 +291,16 @@ fn evaluate_route(
     }
     log::info!(
         "  Score: {}, Punishment: {}, Nonlinearity: {}, Bad Turn: {}",
-        score, punishment_factor, nonlinearity, bad_turn_count
+        score,
+        punishment_factor,
+        nonlinearity,
+        bad_turn_count
     );
 
-    (score * (1.0 - punishment_factor).max(0.0), punishment_factor)
+    (
+        score * (1.0 - punishment_factor).max(0.0),
+        punishment_factor,
+    )
 }
 
 // Compute the heuristic score for selecting a stop
@@ -511,7 +520,14 @@ fn filter_stops_by_route_bbox(
 
     log::debug!(
         "wkt: POLYGON(({} {}, {} {}, {} {}, {} {}))",
-        min_lon, min_lat, max_lon, min_lat, max_lon, max_lat, min_lon, max_lat
+        min_lon,
+        min_lat,
+        max_lon,
+        min_lat,
+        max_lon,
+        max_lat,
+        min_lon,
+        max_lat
     );
 
     city.transit

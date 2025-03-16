@@ -1,3 +1,3 @@
 pub mod cors;
-pub mod server;
-pub mod proxy; // New proxy module
+pub mod proxy;
+pub mod server; // New proxy module
