@@ -1,20 +1,15 @@
-use actix_web::cookie::time::convert;
 use core::f64;
-use std::{collections::HashMap, collections::HashSet, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use geo::{Area, Contains};
-use geo::{Intersects, Point, Polygon};
-use geo_types::Coord;
 use serde::{Deserialize, Serialize};
 
 use crate::layers::{
     geo_util,
-    grid::{self, GridNetwork, Link, Zone},
+    grid::{GridNetwork, Link, Zone},
     road_network::RoadNetwork,
     transit_network::{TransitNetwork, TransitRoute, TransitStop},
 };
-
-use super::consts;
 
 /// Evaluate the ridership of a route at each stop
 ///

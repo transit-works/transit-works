@@ -326,8 +326,10 @@ def normalize_zone_production_and_attraction(zones: gpd.GeoDataFrame) -> gpd.Geo
         ttl_production = zones['production'].apply(lambda x: x[time_period]).sum()
         ttl_attraction = zones['attraction'].apply(lambda x: x[time_period]).sum()
         trips_per_hour = population * TRIPS_GENERATED[time_period]
-        zones['production'] = zones['production'].apply(lambda x: x.update({time_period: x[time_period] / ttl_production * trips_per_hour}) or x)
-        zones['attraction'] = zones['attraction'].apply(lambda x: x.update({time_period: x[time_period] / ttl_attraction * trips_per_hour}) or x)
+        zones['production'] = zones['production'].apply(
+            lambda x: x.update({time_period: x[time_period] / ttl_production * trips_per_hour}) or x)
+        zones['attraction'] = zones['attraction'].apply(
+            lambda x: x.update({time_period: x[time_period] / ttl_attraction * trips_per_hour}) or x)
         # check the sum
         ttl_production = zones['production'].apply(lambda x: x[time_period]).sum()
         ttl_attraction = zones['attraction'].apply(lambda x: x[time_period]).sum()
@@ -464,7 +466,8 @@ def load_db(
             attraction[TimePeriod.PM_RUSH],
             attraction[TimePeriod.EVENING],
         )
-        for idx, (geom, population, production, attraction) in zones[['geometry', 'population', 'production', 'attraction']].iterrows()
+        for idx, (geom, population, production, attraction) in zones[
+            ['geometry', 'population', 'production', 'attraction']].iterrows()
     ])
     conn.executemany('INSERT INTO demand VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
         (
@@ -642,9 +645,12 @@ def visualize_demand(
             high_demand = max_demand
             
             legend_elements = [
-                Line2D([0], [0], color=demand_cmap(norm(low_demand)), lw=line_width, label=f'Low Demand ({low_demand:.1f})'),
-                Line2D([0], [0], color=demand_cmap(norm(med_demand)), lw=line_width, label=f'Medium Demand ({med_demand:.1f})'),
-                Line2D([0], [0], color=demand_cmap(norm(high_demand)), lw=line_width, label=f'High Demand ({high_demand:.1f})')
+                Line2D([0], [0], color=demand_cmap(norm(low_demand)), lw=line_width, 
+                       label=f'Low Demand ({low_demand:.1f})'),
+                Line2D([0], [0], color=demand_cmap(norm(med_demand)), lw=line_width, 
+                       label=f'Medium Demand ({med_demand:.1f})'),
+                Line2D([0], [0], color=demand_cmap(norm(high_demand)), lw=line_width, 
+                       label=f'High Demand ({high_demand:.1f})')
             ]
             ax2.legend(handles=legend_elements, loc='upper right')
         else:
@@ -685,6 +691,7 @@ def visualize_demand(
     print(f"Visualization complete! Saved to {output_file}")
 
 def run_gravity_model(
+    city_name: str,
     city_file: str,
     nodes_file: str,
     edges_file: str,
@@ -738,7 +745,13 @@ def run_gravity_model(
 
     print("Visualizing demand matrix...")
     try:
-        visualize_demand(city, zones, demand_matrix, TimePeriod.AM_RUSH, output_file=f'city_data/demand_visualization_{num_rows}x{num_cols}.png')
+        visualize_demand(
+            city, 
+            zones, 
+            demand_matrix, 
+            TimePeriod.AM_RUSH, 
+            output_file=f'city_data/{city_name}_demand_visualization_{num_rows}x{num_cols}.png'
+        )
     except Exception as e:
         print(f"Error during visualization: {str(e)}")
         import traceback
@@ -754,6 +767,7 @@ def main():
     conn.enable_load_extension(True)
     conn.load_extension('mod_spatialite')
     run_gravity_model(
+        'toronto2',
         'city_data/toronto/data/Toronto.osm.pbf',
         'city_data/toronto/data/nodes.gpkg',
         'city_data/toronto/data/edges.gpkg',

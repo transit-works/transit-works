@@ -7,6 +7,8 @@ import argparse
 import requests
 import subprocess
 
+from shapely.geometry import Polygon
+
 TEMPLATE_DB = 'template.db'
 SCHEMA_FILE = 'schema.sql'
 
@@ -40,12 +42,14 @@ class City:
     data_dir: str
     gmns_dir: str
     db_path: str
+    polygon: Polygon
 
     def __init__(
         self,
         key_name: str,
         osm_name: str,
         gtfs_src: str,
+        polygon: Polygon = None
     ):
         self.key_name = key_name
         self.osm_name = osm_name
@@ -55,6 +59,7 @@ class City:
         self.gtfs_dir = f'{CACHE_DIR}/{key_name}/gtfs'
         self.g2d_dir = f'{CACHE_DIR}/{key_name}/g2d'
         self.db_path = f'{CITY_DIR}/{key_name}.db'
+        self.polygon = polygon
     
     @property
     def city_file(self):
@@ -64,6 +69,15 @@ class City:
             return file
         except:
             return f'{self.data_dir}/{self.key_name}.osm.pbf'
+
+    @property
+    def gtfs_zip_file(self):
+        try:
+            file = next(f for f in os.listdir(self.gtfs_dir) if f.endswith('.zip'))
+            file = f'{self.gtfs_dir}/{file}'
+            return file
+        except:
+            return f'{self.gtfs_dir}/{self.gtfs_src.split("/")[-1]}'
 
     @property
     def nodes_file(self):
@@ -89,10 +103,20 @@ CITY_MAP = {
         osm_name='Austin, TX, USA',
         gtfs_src='https://data.texas.gov/download/r4v4-vz24/application%2Fzip' # capmetro.zip
     ),
-    'vancover': City(
-        key_name='vancover',
+    'vancouver': City(
+        key_name='vancouver',
         osm_name='Vancouver, BC, Canada',
-        gtfs_src='https://gtfs-static.translink.ca/gtfs/History/2025-03-14/google_transit.zip'
+        gtfs_src='https://gtfs-static.translink.ca/gtfs/History/2025-03-14/google_transit.zip',
+        polygon=Polygon([
+            (-123.280117, 49.265116),
+            (-123.22654, 49.121523),
+            (-122.85287, 49.079263),
+            (-122.731977, 49.102645),
+            (-122.703128, 49.233741),
+            (-122.716865, 49.330492),
+            (-123.295229, 49.385949),
+            (-123.280117, 49.265116)
+        ])
     ),
     'singapore': City(
         key_name='singapore',
@@ -139,7 +163,10 @@ def get_data_from_OSM(city: City):
     if not os.path.exists(city.nodes_file) or not os.path.exists(city.edges_file):
         # Download the drive network
         print('Downloading OSM road network data')
-        graph = ox.graph_from_place(city.osm_name, network_type='drive', simplify=False)
+        if city.polygon:
+            graph = ox.graph_from_polygon(city.polygon, network_type='drive', simplify=False)
+        else:
+            graph = ox.graph_from_place(city.osm_name, network_type='drive', simplify=False)
         # Extract the nodes and edges files
         print('Extracting GPKG data')
         nodes, edges = ox.graph_to_gdfs(graph)
@@ -224,6 +251,7 @@ def add_travel_demand_gravity_model(
 ):
     from gravity_model import run_gravity_model
     run_gravity_model(
+        city_name=city.key_name,
         city_file=city.city_file,
         nodes_file=city.nodes_file,
         edges_file=city.edges_file,
@@ -236,8 +264,7 @@ def add_gtfs_data(
     city: City,
     conn: sqlite3.Connection,
 ):
-    file_name = city.gtfs_src.split('/')[-1]
-    file_name = f'{city.gtfs_dir}/{file_name}'
+    file_name = city.gtfs_zip_file
     if not os.path.exists(file_name):
         print(f'Downloading GTFS data from {city.gtfs_src}')
         response = requests.get(city.gtfs_src)
@@ -269,14 +296,43 @@ def add_gtfs_data(
         ]:
             file_path = f'{city.gtfs_dir}/{file}'
             print(f'Loading {file_path} to database')
+            table_name = f'gtfs_{file.split(".")[0]}'
+            
+            # Get database table columns
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            db_columns = [row[1] for row in cursor.fetchall()]
+            
             with open(file_path, 'r') as f:
                 reader = csv.reader(f)
-                columns = next(reader)
-                table_name = f'gtfs_{file.split(".")[0]}'
+                csv_columns = next(reader)
+                
+                # Find which columns exist in both CSV and database
+                valid_columns = [col for col in csv_columns if col in db_columns]
+                
+                if not valid_columns:
+                    print(f"Warning: No matching columns found between {file} and database table {table_name}")
+                    continue
+                    
+                print(f"Using columns: {', '.join(valid_columns)}")
+                
                 # Clear the table
                 cursor.execute(f'DELETE FROM {table_name};')
-                # Insert all the data from the file
-                cursor.executemany(f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({','.join(['?'] * len(columns))})", reader)
+                
+                # Create column mapping
+                column_indices = [csv_columns.index(col) for col in valid_columns]
+                
+                # Collect all rows to be inserted
+                rows_to_insert = []
+                for row in reader:
+                    filtered_row = [row[idx] for idx in column_indices]
+                    rows_to_insert.append(filtered_row)
+                
+                # Insert all rows at once using executemany
+                placeholders = ','.join(['?'] * len(valid_columns))
+                cursor.executemany(
+                    f"INSERT INTO {table_name} ({','.join(valid_columns)}) VALUES ({placeholders})",
+                    rows_to_insert
+                )
 
     conn.commit()
 
