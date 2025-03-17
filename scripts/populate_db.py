@@ -7,6 +7,8 @@ import argparse
 import requests
 import subprocess
 
+from shapely.geometry import Polygon
+
 TEMPLATE_DB = 'template.db'
 SCHEMA_FILE = 'schema.sql'
 
@@ -40,12 +42,14 @@ class City:
     data_dir: str
     gmns_dir: str
     db_path: str
+    polygon: Polygon
 
     def __init__(
         self,
         key_name: str,
         osm_name: str,
         gtfs_src: str,
+        polygon: Polygon = None
     ):
         self.key_name = key_name
         self.osm_name = osm_name
@@ -55,6 +59,7 @@ class City:
         self.gtfs_dir = f'{CACHE_DIR}/{key_name}/gtfs'
         self.g2d_dir = f'{CACHE_DIR}/{key_name}/g2d'
         self.db_path = f'{CITY_DIR}/{key_name}.db'
+        self.polygon = polygon
     
     @property
     def city_file(self):
@@ -101,7 +106,17 @@ CITY_MAP = {
     'vancouver': City(
         key_name='vancouver',
         osm_name='Vancouver, BC, Canada',
-        gtfs_src='https://gtfs-static.translink.ca/gtfs/History/2025-03-14/google_transit.zip'
+        gtfs_src='https://gtfs-static.translink.ca/gtfs/History/2025-03-14/google_transit.zip',
+        polygon=Polygon([
+            (-123.280117, 49.265116),
+            (-123.22654, 49.121523),
+            (-122.85287, 49.079263),
+            (-122.731977, 49.102645),
+            (-122.703128, 49.233741),
+            (-122.716865, 49.330492),
+            (-123.295229, 49.385949),
+            (-123.280117, 49.265116)
+        ])
     ),
     'singapore': City(
         key_name='singapore',
@@ -148,7 +163,10 @@ def get_data_from_OSM(city: City):
     if not os.path.exists(city.nodes_file) or not os.path.exists(city.edges_file):
         # Download the drive network
         print('Downloading OSM road network data')
-        graph = ox.graph_from_place(city.osm_name, network_type='drive', simplify=False)
+        if city.polygon:
+            graph = ox.graph_from_polygon(city.polygon, network_type='drive', simplify=False)
+        else:
+            graph = ox.graph_from_place(city.osm_name, network_type='drive', simplify=False)
         # Extract the nodes and edges files
         print('Extracting GPKG data')
         nodes, edges = ox.graph_to_gdfs(graph)
