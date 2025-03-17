@@ -11,6 +11,7 @@ use route_service::layers::{
 };
 use route_service::opt::aco::ACO;
 use route_service::opt::eval::{evaluate_coverage, evaluate_network_coverage};
+use route_service::opt::ga_params::optimize_aco_params;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -32,30 +33,18 @@ fn main() {
     env_logger::init();
     let args = Args::parse();
 
-    // let city = City::load("toronto", &args.gtfs_path, &args.db_path, true, false).unwrap();
     let city =
         City::load_with_cached_transit("toronto", &args.gtfs_path, &args.db_path, true, false)
             .unwrap();
 
-    let grid = &city.grid;
-    let road = &city.road;
-    let gtfs = &city.gtfs;
-    let mut transit = city.transit;
+    output_geojson(&city.gtfs, &format!("{}/gtfs.geojson", args.output_dir));
 
-    output_geojson(&gtfs, &format!("{}/gtfs.geojson", args.output_dir));
-
-    output_routes_geojson(
-        &transit,
-        &gtfs,
-        &road,
-        &format!("{}/before.geojson", args.output_dir),
-    );
-
-    let target_routes = transit
+    let target_routes = city
+        .transit
         .routes
         .iter()
         .filter(|r| {
-            r.route_id == "73672"
+            r.route_id == "73094"
             // || r.route_id == "73705"
             // || r.route_id == "73688"
             // || r.route_id == "73682"
@@ -63,112 +52,17 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    let res = evaluate_network_coverage(&transit, grid);
-    return ();
+    // let res = evaluate_network_coverage(&transit, grid);
 
-    // Only consider non-bus routes
-    // 73480 73530
-    // transit.routes = transit
-    //     .routes
-    //     .into_iter()
-    //     .filter(|r| r.route_type == RouteType::Bus)
-    //     .filter(|r| {
-    //         r.route_id == "73592"
-    //             || r.route_id == "73588"
-    //             || r.route_id == "73506"
-    //             || r.route_id == "73594"
-    //             || r.route_id == "73480"
-    //             || r.route_id == "73530"
-    //     })
-    //     .take(10)
-    //     .collect();
+    let target_route = target_routes.first().unwrap();
 
-    // weird tracing routes
-    // 73485 73527 73502 73421 73464 73451 73530 73483
-    // remaining
-    // 73489 73430 73589 73493 73521 73473 73536
-    // transit.routes = transit
-    //     .routes
-    //     .into_iter()
-    //     .filter(|r| {
-    //         r.route_id == "73485"
-    //             || r.route_id == "73527"
-    //             || r.route_id == "73502"
-    //             || r.route_id == "73421"
-    //             || r.route_id == "73464"
-    //             || r.route_id == "73451"
-    //             || r.route_id == "73530"
-    //             || r.route_id == "73483"
-    //             || r.route_id == "73489"
-    //             || r.route_id == "73430"
-    //             || r.route_id == "73589"
-    //             || r.route_id == "73493"
-    //             || r.route_id == "73521"
-    //             || r.route_id == "73473"
-    //             || r.route_id == "73536"
-    //     })
-    //     .collect();
-
-    let suffix = args.suffix.unwrap_or("".to_string());
-    let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);
-    output_routes_geojson(&transit, &gtfs, &road, &before_path);
-
-    println!("Initializing ACO");
-    let mut aco = ACO::init();
-    aco.print_stats();
-
-    // Optimize one route
-    // let target_route = transit
-    //     .routes
-    //     .iter()
-    //     .filter(|r| r.route_id == "73657")
-    //     .next()
-    //     .unwrap();
-
-    // let start = Instant::now();
-    // let optimized_route = aco.optimize_route(&grid, &road, &transit, target_route);
-    // let optimized_route = optimized_route.unwrap().0;
-    // println!("  ACO finished in {:?}", start.elapsed());
-
-    // transit.routes = vec![optimized_route];
-    // transit.print_stats();
-
-    // let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
-    // output_routes_geojson(&transit, &gtfs, &road, &solution_path);
-
-    // return ();
-
-    // Only consider target routes
-    let target_routes = transit
-        .routes
-        .iter()
-        .filter(|r| {
-            r.route_id == "73658"
-            // || r.route_id == "73705"
-            // || r.route_id == "73688"
-            // || r.route_id == "73682"
-            // || r.route_id == "73770"
-        })
-        .collect::<Vec<_>>();
-
-    println!("Running ACO!");
-    let start = Instant::now();
-    let optimized_routes = aco.optimize_routes(&grid, &road, &mut transit.clone(), &target_routes);
-    println!("  ACO finished in {:?}", start.elapsed());
-
-    // merge optimized routes to transit network routes
-    // transit.routes.iter_mut().for_each(|r| {
-    //     *r = optimized_routes
-    //         .iter()
-    //         .find(|or| or.route_id == r.route_id)
-    //         .unwrap_or(r)
-    //         .clone()
-    // });
-    // transit.print_stats();
-    transit.routes = optimized_routes;
-
-    let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
-    output_routes_geojson(&transit, &gtfs, &road, &solution_path);
+    if let Some((params, fitness)) = optimize_aco_params(target_route, &city) {
+        println!("Optimized params: ");
+        params.print_stats();
+        println!("Optimized fitness: {:?}", fitness);
+    } else {
+        println!("Failed to optimize params");
+    }
 }
 
 // Convert TransitNetwork to GeoJSON

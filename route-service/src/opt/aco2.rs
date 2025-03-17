@@ -280,12 +280,34 @@ fn evaluate_route(
     if bad_turn_count > 0 {
         punishment_factor += PUNISHMENT_BAD_TURN * (bad_turn_count as f64 / 4.0).max(1.0);
     }
-    log::info!(
-        "  Score: {}, Punishment: {}, Nonlinearity: {}, Bad Turn: {}",
+
+    // calculate average distance between stops
+    let avg_stop_dist = if stops.len() > 1 {
+        road_dist / (stops.len() as f64 - 1.0)
+    } else {
+        0.0
+    };
+
+    // calculate the deviation ratio from desired average
+    let deviation = (avg_stop_dist - params.avg_stop_dist).abs() / params.avg_stop_dist;
+
+    // apply exponential punishment for stop distance
+    let stop_dist_punishment =
+        if avg_stop_dist < params.min_stop_dist || avg_stop_dist > params.max_stop_dist {
+            PUNISHMENT_STOP_DIST
+        } else {
+            PUNISHMENT_STOP_DIST * (1.0 - (-2.0 * deviation).exp())
+        };
+
+    punishment_factor += stop_dist_punishment;
+
+    log::debug!(
+        "  Score: {}, Punishment: {}, Nonlinearity: {}, Bad Turn: {}, Avg Stop Dist: {:?}m",
         score,
         punishment_factor,
         nonlinearity,
-        bad_turn_count
+        bad_turn_count,
+        avg_stop_dist,
     );
 
     (

@@ -1,5 +1,4 @@
 use rand::Rng;
-use std::sync::Arc;
 
 use crate::{
     layers::{city::City, transit_network::TransitRoute},
@@ -25,6 +24,7 @@ struct ACOChromosome {
 
 impl ACOChromosome {
     /// Print detailed stats about this chromosome
+    #[allow(dead_code)]
     fn print_stats(&self) {
         println!("Chromosome Fitness: {}", self.fitness.unwrap_or(0.0));
         self.aco_params.print_stats();
@@ -75,10 +75,16 @@ impl GAConfig {
         );
 
         // Initialize population
+        log::info!(
+            "Initializing population with {} individuals",
+            self.population_size
+        );
         let mut population = self.initialize_population(&mut rng);
 
         // Evaluate initial population
-        for individual in &mut population {
+        log::info!("Evaluating initial population");
+        for (i, individual) in population.iter_mut().enumerate() {
+            log::debug!("Evaluating individual {}/{}", i + 1, self.population_size);
             self.evaluate_fitness(individual, route, city);
         }
 
@@ -97,31 +103,38 @@ impl GAConfig {
 
         // Main GA loop
         for generation in 0..self.max_generations {
+            log::info!(
+                "Starting generation {}/{}",
+                generation + 1,
+                self.max_generations
+            );
+
             // Create next generation
             let mut next_generation = Vec::with_capacity(self.population_size);
 
             // Elitism: keep best individuals
+            log::debug!(
+                "Applying elitism: keeping top {} individuals",
+                self.elitism_count
+            );
             for i in 0..self.elitism_count.min(population.len()) {
                 next_generation.push(population[i].clone());
             }
 
             // Fill the rest of the population
+            log::debug!("Creating new individuals through crossover and mutation");
             while next_generation.len() < self.population_size {
                 // Selection
                 let parent1 = self.tournament_selection(&population, &mut rng);
                 let parent2 = self.tournament_selection(&population, &mut rng);
 
-                // Crossover
+                // Crossover and mutation
                 let mut offspring = if rng.gen::<f64>() < self.crossover_rate {
                     self.crossover(&parent1, &parent2, &mut rng)
                 } else {
                     parent1.clone()
                 };
-
-                // Mutation
                 self.mutate(&mut offspring, &mut rng);
-
-                // Add to next generation
                 next_generation.push(offspring);
             }
 
@@ -129,8 +142,10 @@ impl GAConfig {
             population = next_generation;
 
             // Evaluate new population
-            for individual in &mut population {
+            log::debug!("Evaluating new population");
+            for (i, individual) in population.iter_mut().enumerate() {
                 if individual.fitness.is_none() {
+                    log::trace!("Evaluating individual {}/{}", i + 1, self.population_size);
                     self.evaluate_fitness(individual, route, city);
                 }
             }
@@ -161,6 +176,20 @@ impl GAConfig {
                     best_fitness
                 );
             }
+
+            // logging for average fitness
+            let avg_fitness: f64 = population
+                .iter()
+                .map(|ind| ind.fitness.unwrap_or(0.0))
+                .sum::<f64>()
+                / population.len() as f64;
+            log::info!(
+                "Generation {}/{} completed - Best: {:.4}, Avg: {:.4}",
+                generation + 1,
+                self.max_generations,
+                best_fitness,
+                avg_fitness
+            );
         }
 
         log::info!(
@@ -194,15 +223,15 @@ impl GAConfig {
             beta: rng.gen_range(1.0..5.0),
             rho: rng.gen_range(0.05..0.5),
             q0: rng.gen_range(0.5..1.0),
-            num_ant: rng.gen_range(10..50),
-            max_gen: rng.gen_range(50..200),
+            num_ant: rng.gen_range(5..20),
+            max_gen: rng.gen_range(10..50),
             pheromone_max: rng.gen_range(20.0..50.0),
             pheromone_min: rng.gen_range(1.0..10.0),
             init_pheromone: rng.gen_range(10.0..30.0),
             bus_capacity: rng.gen_range(30..70),
             min_route_len: rng.gen_range(3..10),
             max_route_len: rng.gen_range(50..100),
-            min_stop_dist: rng.gen_range(50.0..200.0),
+            min_stop_dist: rng.gen_range(50.0..150.0),
             max_stop_dist: rng.gen_range(300.0..700.0),
             max_nonlinearity: rng.gen_range(1.5..3.5),
             avg_stop_dist: rng.gen_range(150.0..300.0),
@@ -446,6 +475,7 @@ impl GAConfig {
 ///
 /// This function uses default GA parameters. For more control, create a GAConfig
 /// instance directly and call optimize_aco_params on it.
+#[allow(dead_code)]
 pub fn optimize_aco_params(route: &TransitRoute, city: &City) -> Option<(ACO, f64)> {
     let ga_config = GAConfig::new();
 
@@ -477,6 +507,7 @@ pub fn optimize_aco_params(route: &TransitRoute, city: &City) -> Option<(ACO, f6
 }
 
 /// Run genetic algorithm with custom parameters to find optimal ACO parameters
+#[allow(dead_code)]
 pub fn optimize_aco_params_with_config(
     route: &TransitRoute,
     city: &City,
