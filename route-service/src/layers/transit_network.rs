@@ -537,6 +537,7 @@ pub enum TransitRouteType {
     Trolleybus,
     Monorail,
     IntercityBus,
+    Unkown,
 }
 
 impl From<RouteType> for TransitRouteType {
@@ -552,6 +553,7 @@ impl From<RouteType> for TransitRouteType {
             RouteType::Funicular => TransitRouteType::Funicular,
             RouteType::Trolleybus => TransitRouteType::Trolleybus,
             RouteType::Monorail => TransitRouteType::Monorail,
+            RouteType::Unknown => TransitRouteType::Unkown,
         }
     }
 }

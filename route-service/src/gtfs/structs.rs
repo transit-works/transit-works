@@ -146,6 +146,8 @@ pub enum RouteType {
     Trolleybus,
     #[serde(rename = "12")]
     Monorail,
+    #[serde(other)]
+    Unknown,
 }
 
 /// A scheduled trip for a route.

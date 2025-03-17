@@ -59,6 +59,8 @@ async fn main() -> std::io::Result<()> {
     let mut city_ports = HashMap::new();
     city_ports.insert("toronto".to_string(), 8081);
     city_ports.insert("sanfrancisco".to_string(), 8082);
+    city_ports.insert("vancouver".to_string(), 8083);
+    city_ports.insert("austin".to_string(), 8084);
 
     // Parse the cities from command line
     let cities: Vec<String> = args

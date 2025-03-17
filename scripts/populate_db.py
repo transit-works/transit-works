@@ -278,15 +278,43 @@ def add_gtfs_data(
         ]:
             file_path = f'{city.gtfs_dir}/{file}'
             print(f'Loading {file_path} to database')
+            table_name = f'gtfs_{file.split(".")[0]}'
+            
+            # Get database table columns
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            db_columns = [row[1] for row in cursor.fetchall()]
+            
             with open(file_path, 'r') as f:
                 reader = csv.reader(f)
-                columns = next(reader)
-                table_name = f'gtfs_{file.split(".")[0]}'
+                csv_columns = next(reader)
+                
+                # Find which columns exist in both CSV and database
+                valid_columns = [col for col in csv_columns if col in db_columns]
+                
+                if not valid_columns:
+                    print(f"Warning: No matching columns found between {file} and database table {table_name}")
+                    continue
+                    
+                print(f"Using columns: {', '.join(valid_columns)}")
+                
                 # Clear the table
                 cursor.execute(f'DELETE FROM {table_name};')
-                # Insert all the data from the file
+                
+                # Create column mapping
+                column_indices = [csv_columns.index(col) for col in valid_columns]
+                
+                # Collect all rows to be inserted
+                rows_to_insert = []
+                for row in reader:
+                    filtered_row = [row[idx] for idx in column_indices]
+                    rows_to_insert.append(filtered_row)
+                
+                # Insert all rows at once using executemany
+                placeholders = ','.join(['?'] * len(valid_columns))
                 cursor.executemany(
-                    f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({','.join(['?'] * len(columns))})", reader)
+                    f"INSERT INTO {table_name} ({','.join(valid_columns)}) VALUES ({placeholders})",
+                    rows_to_insert
+                )
 
     conn.commit()
 
