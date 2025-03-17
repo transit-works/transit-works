@@ -13,26 +13,27 @@ use crate::layers::{
 };
 
 // struct to store all the tunable parameters for the ACO algorithm
+#[derive(Clone)]
 pub struct ACO {
     // ACO specific parameters
-    alpha: f64,
-    beta: f64,
-    rho: f64,
-    q0: f64,
-    num_ant: usize,
-    max_gen: usize,
-    pheromone_max: f64,
-    pheromone_min: f64,
-    init_pheromone: f64,
+    pub alpha: f64,
+    pub beta: f64,
+    pub rho: f64,
+    pub q0: f64,
+    pub num_ant: usize,
+    pub max_gen: usize,
+    pub pheromone_max: f64,
+    pub pheromone_min: f64,
+    pub init_pheromone: f64,
     // Bus specific parameters
-    bus_capacity: usize,
-    min_stop_dist: f64,
-    max_stop_dist: f64,
+    pub bus_capacity: usize,
+    pub min_stop_dist: f64,
+    pub max_stop_dist: f64,
     // Punishment parameter
-    min_route_len: usize,
-    max_route_len: usize,
-    max_nonlinearity: f64,
-    avg_stop_dist: f64,
+    pub min_route_len: usize,
+    pub max_route_len: usize,
+    pub max_nonlinearity: f64,
+    pub avg_stop_dist: f64,
 }
 
 // should be less than 1.0
