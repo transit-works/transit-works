@@ -91,13 +91,25 @@ impl GridNetwork {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Hash, Eq, PartialEq)]
+#[derive(PartialOrd, Ord, Clone, Deserialize, Serialize, Hash, Eq, PartialEq)]
 pub enum TimePeriod {
     Morning,
     AmRush,
     MidDay,
     PmRush,
     Evening,
+}
+
+impl TimePeriod {
+    pub fn to_number(&self) -> usize {
+        match self {
+            TimePeriod::Morning => 1,
+            TimePeriod::AmRush => 2,
+            TimePeriod::MidDay => 3,
+            TimePeriod::PmRush => 4,
+            TimePeriod::Evening => 5,
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]

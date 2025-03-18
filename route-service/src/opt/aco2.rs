@@ -427,6 +427,7 @@ fn adjust_route(
         route_type: route.route_type.clone(),
         outbound_stops: new_stops,
         inbound_stops: vec![],
+        stop_times: route.stop_times.clone(),
     })
 }
 

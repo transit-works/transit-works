@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use chrono::NaiveTime;
 use geo::{Distance, Haversine, Length, LineString};
 use geo_types::Point;
 use petgraph::graph::NodeIndex;
@@ -8,14 +9,14 @@ use rstar::{Envelope, PointDistance, RTree, RTreeObject, AABB};
 use serde::{Deserialize, Serialize};
 
 use crate::gtfs::gtfs::Gtfs;
-use crate::gtfs::structs::{Route, RouteType, Shape, Stop, StopTime, Trip};
+use crate::gtfs::structs::{Frequency, Route, RouteType, Shape, Stop, StopTime, Trip};
 use crate::layers::error::Error;
 
 use super::geo_util;
 use super::road_network::RoadNetwork;
 
 // Layer 3 - Data structure describing the transit network
-#[derive(Clone, Deserialize, Serialize)]
+#[derive( Clone, Deserialize, Serialize)]
 pub struct TransitNetwork {
     /// Set of all the transit routes in the network
     pub routes: Vec<TransitRoute>,
@@ -101,6 +102,39 @@ impl TransitNetwork {
                     encountered_stops.insert(stop_times.stop_id.clone());
                 }
             }
+
+            // Get the stop_times for all the trips in a route
+            let mut freq_hash: HashMap<(String, usize), usize> = HashMap::new();
+            let trips = gtfs.trips.get(&route.route_id);
+            if !trips.is_none() {
+                for trip in trips.unwrap() {
+                    for s in &trip.stop_times {
+                        if let Some(departure_time) = &s.departure_time {
+                            if let Ok(time) = NaiveTime::parse_from_str(departure_time, "%H:%M:%S")
+                            {
+                                //let start_time = NaiveTime::from_hms_opt(1, 0, 0);
+                                //let end_time = NaiveTime::from_hms_opt(23, 0, 0);
+                                if time >= NaiveTime::from_hms_opt(5, 0, 0).unwrap() && time <= NaiveTime::from_hms_opt(7, 0, 0).unwrap() {
+                                    *freq_hash.entry((s.stop_id.clone(), 1)).or_insert(0) += 1;
+                                }
+                                else if time >= NaiveTime::from_hms_opt(7, 0, 0).unwrap() && time <= NaiveTime::from_hms_opt(9, 30, 0).unwrap() {
+                                    *freq_hash.entry((s.stop_id.clone(), 2)).or_insert(0) += 1;
+                                }
+                                else if time >= NaiveTime::from_hms_opt(9, 30, 0).unwrap() && time <= NaiveTime::from_hms_opt(15, 0, 0).unwrap() {
+                                    *freq_hash.entry((s.stop_id.clone(), 3)).or_insert(0) += 1;
+                                }
+                                else if time >= NaiveTime::from_hms_opt(15, 0, 0).unwrap() && time <= NaiveTime::from_hms_opt(19, 0, 0).unwrap() {
+                                    *freq_hash.entry((s.stop_id.clone(), 4)).or_insert(0) += 1;
+                                }
+                                else if time >= NaiveTime::from_hms_opt(19, 0, 0).unwrap() && time <= NaiveTime::from_hms_opt(22, 0, 0).unwrap() {
+                                    *freq_hash.entry((s.stop_id.clone(), 5)).or_insert(0) += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Classify route type
             let route_type = if route.route_type == RouteType::Bus
                 && (is_intercity(trip1, road) || is_intercity(trip2, road))
@@ -116,6 +150,7 @@ impl TransitNetwork {
                 route_type: route_type,
                 inbound_stops: inbound_stops,
                 outbound_stops: outbound_stops,
+                stop_times: freq_hash,
             });
         }
         Ok(TransitNetwork {
@@ -522,6 +557,7 @@ pub struct TransitRoute {
     pub route_type: TransitRouteType,
     pub inbound_stops: Vec<Arc<TransitStop>>,
     pub outbound_stops: Vec<Arc<TransitStop>>,
+    pub stop_times: HashMap<(String, usize), usize>,
 }
 
 #[derive(PartialEq, Clone, Deserialize, Serialize)]
