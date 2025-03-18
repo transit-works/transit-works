@@ -38,8 +38,7 @@ pub fn ridership_over_route(
     let mut stop_to_zone = HashMap::new();
     let mut zone_to_count = HashMap::new();
     for stop in stops {
-        let (x, y) = (stop.geom.x(), stop.geom.y());
-        let zone = od.find_nearest_zone(x, y);
+        let zone = stop.zone_index(&od);
         if let Some(zone) = zone {
             if !zones.contains(&zone) {
                 zones.push(zone);
@@ -115,8 +114,7 @@ pub fn get_route_demand_grid_info(
     let mut vis_zones = vec![];
     let mut zones_to_stop_id = HashMap::new();
     for stop in route_stops {
-        let (x, y) = (stop.geom.x(), stop.geom.y());
-        let zone = od.find_nearest_zone(x, y).unwrap();
+        let zone = stop.zone_index(&od).unwrap();
         let zone_ref = od.get_zone(zone);
         if vis_zones.contains(&zone_ref.zoneid) {
             continue;
@@ -124,8 +122,7 @@ pub fn get_route_demand_grid_info(
         vis_zones.push(zone_ref.zoneid);
         let mut zone_links = vec![];
         for stop2 in route_stops {
-            let (x2, y2) = (stop2.geom.x(), stop2.geom.y());
-            let zone2 = od.find_nearest_zone(x2, y2).unwrap();
+            let zone2 = stop2.zone_index(&od).unwrap();
             let demand = od.link_between_zones(zone, zone2).unwrap();
             zone_links.push((*demand).clone());
         }
@@ -188,7 +185,7 @@ pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) 
     let mut total_population = 0.0;
     for stop in route_stops {
         let (x, y) = (stop.geom.x(), stop.geom.y());
-        let node = od.find_nearest_zone(x, y);
+        let node = stop.zone_index(&od);
         if node.is_none() {
             continue;
         }
@@ -238,8 +235,7 @@ pub fn determine_routes_zone_to_zone_coverage(
     let mut num_routes = HashMap::new();
     let mut zones = vec![];
     for stop in &opt_route.outbound_stops {
-        let (x, y) = (stop.geom.x(), stop.geom.y());
-        let zone = grid.find_nearest_zone(x, y);
+        let zone = stop.zone_index(grid);
         if let Some(zone) = zone {
             if !zones.contains(&zone) {
                 zones.push(zone);

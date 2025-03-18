@@ -60,7 +60,7 @@ impl ACO {
             max_route_len: 100,
             min_stop_dist: 100.0,
             max_stop_dist: 500.0,
-            max_nonlinearity: 2.5,
+            max_nonlinearity: 1.5,
             avg_stop_dist: 200.0,
         }
     }
@@ -241,8 +241,7 @@ fn evaluate_route(
     // 2 - Compute demand p_r
     let mut zones = vec![];
     for stop in stops {
-        let (x, y) = (stop.geom.x(), stop.geom.y());
-        let zone = city.grid.find_nearest_zone(x, y);
+        let zone = stop.zone_index(&city.grid);
         if let Some(zone) = zone {
             if !zones.contains(&zone) {
                 zones.push(zone);
@@ -334,16 +333,8 @@ fn compute_heuristic(
     let demand_ji =
         city.grid
             .demand_between_coords(to.geom.x(), to.geom.y(), from.geom.x(), from.geom.y());
-    let zone_i = city
-        .grid
-        .find_nearest_zone(from.geom.x(), from.geom.y())
-        .unwrap();
-    let zone_i = city.grid.get_zone(zone_i);
-    let zone_j = city
-        .grid
-        .find_nearest_zone(to.geom.x(), to.geom.y())
-        .unwrap();
-    let zone_j = city.grid.get_zone(zone_j);
+    let zone_i = from.zone(&city.grid).unwrap();
+    let zone_j = to.zone(&city.grid).unwrap();
     let coverage_ij = *zone_to_zone_coverage
         .get(&(zone_i.zoneid, zone_j.zoneid))
         .unwrap_or(&1) as f64;
@@ -555,8 +546,7 @@ fn filter_zones_by_stops(stops: &Vec<Arc<TransitStop>>, city: &City) -> HashMap<
     let mut zone_to_zone_coverage = HashMap::new();
     let mut zones = vec![];
     for stop in stops {
-        let (x, y) = (stop.geom.x(), stop.geom.y());
-        let zone = city.grid.find_nearest_zone(x, y);
+        let zone = stop.zone_index(&city.grid);
         if let Some(zone) = zone {
             if !zones.contains(&zone) {
                 zones.push(zone);
