@@ -2,7 +2,7 @@ use actix_web::cookie::time::{convert, Time};
 use core::f64;
 use std::{collections::HashMap, collections::HashSet, sync::Arc};
 
-use geo::Area;
+use geo::{Area, Contains};
 use geo::{Intersects, Point, Polygon};
 use geo_types::Coord;
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,8 @@ use crate::layers::{
     road_network::RoadNetwork,
     transit_network::{TransitNetwork, TransitRoute, TransitStop},
 };
+
+use super::consts;
 
 /// Evaluate the ridership of a route at each stop
 ///
@@ -34,24 +36,14 @@ pub fn ridership_over_route(
     transit: &TransitNetwork,
     route: &TransitRoute,
     od: &GridNetwork,
-    route: &TransitRoute,
-    transit: &TransitNetwork,
 ) -> (Vec<f64>, f64) {
-    let mut ridership = vec![];
-    let mut zone_prev_outer = None;
-    // populate the net change at each stop for ridership
-    let mut number_of_intersecting_stops: HashMap<(String, String), f64> = HashMap::new();
-    for r in transit.routes.iter() {
-        if r.route_id != route.route_id {
-            for stops in route.outbound_stops.windows(2) {
-                let edge = (stops[0].stop_id.clone(), stops[1].stop_id.clone());
-                *number_of_intersecting_stops.entry(edge).or_insert(0.0) += 1.0;
-            }
-        }
-    }
-
-    for i in 0..route_stops.len() {
-        let stop = &route_stops[i];
+    // get other routes serving demand
+    let zone_to_zone_coverage = determine_routes_zone_to_zone_coverage(transit, od, route);
+    let stops = &route.outbound_stops;
+    let mut zones = vec![];
+    let mut stop_to_zone = HashMap::new();
+    let mut zone_to_count = HashMap::new();
+    for stop in stops {
         let (x, y) = (stop.geom.x(), stop.geom.y());
         let zone = od.find_nearest_zone(x, y);
         if let Some(zone) = zone {
@@ -66,55 +58,28 @@ pub fn ridership_over_route(
     for i in 0..zones.len() {
         // people getting off
         for j in 0..i {
-            // riders leaving at stop i
-            let intersecting = number_of_intersecting_stops
-            .get(&(stop.stop_id.clone(), route_stops[j].stop_id.clone()))
-            .unwrap_or(&1.0);
-
-            let (x1, y1) = (route_stops[j].geom.x(), route_stops[j].geom.y());
-            if let Some(zone_curr) = od.find_nearest_zone(x1, y1) {
-                // avoid double counting the same zone, assume the total demand from that zone
-                // is distribued over all the stops in that zone from the route
-                if zone_prev == Some(zone_curr) {
-                    continue;
-                }
-                zone_prev = Some(zone_curr);
-                let demand = od.demand_between_zones(zone, zone_curr);
-                net_at_stop -= demand/intersecting;
-            }
+            let (u, v) = (od.get_zone(zones[i]).zoneid, od.get_zone(zones[j]).zoneid);
+            let coverage = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1) as f64;
+            let demand_ij = od.link_between_zones(zones[i], zones[j]).unwrap();
+            let ridership_ij = demand_ij.weight / coverage;
+            *zone_to_ridership.entry(zones[i]).or_insert(0.0) -= ridership_ij;
         }
-        for j in i + 1..route_stops.len() {
-            // riders boarding at stop i
-            let intersecting = number_of_intersecting_stops
-            .get(&(stop.stop_id.clone(), route_stops[j].stop_id.clone()))
-            .unwrap_or(&1.0);
-            let (x2, y2) = (route_stops[j].geom.x(), route_stops[j].geom.y());
-            if let Some(zone_curr) = od.find_nearest_zone(x2, y2) {
-                if zone_prev == Some(zone_curr) {
-                    continue;
-                }
-                zone_prev = Some(zone_curr);
-                let demand = od.demand_between_zones(zone, zone_curr);
-                net_at_stop += demand/intersecting;
-            }
+        // people getting on
+        for j in i + 1..zones.len() {
+            let (u, v) = (od.get_zone(zones[i]).zoneid, od.get_zone(zones[j]).zoneid);
+            let coverage = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1) as f64;
+            let demand_ij = od.link_between_zones(zones[i], zones[j]).unwrap();
+            let ridership_ij = demand_ij.weight / coverage;
+            *zone_to_ridership.entry(zones[i]).or_insert(0.0) += ridership_ij;
         }
     }
 
-        zone_prev_outer = Some(zone);
-        ridership.push(net_at_stop);
-    }
-    // for all NAN entries in a row, distribe the last non-NAN value over them
-    // assume that the demand is equally distribued over all the stops in the same zone
-    let mut last_non_nan = 0.0;
-    let mut count_nan = 0;
-    for i in 0..ridership.len() {
-        if ridership[i].is_nan() {
-            if i == ridership.len() - 1{
-                ridership[i] = 0.0;
-            }
-            else{
-                count_nan += 1;
-            }
+    let mut ridership = vec![];
+    for stop in stops {
+        if let Some(zone) = stop_to_zone.get(&stop.stop_id) {
+            let ridership_stop =
+                *zone_to_ridership.get(zone).unwrap() / *zone_to_count.get(zone).unwrap() as f64;
+            ridership.push(ridership_stop);
         } else {
             ridership.push(0.0);
         }
@@ -124,7 +89,7 @@ pub fn ridership_over_route(
         ridership[i] += ridership[i - 1];
     }
 
-    let s: f64 = ridership.iter().filter(|&&r| !r.is_nan()).sum();
+    let avg_ridership = ridership.iter().sum::<f64>() / ridership.len() as f64;
 
     (ridership, avg_ridership)
 }
@@ -268,7 +233,7 @@ pub fn evaluate_economic_score(
     od: &GridNetwork,
     transit : &TransitNetwork,
 ) -> f64 {
-    let (ridership, avg) = ridership_over_route(route_stops, od, route, transit);
+    let (ridership, avg) = ridership_over_route(transit, route, od);
     let s: f64 = ridership.iter().filter(|&&r| !r.is_nan()).sum();
     let ridership_per_stop = s / route_stops.len() as f64;
 
