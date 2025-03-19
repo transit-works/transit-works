@@ -52,7 +52,7 @@ pub fn ridership_over_route(
         // people getting off
         for j in 0..i {
             let (u, v) = (od.get_zone(zones[i]).zoneid, od.get_zone(zones[j]).zoneid);
-            let coverage = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1) as f64;
+            let coverage = (*zone_to_zone_coverage.get(&(u, v)).unwrap_or(&0) + 1) as f64;
             let demand_ij = od.link_between_zones(zones[i], zones[j]).unwrap();
             let ridership_ij = demand_ij.weight / coverage;
             *zone_to_ridership.entry(zones[i]).or_insert(0.0) -= ridership_ij;
@@ -60,7 +60,7 @@ pub fn ridership_over_route(
         // people getting on
         for j in i + 1..zones.len() {
             let (u, v) = (od.get_zone(zones[i]).zoneid, od.get_zone(zones[j]).zoneid);
-            let coverage = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1) as f64;
+            let coverage = (*zone_to_zone_coverage.get(&(u, v)).unwrap_or(&0) + 1) as f64;
             let demand_ij = od.link_between_zones(zones[i], zones[j]).unwrap();
             let ridership_ij = demand_ij.weight / coverage;
             *zone_to_ridership.entry(zones[i]).or_insert(0.0) += ridership_ij;

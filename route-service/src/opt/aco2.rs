@@ -253,6 +253,7 @@ fn evaluate_route(
     let mut zones = vec![];
     let mut zones_count = HashMap::new();
     for stop in stops {
+        // possible dont add demand for bad stops to not reward them
         let zone = stop.zone_index(&city.grid);
         if let Some(zone) = zone {
             if !zones.contains(&zone) {
@@ -343,7 +344,7 @@ fn compute_heuristic(
         let (c0, c1) = (city.road.get_node(*c0).geom, city.road.get_node(*c1).geom);
         let diff = angle_diff(p0, p1, c0, c1);
         if diff.abs() > 178.0 {
-            return 0.01;
+            return 0.0;
         }
     }
     let demand_ij =
@@ -382,7 +383,7 @@ fn adjust_route(
     let mut new_stops = vec![first.clone()];
     let mut visited = HashSet::new(); // Use this visited list
     visited.insert(first.stop_id.clone());
-    let mut radius = params.max_stop_dist;
+    let mut radius = 1500.0;
     loop {
         if geo_util::haversine(
             new_stops.last().unwrap().geom.x(),
@@ -410,7 +411,7 @@ fn adjust_route(
         );
         // let choices = filter_stops_by_dir(params, new_stops.last().unwrap(), last, city, radius);
         if choices.is_empty() {
-            if radius > 2000.0 {
+            if radius >= 3000.0 {
                 log::debug!(
                     "    No choices found after {} stops, location: {:?}, distance to end {}",
                     new_stops.len(),
@@ -424,7 +425,7 @@ fn adjust_route(
                 );
                 break;
             } else {
-                radius += 500.0;
+                radius += 1500.0;
                 continue;
             }
         }
@@ -446,10 +447,10 @@ fn adjust_route(
             radius = params.max_stop_dist;
         } else {
             log::debug!("    No stops found");
-            radius += 500.0;
-            if radius > 2000.0 {
+            if radius >= 3000.0 {
                 break;
             }
+            radius += 1500.0;
             continue;
         }
     }
@@ -507,6 +508,12 @@ fn select_next_stop_from_choices(
             &zone_to_zone_coverage,
             &path,
         );
+        if heuristic == 0.0 {
+            // very low probability of selecting this stop
+            weights.push(0.001);
+            continue;
+        }
+
         let pheromone = pheromone_map.get(&curr.stop_id, &stop.stop_id);
         let weight = heuristic.powf(params.alpha) * pheromone.powf(params.beta);
         weights.push(weight);
