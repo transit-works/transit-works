@@ -3,8 +3,8 @@ use std::{
     sync::Arc,
 };
 
-use geo::{Bearing, Contains, Geodesic};
-use rand::{distributions::WeightedIndex, prelude::Distribution, rngs::ThreadRng};
+use geo::Contains;
+use rand::{distributions::WeightedIndex, prelude::Distribution, rngs::StdRng, Rng, SeedableRng};
 
 use crate::layers::{
     city::City,
@@ -153,6 +153,7 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     let mut gen_best_eval = evaluate_route(&aco, &gen_best_route, &city, &zone_to_zone_coverage).0;
     let init_eval = gen_best_eval;
     let mut update_pheromone = vec![];
+    let mut rng = StdRng::seed_from_u64(42);
     for gen_i in 0..aco.max_gen {
         log::debug!("Generation: {}", gen_i);
         // pheromone evaporation
@@ -177,6 +178,7 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
                 &mut heuristic_map,
                 &stops,
                 &zone_to_zone_coverage,
+                &mut rng,
             ) {
                 let new_route_eval =
                     evaluate_route(&aco, &new_route, &city, &zone_to_zone_coverage).0;
@@ -359,6 +361,7 @@ fn adjust_route(
     heuristic_map: &mut HashMap<(String, String), f64>,
     stops: &Vec<Arc<TransitStop>>,
     zone_to_zone_coverage: &HashMap<(u32, u32), u32>,
+    rng: &mut StdRng,
 ) -> Option<TransitRoute> {
     let first = route.outbound_stops.first().unwrap();
     let last = route.outbound_stops.last().unwrap();
@@ -374,6 +377,7 @@ fn adjust_route(
             last.geom.x(),
             last.geom.y(),
         ) < params.max_stop_dist
+            && rng.gen_bool(0.5)
         {
             new_stops.push(last.clone());
             break;
@@ -421,6 +425,7 @@ fn adjust_route(
             &choices,
             &visited,
             &zone_to_zone_coverage,
+            rng,
         ) {
             visited.insert(next.stop_id.clone());
             new_stops.push(next);
@@ -459,6 +464,7 @@ fn select_next_stop_from_choices(
     choices: &Vec<Arc<TransitStop>>,
     visited: &HashSet<String>,
     zone_to_zone_coverage: &HashMap<(u32, u32), u32>,
+    rng: &mut StdRng,
 ) -> Option<Arc<TransitStop>> {
     // compute probability of visiting each stop
     let mut weights = vec![];
@@ -485,9 +491,8 @@ fn select_next_stop_from_choices(
     }
 
     // select the next stop
-    let mut rng = ThreadRng::default();
     let dist = WeightedIndex::new(&weights).unwrap();
-    let next = &choices[dist.sample(&mut rng)];
+    let next = &choices[dist.sample(rng)];
     Some(next.clone())
 }
 
@@ -599,7 +604,7 @@ fn valid_next_stops(
             }
             let diff = angle_diff(curr.geom, stop.geom, stop.geom, last.geom);
             // diff ranges from 180 to 60 depending on distance from end to allow exploration
-            let allowed_diff = 150.0 - (stops_so_far as f64 / expected_stops as f64) * 70.0;
+            let allowed_diff = 120.0 - (stops_so_far as f64 / expected_stops as f64) * 80.0;
             diff.abs() < allowed_diff
         })
         .cloned()
