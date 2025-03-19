@@ -230,7 +230,7 @@ fn evaluate_route(
             let (p0, p1) = (city.road.get_node(*p0).geom, city.road.get_node(*p1).geom);
             let (c0, c1) = (city.road.get_node(*c0).geom, city.road.get_node(*c1).geom);
             let diff = angle_diff(p0, p1, c0, c1);
-            if diff.abs() > 175.0 {
+            if diff.abs() > 178.0 {
                 bad_turn_count += 1;
             }
         }
@@ -296,9 +296,8 @@ fn evaluate_route(
     if bad_turn_count > 0 {
         let expected_stops =
             ((straight_line_dist / params.avg_stop_dist) * params.max_nonlinearity).ceil();
-        // max punishment if more than 1 in 5 stops are bad turns
-        punishment_factor +=
-            PUNISHMENT_BAD_TURN * (((bad_turn_count * 5) as f64 / expected_stops as f64).min(1.0));
+        punishment_factor += PUNISHMENT_BAD_TURN
+            * (bad_turn_count as f64 / (expected_stops as f64 * 0.1).max(10.0)).min(1.0);
     }
     if avg_stop_dist < params.min_stop_dist || avg_stop_dist > params.max_stop_dist {
         // max punishment if avg stop distance is less than min_stop_dist or greater than max_stop_dist
@@ -615,10 +614,15 @@ fn angle_diff(
     c: geo::Point<f64>,
     d: geo::Point<f64>,
 ) -> f64 {
-    let bearing_ab = Geodesic::bearing(a, b);
-    let bearing_cd = Geodesic::bearing(c, d);
-    let normalized_bearing_ab = (bearing_ab + 360.0) % 360.0;
-    let normalized_bearing_cd = (bearing_cd + 360.0) % 360.0;
-    let diff = ((normalized_bearing_cd - normalized_bearing_ab + 540.0) % 360.0) - 180.0;
-    diff
+    let (ax, ay) = (a.x(), a.y());
+    let (bx, by) = (b.x(), b.y());
+    let (cx, cy) = (c.x(), c.y());
+    let (dx, dy) = (d.x(), d.y());
+    let (v1x, v1y) = (bx - ax, by - ay);
+    let (v2x, v2y) = (dx - cx, dy - cy);
+    let dot = v1x * v2x + v1y * v2y;
+    let cross = v1x * v2y - v1y * v2x;
+    let angle = cross.atan2(dot).to_degrees();
+    assert!(-180.0 <= angle && angle <= 180.0);
+    angle
 }
