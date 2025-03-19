@@ -4,6 +4,7 @@ use std::{
 };
 
 use geo::Contains;
+use petgraph::graph::NodeIndex;
 use rand::{distributions::WeightedIndex, prelude::Distribution, rngs::StdRng, Rng, SeedableRng};
 
 use crate::layers::{
@@ -328,11 +329,23 @@ fn compute_heuristic(
     city: &City,
     heuristic_map: &mut HashMap<(String, String), f64>,
     zone_to_zone_coverage: &HashMap<(u32, u32), u32>,
+    path_prev: &Vec<NodeIndex>,
 ) -> f64 {
     if let Some(val) = heuristic_map.get(&(from.stop_id.clone(), to.stop_id.clone())) {
         return *val;
     }
-    let road_dist = from.road_distance(to, &city.road).0;
+    let (road_dist, path_curr) = from.road_distance(to, &city.road);
+    // check if path_ij is a u-turn or large detour from path_pi
+    let (p0, p1) = (path_prev.get(path_prev.len() - 2), path_prev.last());
+    let (c0, c1) = (path_curr.first(), path_curr.get(1));
+    if let (Some(p0), Some(p1), Some(c0), Some(c1)) = (p0, p1, c0, c1) {
+        let (p0, p1) = (city.road.get_node(*p0).geom, city.road.get_node(*p1).geom);
+        let (c0, c1) = (city.road.get_node(*c0).geom, city.road.get_node(*c1).geom);
+        let diff = angle_diff(p0, p1, c0, c1);
+        if diff.abs() > 178.0 {
+            return 0.01;
+        }
+    }
     let demand_ij =
         city.grid
             .demand_between_coords(from.geom.x(), from.geom.y(), to.geom.x(), to.geom.y());
@@ -466,6 +479,12 @@ fn select_next_stop_from_choices(
     zone_to_zone_coverage: &HashMap<(u32, u32), u32>,
     rng: &mut StdRng,
 ) -> Option<Arc<TransitStop>> {
+    // get the path from prev to curr, to determine if curr to stop (next) is good
+    let path = if let Some(prev) = prev {
+        prev.road_distance(curr, &city.road).1
+    } else {
+        vec![]
+    };
     // compute probability of visiting each stop
     let mut weights = vec![];
     for stop in choices {
@@ -473,14 +492,21 @@ fn select_next_stop_from_choices(
             continue;
         }
         // ensure there is no u turn prev -> curr -> stop
-        if let Some(prev) = prev {
-            let diff = angle_diff(prev.geom, curr.geom, curr.geom, stop.geom);
-            if diff.abs() > 140.0 {
-                continue;
-            }
-        }
+        // if let Some(prev) = prev {
+        //     let diff = angle_diff(prev.geom, curr.geom, curr.geom, stop.geom);
+        //     if diff.abs() > 140.0 {
+        //         continue;
+        //     }
+        // }
 
-        let heuristic = compute_heuristic(curr, stop, city, heuristic_map, &zone_to_zone_coverage);
+        let heuristic = compute_heuristic(
+            curr,
+            stop,
+            city,
+            heuristic_map,
+            &zone_to_zone_coverage,
+            &path,
+        );
         let pheromone = pheromone_map.get(&curr.stop_id, &stop.stop_id);
         let weight = heuristic.powf(params.alpha) * pheromone.powf(params.beta);
         weights.push(weight);
