@@ -85,7 +85,7 @@ export default function Home() {
       </ParallaxLayer>
 
       {/* Optimize & Visualize Section */}
-      <ParallaxLayer offset={1} speed={0.75}>
+      <ParallaxLayer offset={1} speed={0.35}>
         <div className="fixed -right-1/2 -top-1/4">
           <Spline scene="https://prod.spline.design/N65bCqhDNa1MQxts/scene.splinecode" />
         </div>

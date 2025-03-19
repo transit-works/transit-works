@@ -54,19 +54,21 @@ export default function OptimizationProgress({
           const attemptCount = optimize_attempts ? optimize_attempts[i] : 0;
           
           routeStatusElements.push(
-            <div key={routeId} className={`text-xs mb-2 ${isCurrentRoute ? 'font-bold' : ''}`}>
-              Route {i + 1}/{routes_count}: {routeId.substring(0, 15)}...
+            <div key={routeId} className={`text-xs mb-2 ${isCurrentRoute ? 'font-bold' : ''} flex justify-between`}>
+              <span className="truncate max-w-[150px]">
+                Route {i + 1}/{routes_count}: {routeId.substring(0, 12)}...
+              </span>
               {hasConverged ? (
-                <span className="ml-2 text-green-400 font-semibold">
-                  ✓ Converged ({attemptCount} attempts)
+                <span className="ml-2 text-accent-2 font-semibold">
+                  ✓ Converged ({attemptCount})
                 </span>
               ) : isCurrentRoute ? (
-                <span className="ml-2 text-blue-400">
-                  Optimizing... ({attemptCount} attempts)
+                <span className="ml-2 text-accent">
+                  Optimizing... ({attemptCount})
                 </span>
               ) : (
-                <span className="ml-2 text-gray-400">
-                  Waiting... ({attemptCount} attempts)
+                <span className="ml-2 text-text-2 opacity-70">
+                  Waiting... ({attemptCount})
                 </span>
               )}
             </div>
@@ -75,14 +77,16 @@ export default function OptimizationProgress({
       } else {
         // Fallback to showing just the current route
         routeStatusElements.push(
-          <div key={current_route} className="text-xs mb-2 font-bold">
-            Route {current_route_index + 1}/{routes_count}: {current_route}
+          <div key={current_route} className="text-xs mb-2 font-bold flex justify-between">
+            <span className="truncate max-w-[150px]">
+              Route {current_route_index + 1}/{routes_count}: {current_route}
+            </span>
             {converged && converged_route === current_route ? (
-              <span className="ml-2 text-green-400 font-semibold">
+              <span className="ml-2 text-accent-2 font-semibold">
                 ✓ Converged
               </span>
             ) : (
-              <span className="ml-2 text-blue-400">
+              <span className="ml-2 text-accent">
                 Optimizing...
               </span>
             )}
@@ -91,32 +95,36 @@ export default function OptimizationProgress({
       }
       
       return (
-        <div className="p-4 bg-background-dk bg-opacity-20 backdrop-blur-lg rounded-2xl shadow-lg border border-zinc-700 min-w-[300px] max-w-[400px]">
-          <div className="flex justify-between items-center mb-3">
-            <div className="text-sm font-semibold text-white">
+        <div className="p-5 bg-background-dk bg-opacity-80 backdrop-blur-lg rounded-2xl shadow-bubble border border-zinc-700 min-w-[340px] max-w-[400px] transition-all duration-300">
+          <div className="flex justify-between items-center mb-4">
+            <div className="text-sm font-semibold text-text flex items-center">
+              <div className="w-2 h-2 bg-accent rounded-full mr-2 animate-pulse"></div>
               Optimizing {routes_count} routes: {progress}%
             </div>
             <button
               onClick={onCancel}
-              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs rounded-md transition-colors"
+              className="bg-primary hover:bg-primary/80 text-text px-4 py-1.5 text-xs font-medium rounded-md transition-colors shadow-md"
             >
               Cancel
             </button>
           </div>
           
-          <div className="max-h-28 overflow-y-auto custom-scrollbar text-white">
+          <div className="max-h-32 overflow-y-auto custom-scrollbar text-text px-1 py-1 bg-black/20 rounded-lg mb-3">
             {routeStatusElements}
           </div>
           
-          <div className="text-xs mt-2 mb-2 text-white">
-            Current route: {current_route_index + 1}/{routes_count} (Iteration {route_iteration}/{iterations_per_route})
+          <div className="text-xs mt-2 mb-3 text-text-2 flex justify-between items-center">
+            <span>Current route: {current_route_index + 1}/{routes_count}</span>
+            <span className="px-2 py-0.5 bg-black/30 rounded-md">Iteration {route_iteration}/{iterations_per_route}</span>
           </div>
           
-          <div className="w-full bg-gray-700 rounded-full h-2">
+          <div className="w-full bg-zinc-800 rounded-full h-2.5 overflow-hidden shadow-inner">
             <div 
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              className="bg-accent h-2.5 rounded-full transition-all duration-300 relative"
               style={{ width: `${progress}%` }}
-            ></div>
+            >
+              <div className="absolute top-0 left-0 w-full h-full bg-white/20 animate-pulse"></div>
+            </div>
           </div>
         </div>
       );
@@ -125,23 +133,26 @@ export default function OptimizationProgress({
   
   // Simple progress display for single route
   return (
-    <div className="p-4 bg-background-dk bg-opacity-20 backdrop-blur-lg rounded-2xl shadow-lg border border-zinc-700 min-w-[300px] max-w-[400px]">
-      <div className="flex justify-between items-center mb-3">
-        <div className="text-sm font-semibold text-white">
+    <div className="p-5 bg-background-dk bg-opacity-80 backdrop-blur-lg rounded-2xl shadow-bubble border border-zinc-700 min-w-[340px] max-w-[400px] transition-all duration-300">
+      <div className="flex justify-between items-center mb-4">
+        <div className="text-sm font-semibold text-text flex items-center">
+          <div className="w-2 h-2 bg-accent rounded-full mr-2 animate-pulse"></div>
           Optimizing {routeCount > 1 ? `${routeCount} routes` : '1 route'}: {progress}%
         </div>
         <button
           onClick={onCancel}
-          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs rounded-md transition-colors"
+          className="bg-primary hover:bg-primary/80 text-text px-4 py-1.5 text-xs font-medium rounded-md transition-colors shadow-md ml-3"
         >
           Cancel
         </button>
       </div>
-      <div className="w-full bg-gray-700 rounded-full h-2">
+      <div className="w-full bg-zinc-800 rounded-full h-2.5 overflow-hidden shadow-inner">
         <div 
-          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+          className="bg-accent h-2.5 rounded-full transition-all duration-300 relative"
           style={{ width: `${progress}%` }}
-        ></div>
+        >
+          <div className="absolute top-0 left-0 w-full h-full bg-white/20 animate-pulse"></div>
+        </div>
       </div>
     </div>
   );

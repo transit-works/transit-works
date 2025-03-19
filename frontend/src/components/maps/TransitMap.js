@@ -381,7 +381,7 @@ const renderFixedInfoPanel = () =>
     const dLon = toRad(coord2[0] - coord1[0]);
     const lat1 = toRad(coord1[1]);
     const lat2 = toRad(coord2[1]);
-    const a =``
+    const a = 
       Math.sin(dLat / 2) ** 2 +
       Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
@@ -693,7 +693,7 @@ useEffect(() => {
           mesh: busMesh,
           sizeScale: 8,
           modelMatrix: finalBusModelMatrix,
-          getColor: [255, 255, 0, 240],
+          getColor: [255, 255, 20, 240],
           pickable: false,
         })
       );
