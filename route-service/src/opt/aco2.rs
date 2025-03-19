@@ -37,10 +37,10 @@ pub struct ACO {
 }
 
 // should be less than 1.0
-const PUNISHMENT_NONLINEARITY: f64 = 0.2;
-const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
+const PUNISHMENT_NONLINEARITY: f64 = 0.3;
+// const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
 const PUNISHMENT_BAD_TURN: f64 = 0.4;
-const PUNISHMENT_STOP_DIST: f64 = 0.2;
+const PUNISHMENT_STOP_DIST: f64 = 0.1;
 
 impl ACO {
     // function to initialize the ACO struct with default values
@@ -48,20 +48,20 @@ impl ACO {
         ACO {
             alpha: 2.0,
             beta: 3.0,
-            rho: 0.1,
+            rho: 0.2,
             q0: 1.0,
             num_ant: 20,
-            max_gen: 100,
-            pheromone_max: 30.0,
-            pheromone_min: 5.0,
+            max_gen: 50,
+            pheromone_max: 100.0,
+            pheromone_min: 10.0,
             init_pheromone: 20.0,
             bus_capacity: 50,
             min_route_len: 5,
             max_route_len: 100,
             min_stop_dist: 100.0,
             max_stop_dist: 500.0,
-            max_nonlinearity: 1.5,
-            avg_stop_dist: 200.0,
+            max_nonlinearity: 2.0,
+            avg_stop_dist: 350.0,
         }
     }
 
@@ -152,11 +152,18 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     let mut gen_best_route = route.clone();
     let mut gen_best_eval = evaluate_route(&aco, &gen_best_route, &city, &zone_to_zone_coverage).0;
     let init_eval = gen_best_eval;
+    let mut update_pheromone = vec![];
     for gen_i in 0..aco.max_gen {
         log::debug!("Generation: {}", gen_i);
         // pheromone evaporation
         pheromone_map.decay();
+        // update pheromone for the best route
         pheromone_map.update_route(&gen_best_route, gen_best_eval);
+        // update the pheromone for the rest of the attempts routes
+        for (route, score) in update_pheromone.iter() {
+            pheromone_map.update_route(route, *score);
+        }
+        update_pheromone.clear();
         let mut curr_best_route = gen_best_route.clone();
         let mut curr_best_eval = gen_best_eval;
         for ant_i in 0..aco.num_ant {
@@ -174,9 +181,12 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
                 let new_route_eval =
                     evaluate_route(&aco, &new_route, &city, &zone_to_zone_coverage).0;
                 if new_route_eval > curr_best_eval {
+                    update_pheromone.push((curr_best_route, curr_best_eval));
                     curr_best_route = new_route;
                     curr_best_eval = new_route_eval;
                     log::debug!("    New best route found: {}", new_route_eval);
+                } else {
+                    update_pheromone.push((new_route, new_route_eval));
                 }
             }
         }
@@ -184,6 +194,8 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
         if curr_best_eval > gen_best_eval {
             gen_best_route = curr_best_route;
             gen_best_eval = curr_best_eval;
+        } else {
+            update_pheromone.push((curr_best_route, curr_best_eval));
         }
     }
 
@@ -217,11 +229,7 @@ fn evaluate_route(
         if let (Some(p0), Some(p1), Some(c0), Some(c1)) = (p0, p1, c0, c1) {
             let (p0, p1) = (city.road.get_node(*p0).geom, city.road.get_node(*p1).geom);
             let (c0, c1) = (city.road.get_node(*c0).geom, city.road.get_node(*c1).geom);
-            let bearing_p = Geodesic::bearing(p0, p1);
-            let bearing_c = Geodesic::bearing(c0, c1);
-            let normalized_bearing_p = (bearing_p + 360.0) % 360.0;
-            let normalized_bearing_c = (bearing_c + 360.0) % 360.0;
-            let diff = ((normalized_bearing_c - normalized_bearing_p + 540.0) % 360.0) - 180.0;
+            let diff = angle_diff(p0, p1, c0, c1);
             if diff.abs() > 175.0 {
                 bad_turn_count += 1;
             }
@@ -240,11 +248,15 @@ fn evaluate_route(
 
     // 2 - Compute demand p_r
     let mut zones = vec![];
+    let mut zones_count = HashMap::new();
     for stop in stops {
         let zone = stop.zone_index(&city.grid);
         if let Some(zone) = zone {
             if !zones.contains(&zone) {
                 zones.push(zone);
+                zones_count.insert(zone, 1);
+            } else {
+                *zones_count.entry(zone).or_insert(0) += 1;
             }
         }
     }
@@ -258,27 +270,14 @@ fn evaluate_route(
             let coverage = *zone_to_zone_coverage.get(&(u, v)).unwrap_or(&1) as f64;
             demand += (city.grid.demand_between_zones(zones[i], zones[j])
                 + city.grid.demand_between_zones(zones[j], zones[i]))
+                * zones_count[&zones[i]] as f64
+                * 0.75
                 / coverage;
         }
     }
 
     // compute score
     let score = demand / ((road_dist / 1000.0) * nonlinearity);
-
-    // determine punishment factor
-    let mut punishment_factor = 0.0;
-    if nonlinearity > params.max_nonlinearity {
-        punishment_factor += PUNISHMENT_NONLINEARITY;
-    }
-    if stops.len() < params.min_route_len {
-        punishment_factor += PUNISHMENT_ROUTE_LEN;
-    }
-    if stops.len() > params.max_route_len {
-        punishment_factor += PUNISHMENT_ROUTE_LEN;
-    }
-    if bad_turn_count > 0 {
-        punishment_factor += PUNISHMENT_BAD_TURN * (bad_turn_count as f64 / 4.0).max(1.0);
-    }
 
     // calculate average distance between stops
     let avg_stop_dist = if stops.len() > 1 {
@@ -287,18 +286,24 @@ fn evaluate_route(
         0.0
     };
 
-    // calculate the deviation ratio from desired average
-    let deviation = (avg_stop_dist - params.avg_stop_dist).abs() / params.avg_stop_dist;
-
-    // apply exponential punishment for stop distance
-    let stop_dist_punishment =
-        if avg_stop_dist < params.min_stop_dist || avg_stop_dist > params.max_stop_dist {
-            PUNISHMENT_STOP_DIST
-        } else {
-            PUNISHMENT_STOP_DIST * (1.0 - (-2.0 * deviation).exp())
-        };
-
-    punishment_factor += stop_dist_punishment;
+    // determine punishment factor
+    let mut punishment_factor = 0.0;
+    if nonlinearity > params.max_nonlinearity - 0.5 {
+        // max punishment if nonlinearity is greater than max_nonlinearity
+        punishment_factor += PUNISHMENT_NONLINEARITY
+            * ((nonlinearity - params.max_nonlinearity + 0.5) / 0.5).min(1.0);
+    }
+    if bad_turn_count > 0 {
+        let expected_stops =
+            ((straight_line_dist / params.avg_stop_dist) * params.max_nonlinearity).ceil();
+        // max punishment if more than 1 in 5 stops are bad turns
+        punishment_factor +=
+            PUNISHMENT_BAD_TURN * (((bad_turn_count * 5) as f64 / expected_stops as f64).min(1.0));
+    }
+    if avg_stop_dist < params.min_stop_dist || avg_stop_dist > params.max_stop_dist {
+        // max punishment if avg stop distance is less than min_stop_dist or greater than max_stop_dist
+        punishment_factor += PUNISHMENT_STOP_DIST;
+    }
 
     log::debug!(
         "  Score: {}, Punishment: {}, Nonlinearity: {}, Bad Turn: {}, Avg Stop Dist: {:?}m",
@@ -369,7 +374,7 @@ fn adjust_route(
             new_stops.last().unwrap().geom.y(),
             last.geom.x(),
             last.geom.y(),
-        ) < 300.0
+        ) < params.max_stop_dist
         {
             new_stops.push(last.clone());
             break;
@@ -381,8 +386,8 @@ fn adjust_route(
         let choices = valid_next_stops(
             params,
             new_stops.last().unwrap(),
+            first,
             last,
-            city,
             &stops,
             radius,
             new_stops.len(),
@@ -464,12 +469,7 @@ fn select_next_stop_from_choices(
         }
         // ensure there is no u turn prev -> curr -> stop
         if let Some(prev) = prev {
-            let prev_bearing = Geodesic::bearing(prev.geom, curr.geom);
-            let next_bearing = Geodesic::bearing(curr.geom, stop.geom);
-            let normalized_prev_bearing = (prev_bearing + 360.0) % 360.0;
-            let normalized_next_bearing = (next_bearing + 360.0) % 360.0;
-            let diff =
-                ((normalized_next_bearing - normalized_prev_bearing + 540.0) % 360.0) - 180.0;
+            let diff = angle_diff(prev.geom, curr.geom, curr.geom, stop.geom);
             if diff.abs() > 140.0 {
                 continue;
             }
@@ -581,12 +581,15 @@ fn filter_zones_by_stops(stops: &Vec<Arc<TransitStop>>, city: &City) -> HashMap<
 fn valid_next_stops(
     params: &ACO,
     curr: &Arc<TransitStop>,
+    first: &Arc<TransitStop>,
     last: &Arc<TransitStop>,
-    city: &City,
     stops: &Vec<Arc<TransitStop>>,
     radius: f64,
     stops_so_far: usize,
 ) -> Vec<Arc<TransitStop>> {
+    let dist_fl = geo_util::haversine(first.geom.x(), first.geom.y(), last.geom.x(), last.geom.y());
+    let expected_stops =
+        ((dist_fl / params.avg_stop_dist) * params.max_nonlinearity).ceil() as usize;
     stops
         .iter()
         .filter(|stop| {
@@ -595,15 +598,27 @@ fn valid_next_stops(
             if dist < params.min_stop_dist || dist > radius {
                 return false;
             }
-            let bearing = Geodesic::bearing(curr.geom, stop.geom);
-            let normalized_bearing = (bearing + 360.0) % 360.0;
-            let bearing_to_last = Geodesic::bearing(stop.geom, last.geom);
-            let normalized_bearing_to_last = (bearing_to_last + 360.0) % 360.0;
-            let diff = ((normalized_bearing - normalized_bearing_to_last + 540.0) % 360.0) - 180.0;
-            // diff ranges from 180 to 30 depending on distance from end
-            let allowed_diff = 120.0 - (stops_so_far as f64 / params.max_route_len as f64) * 80.0;
+            let diff = angle_diff(curr.geom, stop.geom, stop.geom, last.geom);
+            // diff ranges from 180 to 60 depending on distance from end to allow exploration
+            let allowed_diff = 150.0 - (stops_so_far as f64 / expected_stops as f64) * 70.0;
             diff.abs() < allowed_diff
         })
         .cloned()
         .collect()
+}
+
+/// Compute the angle difference between two bearings a->b and c->d
+/// Returns a value between -180 and 180
+fn angle_diff(
+    a: geo::Point<f64>,
+    b: geo::Point<f64>,
+    c: geo::Point<f64>,
+    d: geo::Point<f64>,
+) -> f64 {
+    let bearing_ab = Geodesic::bearing(a, b);
+    let bearing_cd = Geodesic::bearing(c, d);
+    let normalized_bearing_ab = (bearing_ab + 360.0) % 360.0;
+    let normalized_bearing_cd = (bearing_cd + 360.0) % 360.0;
+    let diff = ((normalized_bearing_cd - normalized_bearing_ab + 540.0) % 360.0) - 180.0;
+    diff
 }
