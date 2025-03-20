@@ -278,7 +278,7 @@ export default function CountrySelectPage() {
               <Globe
                 ref={globeRef}
                 // Keep the dark earth texture
-                globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
+                globeImageUrl="/styles/earth-dark.jpg" 
                 backgroundColor="rgba(0, 0, 0, 0)"
                 width={dimensions.width}
                 height={dimensions.height}
