@@ -83,7 +83,7 @@ impl City {
             );
 
             let transit_start = Instant::now();
-            let transit = TransitNetwork::from_gtfs(&gtfs, &road)?;
+            let transit = TransitNetwork::from_gtfs(&gtfs, &road, &grid)?;
             log::debug!(
                 "Transit network built in {}ms",
                 transit_start.elapsed().as_millis()
@@ -201,7 +201,7 @@ impl City {
         } else {
             log::debug!("Building transit network from GTFS");
             let build_start = Instant::now();
-            let transit = TransitNetwork::from_gtfs(&gtfs, &road)?;
+            let transit = TransitNetwork::from_gtfs(&gtfs, &road, &grid)?;
             log::debug!(
                 "Transit network built in {}ms",
                 build_start.elapsed().as_millis()
