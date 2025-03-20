@@ -31,7 +31,7 @@ function ReactGlobe() {
     <div className="flex justify-center align-middle">
       <Globe
         ref={globeRef}
-        globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" // Custom Earth texture
+        globeImageUrl="/styles/earth-dark.jpg" // Custom Earth texture
         ringsData={gData}
         ringColor={() => colorInterpolator}
         ringMaxRadius="maxR"
