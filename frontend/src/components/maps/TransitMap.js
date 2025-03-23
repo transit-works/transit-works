@@ -79,6 +79,7 @@ function TransitMap({
   const [showOptimizedBanner, setShowOptimizedBanner] = useState(false);
   const [collapsedBanner, setCollapsedBanner] = useState(false);
   const [showColorLegend, setShowColorLegend] = useState(true);
+  const [coverageData, setCoverageData] = useState(null);
   
   // Use either props or local state
   const selectedRoute = propsSelectedRoute || localSelectedRoute;
@@ -156,6 +157,19 @@ function TransitMap({
     } catch (error) {
       console.error('Error fetching population data:', error);
       setPopulationData(null);
+    }
+  };
+
+  const fetchCoverageData = async () => {
+    if (isOptimizing) {
+      return;
+    }
+    try {
+      const data = await fetchFromAPI('/avg-transfers');
+      setCoverageData(data.zone_transfers);
+    } catch (error) {
+      console.error('Error fetching coverage data:', error);
+      setCoverageData(null);
     }
   };
 
@@ -271,12 +285,18 @@ function TransitMap({
     busMesh,
     busScale,
     colorByRouteType,
+    showCoverageHeatmap,
+    coverageData,
   });
 
   // Effects
   useEffect(() => {
     fetchPopulationData();
   }, []);
+
+  useEffect(() => {
+    fetchCoverageData();
+  }, [optimizedRoutes, isOptimizing]);
 
   useEffect(() => {
     if (selectedRoute) {

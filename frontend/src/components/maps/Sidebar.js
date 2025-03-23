@@ -34,7 +34,6 @@ function Sidebar({
   earlyConvergedRoutes,
   colorByRouteType,
   onToggleRouteTypeColors,
-  websocketData,  
   showCoverageHeatmap,
   onToggleCoverageHeatmap,
 }) {
@@ -182,6 +181,22 @@ function Sidebar({
                   </button>
                   <div className="absolute right-full top-1/2 transform -translate-y-1/2 mr-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
                     Route Type Colors
+                  </div>
+                </div>
+
+                {/* Coverage Heatmap Toggle */}
+                <div className="relative group">
+                  <button
+                    className={`w-11 h-11 ${
+                      showCoverageHeatmap ? 'bg-accent' : 'bg-zinc-900'
+                    } hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center justify-center focus:outline-none border border-zinc-600`}
+                    onClick={onToggleCoverageHeatmap}
+                    aria-label="Toggle coverage heatmap"
+                  >
+                    <FaBusAlt className="text-lg" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                    Coverage Heatmap
                   </div>
                 </div>
                 
