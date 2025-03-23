@@ -16,6 +16,25 @@ export default function RidershipChart({ ridership = [], optRidership = [], widt
   const containerRef = useRef(null);
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop } = useTooltip();
 
+  // Pad arrays to ensure they have the same length
+  const { paddedRidership, paddedOptRidership } = useMemo(() => {
+    const maxLength = Math.max(ridership.length, optRidership.length);
+    
+    const paddedRidership = [...ridership];
+    const paddedOptRidership = [...optRidership];
+    
+    // Pad the shorter array with zeros
+    while (paddedRidership.length < maxLength) {
+      paddedRidership.push(0);
+    }
+    
+    while (paddedOptRidership.length < maxLength) {
+      paddedOptRidership.push(0);
+    }
+    
+    return { paddedRidership, paddedOptRidership };
+  }, [ridership, optRidership]);
+
   // Use ResizeObserver to adjust chart size to container
   useEffect(() => {
     if (!containerRef.current) return;
@@ -42,12 +61,12 @@ export default function RidershipChart({ ridership = [], optRidership = [], widt
 
   // Format data for display
   const data = useMemo(() => {
-    return ridership.map((value, index) => ({
+    return paddedRidership.map((value, index) => ({
       index,
       ridership: value,
-      optRidership: optRidership[index] || 0
+      optRidership: paddedOptRidership[index]
     }));
-  }, [ridership, optRidership]);
+  }, [paddedRidership, paddedOptRidership]);
 
   // Scales
   const xScale = useMemo(() => {
@@ -59,14 +78,14 @@ export default function RidershipChart({ ridership = [], optRidership = [], widt
   }, [innerWidth, data]);
 
   const yScale = useMemo(() => {
-    const allValues = [...ridership, ...optRidership.filter(v => v !== undefined)];
+    const allValues = [...paddedRidership, ...paddedOptRidership];
     const maxValue = Math.max(...allValues);
     return scaleLinear({
       range: [innerHeight, 0],
       domain: [0, maxValue + (maxValue * 0.1)], // Add 10% padding at the top
       nice: true
     });
-  }, [innerHeight, ridership, optRidership]);
+  }, [innerHeight, paddedRidership, paddedOptRidership]);
 
   // Add null check to prevent TypeError when d is undefined
   const getX = d => {
@@ -74,7 +93,7 @@ export default function RidershipChart({ ridership = [], optRidership = [], widt
     return xScale(d.index) + xScale.bandwidth() / 2;
   };
   
-  if (!ridership || ridership.length === 0) {
+  if (!paddedRidership || paddedRidership.length === 0) {
     return <div className="flex items-center justify-center w-full h-[150px] text-white">No data available</div>;
   }
 
@@ -157,33 +176,23 @@ export default function RidershipChart({ ridership = [], optRidership = [], widt
             })}
           />
           
-          {/* Threshold area for worse performance (red) - where current is higher than optimized */}
+          
+          {/* Combined threshold area */}
           <Threshold
-            id={`ridership-threshold-worse`}
-            data={data.filter(d => (d.ridership || 0) > (d.optRidership || 0))}
+            id="ridership-threshold"
+            data={data}
             x={d => getX(d)}
             y0={d => yScale(d.optRidership || 0)}
             y1={d => yScale(d.ridership || 0)}
             clipAboveTo={0}
             clipBelowTo={innerHeight}
+            aboveAreaProps={{
+              fill: 'url(#better-gradient)',
+              fillOpacity: 0.8,
+            }}
             belowAreaProps={{
               fill: 'url(#worse-gradient)',
-              fillOpacity: 0.7,
-            }}
-          />
-          
-          {/* Threshold area for better performance (green) - where optimized is higher than current */}
-          <Threshold
-            id={`ridership-threshold-better`}
-            data={data.filter(d => (d.optRidership || 0) > (d.ridership || 0))}
-            x={d => getX(d)}
-            y0={d => yScale(d.ridership || 0)}
-            y1={d => yScale(d.optRidership || 0)}
-            clipAboveTo={0}
-            clipBelowTo={innerHeight}
-            belowAreaProps={{
-              fill: 'url(#better-gradient)',
-              fillOpacity: 0.7,
+              fillOpacity: 0.8,
             }}
           />
           

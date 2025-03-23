@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import ProgressDial from '@/components/visualization/ProgressDial';
 import RouteList from '@/components/transit/RouteList';
 import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
-import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt } from 'react-icons/fa';
+// Import the icons
+import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt, FaPlus, FaSubway, FaPaintBrush, FaTrain } from 'react-icons/fa';
 
-// Update function parameters to include optimizedRoutes
 function Sidebar({ 
   data, 
   selectedRoutes,
@@ -16,9 +16,7 @@ function Sidebar({
   onOptimize, 
   isOptimizing, 
   optimizationError,
-  // Add optimizedRoutes prop
   optimizedRoutes,
-  // Existing map control props
   mapStyle,
   show3DRoutes,
   useRandomColors,
@@ -32,10 +30,13 @@ function Sidebar({
   currentEvaluation,
   useLiveOptimization,
   setUseLiveOptimization,
-  websocketData,  // Add this new prop
-  earlyConvergedRoutes, // Add this prop
+  websocketData,
+  earlyConvergedRoutes,
+  colorByRouteType,
+  onToggleRouteTypeColors,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showExtraControls, setShowExtraControls] = useState(false);
 
   const toggleSidebar = () => {
     setIsExpanded(!isExpanded);
@@ -44,6 +45,13 @@ function Sidebar({
   const closeExpandedSection = () => {
     setIsExpanded(false);
   };
+
+  // Automatically deactivate "More Controls" when "View Details" is open
+  useEffect(() => {
+    if (isExpanded) {
+      setShowExtraControls(false);
+    }
+  }, [isExpanded]);
 
   return (
     <div className="relative flex h-screen flex-col">
@@ -70,7 +78,7 @@ function Sidebar({
           </div>
         </div>
 
-        {/* Map Control Section - new section */}
+        {/* Map Control Section */}
         <div className="mt-3 mb-2">
           <div className="flex justify-center gap-3">
             {/* 3D Buildings Toggle */}
@@ -105,22 +113,6 @@ function Sidebar({
               </div>
             </div>
             
-            {/* Random Colors Toggle */}
-            <div className="relative group">
-              <button
-                className={`w-11 h-11 ${
-                  useRandomColors ? 'bg-accent' : 'bg-zinc-900'
-                } hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center justify-center focus:outline-none border border-zinc-600`}
-                onClick={onToggleRandomColors}
-                aria-label="Toggle random route colors"
-              >
-                <FaPalette className="text-lg" />
-              </button>
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
-                Random Colors
-              </div>
-            </div>
-            
             {/* Population Heatmap Toggle */}
             <div className="relative group">
               <button
@@ -136,10 +128,66 @@ function Sidebar({
                 Population Heatmap
               </div>
             </div>
+            
+            {/* More Controls Toggle */}
+            <div className="relative group">
+              <button
+                className={`w-11 h-11 ${
+                  showExtraControls ? 'bg-primary' : 'bg-zinc-900'
+                } hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center justify-center focus:outline-none border border-zinc-600`}
+                onClick={() => setShowExtraControls(!showExtraControls)}
+                aria-label="Toggle extra controls"
+              >
+                <FaPlus className="text-lg" />
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                More Controls
+              </div>
+            </div>
           </div>
+          
+          {/* Expandable controls panel with frosted glass effect */}
+          {showExtraControls && (
+            <div className="absolute left-full top-[200px] bg-background-light bg-opacity-20 backdrop-blur-lg border border-l-0 border-zinc-800 rounded-r-xl p-3 shadow-lg transition-all duration-300 z-20">
+              <div className="flex flex-col gap-3">
+                {/* Random Colors Toggle */}
+                <div className="relative group">
+                  <button
+                    className={`w-11 h-11 ${
+                      useRandomColors ? 'bg-accent' : 'bg-zinc-900'
+                    } hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center justify-center focus:outline-none border border-zinc-600`}
+                    onClick={onToggleRandomColors}
+                    aria-label="Toggle random route colors"
+                  >
+                    <FaPalette className="text-lg" />
+                  </button>
+                  <div className="absolute right-full top-1/2 transform -translate-y-1/2 mr-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                    Random Colors
+                  </div>
+                </div>
+                
+                {/* Route Type Colors Toggle */}
+                <div className="relative group">
+                  <button
+                    className={`w-11 h-11 ${
+                      colorByRouteType ? 'bg-primary' : 'bg-zinc-900'
+                    } hover:bg-white hover:text-black backdrop-blur-sm text-white rounded-full flex items-center justify-center focus:outline-none border border-zinc-600`}
+                    onClick={onToggleRouteTypeColors}
+                    aria-label="Toggle route type colors"
+                  >
+                    <FaTrain className="text-lg" /> {/* Changed from FaSubway to FaTrain */}
+                  </button>
+                  <div className="absolute right-full top-1/2 transform -translate-y-1/2 mr-2 w-max px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200">
+                    Route Type Colors
+                  </div>
+                </div>
+                
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Routes Section - pass optimizedRoutes */}
+        {/* Rest of sidebar content remains the same */}
         <div className="custom-scrollbar-container my-2 max-h-[calc(100vh-300px)] overflow-y-auto rounded-2xl border border-zinc-800 bg-background-dk px-2 pb-2 custom-scrollbar">
           <RouteList
             data={data}
@@ -152,7 +200,6 @@ function Sidebar({
           />
         </div>
         
-        {/* Optimize Button */}
         <ImageButton
           text={isOptimizing ? "Optimizing..." : "Optimize"}
           imageSrc="/assets/icons/speed.png"
@@ -161,7 +208,6 @@ function Sidebar({
           isLoading={isOptimizing}
         />
         
-        {/* Show error message if optimization failed */}
         {optimizationError && (
           <div className="mt-1 text-xs text-red-500 text-center">
             {optimizationError}
@@ -183,7 +229,6 @@ function Sidebar({
         </div>
       </div>
 
-      {/* Expanded Sidebar Section (conditionally rendered when expanded) */}
       {isExpanded && <SidebarReport onClose={closeExpandedSection} />}
     </div>
   );
