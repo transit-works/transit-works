@@ -30,7 +30,7 @@ export default function useMapLayers({
   
   // Define default colors for when colorByRouteType is false
   const DEFAULT_BUS_COLOR = [220, 0, 80, 180]; // More visible red for buses
-  const DEFAULT_OTHER_COLOR = [160, 160, 160, 255]; // Grey for other transit types
+  const DEFAULT_OTHER_COLOR = [100, 100, 100, 255]; // Grey for other transit types
   
   // In your component before passing data to the map
   const processedData = {

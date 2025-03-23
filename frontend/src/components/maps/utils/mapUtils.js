@@ -27,10 +27,10 @@ export function getInitialViewState(city = 'toronto') {
       bearing: 0,
       pitch: 30
     },
-    montreal: {
-      latitude: 45.5017,
-      longitude: -73.5673,
-      zoom: 11.5,
+    sanfrancisco: {
+      latitude: 37.7449,
+      longitude: -122.4394,
+      zoom: 12,
       bearing: 0,
       pitch: 30
     },

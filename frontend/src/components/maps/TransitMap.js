@@ -176,13 +176,13 @@ function TransitMap({
   const handleClick = (info) => {
     if (!info || !info.object) return;
     const { type } = info.object.geometry;
-    
+  
     if (type !== 'Point') {
       const routeId = info.object.properties.route_id;
-      
+  
       if (multiSelectMode) {
         // Toggle route in multi-select mode
-        effectiveSetSelectedRoutes(prevSelectedRoutes => {
+        effectiveSetSelectedRoutes((prevSelectedRoutes) => {
           const newSelectedRoutes = new Set(prevSelectedRoutes);
           if (newSelectedRoutes.has(routeId)) {
             newSelectedRoutes.delete(routeId);
@@ -198,15 +198,17 @@ function TransitMap({
         if (isCurrentlySelected) {
           setSelectedRoute(null);
           effectiveSetSelectedRoutes(new Set());
+          setShowOptimizedBanner(false); // Hide banner when deselecting
         } else {
           setSelectedRoute(routeId);
           effectiveSetSelectedRoutes(new Set([routeId]));
+          setShowOptimizedBanner(optimizedRoutes.has(routeId)); // Show banner if optimized route
         }
       }
-      
+  
       fetchRidershipData(routeId);
     }
-    
+  
     // Set popup info
     if (!multiSelectMode || type === 'Point') {
       setPopupInfo({
@@ -309,6 +311,25 @@ function TransitMap({
       setPopupInfo(null);
     }
   }, [selectedRoute, multiSelectMode, data, optimizedRoutesData]);
+
+  // Add the Escape key functionality here
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        if (selectedRoute) {
+          setSelectedRoute(null);
+          effectiveSetSelectedRoutes(new Set());
+          setShowOptimizedBanner(false);
+          setPopupInfo(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedRoute, setSelectedRoute, effectiveSetSelectedRoutes, setShowOptimizedBanner, setPopupInfo]);
 
   useEffect(() => {
     if (useRandomColors) {
