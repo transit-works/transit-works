@@ -47,6 +47,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   // Add state to track if the route carousel is visible
   const [isRouteCarouselVisible, setIsRouteCarouselVisible] = useState(false);
 
+  // Add state for route type colors (default is false)
+  const [colorByRouteType, setColorByRouteType] = useState(false);
+
   // Map control toggle functions
   const toggleMapStyle = () => {
     setMapStyle((prevStyle) => (prevStyle === '/styles/dark_matter_3d.json' 
@@ -64,6 +67,11 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
 
   const togglePopulationHeatmap = () => {
     setShowPopulationHeatmap(!showPopulationHeatmap);
+  };
+
+  // Add toggle function
+  const toggleRouteTypeColors = () => {
+    setColorByRouteType(!colorByRouteType);
   };
 
   // Modified handleOptimize function to work with multiple routes
@@ -464,6 +472,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           onToggleRandomColors={toggleRandomColors}
           onTogglePopulationHeatmap={togglePopulationHeatmap}
           city={city} // Pass city prop to Sidebar
+          colorByRouteType={colorByRouteType}
+          onToggleRouteTypeColors={toggleRouteTypeColors}
         />
       </div>
       <div className="absolute inset-0 z-0 h-full w-full">
@@ -494,6 +504,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           setAcoParams={setAcoParams}
           setIsRouteCarouselVisible={setIsRouteCarouselVisible}
           city={city} // Pass city prop to TransitMap
+          colorByRouteType={colorByRouteType}
         />
 
         {/* Update the floating OptimizationProgress component position to bottom left with higher z-index */}

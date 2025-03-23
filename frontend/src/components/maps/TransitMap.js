@@ -14,6 +14,7 @@ import InfoPanel from './ui/InfoPanel';
 import OptimizedBanner from './ui/OptimizedBanner';
 import RouteStopsCarousel from './ui/RouteStopsCarousel';
 import { getInitialViewState } from './utils/mapUtils';
+import RouteColorLegend from './ui/RouteColorLegend';
 
 // Create the overlay for Deck.gl layers
 function DeckGLOverlay(props) {
@@ -58,7 +59,8 @@ function TransitMap({
   acoParams,
   setAcoParams,
   setIsRouteCarouselVisible,
-  city
+  city,
+  colorByRouteType,
 }) {
   const mapRef = useRef(null);
   
@@ -75,6 +77,7 @@ function TransitMap({
   const [showParametersPopup, setShowParametersPopup] = useState(false);
   const [showOptimizedBanner, setShowOptimizedBanner] = useState(false);
   const [collapsedBanner, setCollapsedBanner] = useState(false);
+  const [showColorLegend, setShowColorLegend] = useState(true);
   
   // Use either props or local state
   const selectedRoute = propsSelectedRoute || localSelectedRoute;
@@ -234,6 +237,10 @@ function TransitMap({
     setPanelOpen(!panelOpen);
   };
 
+  const handleToggleRandomColors = () => {
+    toggleRandomColors();
+  };
+
   // Use custom hooks
   const { busPositions } = useBusAnimation({
     selectedRoute,
@@ -259,7 +266,8 @@ function TransitMap({
     populationData,
     onClick: handleClick,
     busMesh,
-    busScale
+    busScale,
+    colorByRouteType,
   });
 
   // Effects
@@ -309,8 +317,13 @@ function TransitMap({
   }, [useRandomColors]);
 
   useEffect(() => {
-    setShowOptimizedBanner(selectedRoute && optimizedRoutes.has(selectedRoute));
-  }, [selectedRoute, optimizedRoutes]);
+    if (selectedRoute || (multiSelectMode && effectiveSelectedRoutes.size > 0) || popupInfo) {
+      setShowColorLegend(false);
+    } else {
+      // Only show legend if colorByRouteType is enabled
+      setShowColorLegend(colorByRouteType);
+    }
+  }, [selectedRoute, multiSelectMode, effectiveSelectedRoutes, popupInfo, colorByRouteType]);
 
   return (
     <>
@@ -360,6 +373,7 @@ function TransitMap({
           onOptimize={onOptimize}
           fetchRidershipData={fetchRidershipData}
           setShowParametersPopup={setShowParametersPopup}
+          setShowColorLegend={setShowColorLegend}
         />
       </Map>
       
@@ -381,6 +395,14 @@ function TransitMap({
         setShow={setShowParametersPopup}
         acoParams={acoParams}
         setAcoParams={setAcoParams}
+      />
+      
+      <RouteColorLegend 
+        isVisible={showColorLegend && colorByRouteType && !selectedRoute && (!multiSelectMode || effectiveSelectedRoutes.size === 0)}
+        onClose={() => setShowColorLegend(false)}
+        useRandomColors={useRandomColors}
+        toggleRandomColors={handleToggleRandomColors}
+        data={getFilteredData()} // Pass the filtered data
       />
     </>
   );

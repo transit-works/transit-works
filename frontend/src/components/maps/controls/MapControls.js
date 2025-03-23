@@ -1,4 +1,5 @@
 import React from 'react';
+import { FaBuilding, FaLayerGroup, FaFireAlt } from 'react-icons/fa';
 
 function MapControls({
   open,

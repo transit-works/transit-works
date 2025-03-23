@@ -6,19 +6,7 @@ import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import { PathLayer } from '@deck.gl/layers';
 import { Matrix4 } from 'math.gl';
 import lerpColor from '../../../utils/colorUtils';
-
-// Define route type colors
-const routeTypeColors = {
-  0: [255, 140, 0, 220],       // Tram/Streetcar/Light rail - Orange
-  1: [120, 20, 140, 220],      // Subway/Metro - Deep purple
-  2: [184, 28, 198, 220],      // Rail - Magenta
-  3: [200, 0, 80, 220],        // Bus - Original reddish color
-  4: [96, 0, 128, 220],        // Ferry - Deep purple
-  5: [175, 138, 0, 220],       // Cable car - Gold/amber
-  6: [227, 55, 105, 220],      // Gondola - Coral pink
-  7: [168, 0, 84, 220],        // Funicular - Raspberry
-  default: [200, 0, 80, 220]   // Default - same as bus
-};
+import { routeTypeColorsArray } from '../../../utils/routeTypeColors';
 
 export default function useMapLayers({
   filteredData,
@@ -35,15 +23,48 @@ export default function useMapLayers({
   populationData,
   onClick,
   busMesh,
-  busScale
+  busScale,
+  colorByRouteType // Add this parameter
 }) {
   const layers = [];
+  
+  // Define default colors for when colorByRouteType is false
+  const DEFAULT_BUS_COLOR = [220, 0, 80, 180]; // More visible red for buses
+  const DEFAULT_OTHER_COLOR = [160, 160, 160, 255]; // Grey for other transit types
+  
+  // In your component before passing data to the map
+  const processedData = {
+    ...filteredData,
+    features: filteredData.features.map(feature => {
+      // Only process stops without route_type
+      if (feature.geometry.type === 'Point' && !feature.properties.route_type) {
+        // Find a route that includes this stop
+        const relatedRoute = filteredData.features.find(r => 
+          r.geometry.type === 'LineString' && 
+          r.properties.route_stops && 
+          r.properties.route_stops.includes(feature.properties.stop_id)
+        );
+        
+        if (relatedRoute) {
+          return {
+            ...feature,
+            properties: {
+              ...feature.properties,
+              route_type: relatedRoute.properties.route_type,
+              route_id: relatedRoute.properties.route_id
+            }
+          };
+        }
+      }
+      return feature;
+    })
+  };
   
   // Add stop points layer
   layers.push(
     new GeoJsonLayer({
       id: 'stops-layer',
-      data: filteredData,
+      data: processedData,
       stroked: true,
       filled: true,
       getFillColor: d => {
@@ -64,12 +85,17 @@ export default function useMapLayers({
           // Color by route type - ensure we parse as a number
           const routeType = parseInt(d.properties.route_type, 10);
           
-          // Use the same centralized colors
-          return routeTypeColors[routeType] || routeTypeColors.default;
+          // If colorByRouteType is true, use the route type colors
+          if (colorByRouteType) {
+            return routeTypeColorsArray[routeType] || routeTypeColorsArray.default;
+          } else {
+            // Otherwise use simple red for buses (type 3), grey for others
+            return routeType === 3 ? DEFAULT_BUS_COLOR : DEFAULT_OTHER_COLOR;
+          }
         }
         
-        // Default color for stops without route type information
-        return [200, 0, 80, 180];
+        // Default color for stops without route type information - match bus color
+        return DEFAULT_BUS_COLOR;
       },
       pointRadiusMinPixels: 2,
       getRadius: 10,
@@ -90,8 +116,8 @@ export default function useMapLayers({
   // Add routes layer
   layers.push(
     new GeoJsonLayer({
-      id: `routes-layer-${useRandomColors ? 'random' : 'default'}`,
-      data: filteredData,
+      id: `routes-layer-${useRandomColors ? 'random' : (colorByRouteType ? 'typecolor' : 'default')}`,
+      data: processedData,
       stroked: true,
       filled: false,
       getLineColor: d => {
@@ -107,11 +133,16 @@ export default function useMapLayers({
           return routeColorMap[routeId] || [200, 0, 80, 180]; // Random or fallback color
         }
         
-        // Color by route type - ensure we parse as a number
+        // Parse route type as a number
         const routeType = parseInt(d.properties.route_type, 10);
         
-        // Use centralized color definitions
-        return routeTypeColors[routeType] || routeTypeColors.default;
+        // If colorByRouteType is true, use the route type color array
+        if (colorByRouteType) {
+          return routeTypeColorsArray[routeType] || routeTypeColorsArray.default;
+        } else {
+          // Otherwise use simple red for buses (type 3), grey for others
+          return routeType === 3 ? DEFAULT_BUS_COLOR : DEFAULT_OTHER_COLOR;
+        }
       },
       getLineWidth: d => {
         const routeId = d.properties.route_id;
@@ -173,7 +204,7 @@ export default function useMapLayers({
       
       if (show3DRoutes) {
         // Find the layer index of the route
-        const routeIndex = filteredData.features
+        const routeIndex = processedData.features
           .filter(feature => feature.geometry.type === 'LineString')
           .findIndex(feature => feature.properties.route_id === routeId);
           
@@ -204,10 +235,10 @@ export default function useMapLayers({
   if (show3DRoutes) {
     // Get all routes when in multi-select mode, not just filtered ones
     const routesToShow = multiSelectMode 
-      ? filteredData.features.filter(feature => 
+      ? processedData.features.filter(feature => 
           feature.geometry.type === 'LineString' && !optimizedRoutes.has(feature.properties.route_id)
         )
-      : filteredData.features.filter(feature => 
+      : processedData.features.filter(feature => 
           feature.geometry.type === 'LineString'
         );
     
@@ -235,11 +266,15 @@ export default function useMapLayers({
       else if (useRandomColors) {
         color = routeColorMap[routeId] || [200, 0, 80, 180]; // Fallback color
       } 
-      // Default gradient
+      // Color by route type
+      else if (colorByRouteType) {
+        const routeType = parseInt(feature.properties.route_type, 10);
+        color = [...(routeTypeColorsArray[routeType] || routeTypeColorsArray.default)];
+      }
+      // Default mode - red for buses, grey for others
       else {
-        const gradientPosition = layerIndex / 9; // 0 to 1 position in gradient
-        const rgbColor = lerpColor(startColor, endColor, gradientPosition);
-        color = [...rgbColor, 180];
+        const routeType = parseInt(feature.properties.route_type, 10);
+        color = routeType === 3 ? DEFAULT_BUS_COLOR : DEFAULT_OTHER_COLOR;
       }
       
       // Create modified data with z-coordinate added
