@@ -37,6 +37,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   const [show3DRoutes, setShow3DRoutes] = useState(false);
   const [useRandomColors, setUseRandomColors] = useState(false);
   const [showPopulationHeatmap, setShowPopulationHeatmap] = useState(false);
+  const [showCoverageHeatmap, setShowCoverageHeatmap] = useState(false);
   
   // Add multiSelectMode state here
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -72,6 +73,10 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   // Add toggle function
   const toggleRouteTypeColors = () => {
     setColorByRouteType(!colorByRouteType);
+  };
+  
+  const toggleCoverageHeatmap = () => {
+    setShowCoverageHeatmap(!showCoverageHeatmap);
   };
 
   // Modified handleOptimize function to work with multiple routes
@@ -471,6 +476,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           onToggle3DRoutes={toggle3DRoutes}
           onToggleRandomColors={toggleRandomColors}
           onTogglePopulationHeatmap={togglePopulationHeatmap}
+          showCoverageHeatmap={showCoverageHeatmap}
+          onToggleCoverageHeatmap={toggleCoverageHeatmap}
           city={city} // Pass city prop to Sidebar
           colorByRouteType={colorByRouteType}
           onToggleRouteTypeColors={toggleRouteTypeColors}
@@ -500,6 +507,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           show3DRoutes={show3DRoutes}
           useRandomColors={useRandomColors}
           showPopulationHeatmap={showPopulationHeatmap}
+          showCoverageHeatmap={showCoverageHeatmap}
           acoParams={acoParams}
           setAcoParams={setAcoParams}
           setIsRouteCarouselVisible={setIsRouteCarouselVisible}
