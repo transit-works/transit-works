@@ -451,7 +451,9 @@ async fn proxy_handler(
     );
 
     // Create a client for this request with increased payload limit
-    let client = Client::default();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .finish();
 
     // Create a new request with the same method
     let mut forwarded_req = client.request(req.method().clone(), &forwarding_url);
