@@ -13,6 +13,7 @@ use crate::gtfs::structs::{Frequency, Route, RouteType, Shape, Stop, StopTime, T
 use crate::layers::error::Error;
 
 use super::geo_util;
+use super::grid::{GridNetwork, Zone};
 use super::road_network::RoadNetwork;
 
 // Layer 3 - Data structure describing the transit network
@@ -46,7 +47,11 @@ impl TransitNetwork {
     /// For each routes, extracts the longest INBOUND and OUTBOUND trips
     /// and classifies stops from these trips as INBOUND or OUTBOUND depending on their
     /// geodesic bearing. Stops are stored in an RTree for spatial queries.
-    pub fn from_gtfs(gtfs: &Gtfs, road: &RoadNetwork) -> Result<TransitNetwork, Error> {
+    pub fn from_gtfs(
+        gtfs: &Gtfs,
+        road: &RoadNetwork,
+        grid: &GridNetwork,
+    ) -> Result<TransitNetwork, Error> {
         let mut routes = Vec::new();
         let mut inbound_stops_tree = RTree::new();
         let mut outbound_stops_tree = RTree::new();
@@ -88,6 +93,12 @@ impl TransitNetwork {
                                     stop_times.stop.stop_lat.unwrap_or_default(),
                                 ),
                                 osmid: stop_to_osmid.get(&stop_times.stop_id).cloned(),
+                                zone: grid
+                                    .find_nearest_zone(
+                                        stop_times.stop.stop_lon.unwrap_or_default(),
+                                        stop_times.stop.stop_lat.unwrap_or_default(),
+                                    )
+                                    .map(|idx| grid.get_zone(idx).zoneid),
                             });
                             stops_map.insert(stop_times.stop_id.clone(), Arc::clone(&new_stop));
                             let rtree_node = RTreeNode {
@@ -631,6 +642,7 @@ pub struct TransitStop {
     pub stop_id: String,
     pub geom: Point,
     osmid: Option<u64>, // nearby road network osmid, if one exists
+    zone: Option<u32>,  // nearby zone id, if one exists
 }
 
 impl TransitStop {
@@ -642,6 +654,7 @@ impl TransitStop {
         }
     }
 
+    /// Compute the road distance between two transit stops
     pub fn road_distance(&self, other: &TransitStop, road: &RoadNetwork) -> (f64, Vec<NodeIndex>) {
         if let (Some(n1), Some(n2)) = (self.get_node_index(road), other.get_node_index(road)) {
             // If stops have an appropriate road node mapping, then use the road distance
@@ -649,6 +662,24 @@ impl TransitStop {
         } else {
             // otherwise use the straight line distance
             (Haversine::distance(self.geom, other.geom), vec![])
+        }
+    }
+
+    /// Get the stops's enclosing zone node index
+    pub fn zone_index(&self, grid: &GridNetwork) -> Option<NodeIndex> {
+        if let Some(zoneid) = self.zone {
+            Some(grid.get_zone_idx_by_id(zoneid))
+        } else {
+            None
+        }
+    }
+
+    /// Get the stops's enclosing zone
+    pub fn zone<'a>(&self, grid: &'a GridNetwork) -> Option<&'a Zone> {
+        if let Some(idx) = self.zone_index(grid) {
+            Some(grid.get_zone(idx))
+        } else {
+            None
         }
     }
 }

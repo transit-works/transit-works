@@ -151,7 +151,7 @@ export default function CountrySelectPage() {
         lat: city.coordinates[1],
         lng: city.coordinates[0],
         size: 0.5,
-        color: '#d1b99e',
+        color: city.coming_soon ? '#555555' : '#d1b99e', // Gray color for coming soon cities
       };
     }).filter(Boolean);
   }, [cities]);
@@ -278,7 +278,7 @@ export default function CountrySelectPage() {
               <Globe
                 ref={globeRef}
                 // Keep the dark earth texture
-                globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg" 
+                globeImageUrl="/styles/earth-dark.jpg" 
                 backgroundColor="rgba(0, 0, 0, 0)"
                 width={dimensions.width}
                 height={dimensions.height}
@@ -308,7 +308,8 @@ export default function CountrySelectPage() {
                     population_density: point.population_density,
                     transitScore: point.transitScore,
                     economicScore: point.economicScore,
-                    coordinates: [point.lng, point.lat]
+                    coordinates: [point.lng, point.lat],
+                    coming_soon: point.coming_soon  // Add this line to pass the coming_soon flag
                   });
                 }}
                 // Replace the existing onGlobeReady callback
@@ -373,113 +374,138 @@ export default function CountrySelectPage() {
                 </div>
               </div>
 
-              <div className="mb-4">
-                <h4 className="text-white/90 font-semibold text-sm mb-2">City Performance</h4>
-                {selectedCity.transitScore && (
-                  <div className="mb-3">
-                    <ProgressBar
-                      percentage={selectedCity.transitScore}
-                      name="Transit Score"
-                      startColor="#00bfff"
-                      endColor="#0080ff"
-                    />
-                    {selectedCity.transitScore >= 80 && (
-                      <p className="text-[#00bfff] text-xs mt-1">Top tier transit system</p>
-                    )}
+              {selectedCity.coming_soon ? (
+                <div className="mb-4 bg-white/10 rounded-lg p-4 flex flex-col items-center">
+                  <div className="text-yellow-200 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="8" x2="12" y2="12"></line>
+                      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
                   </div>
-                )}
-                {selectedCity.economicScore && (
-                  <div className="mb-2">
-                    <ProgressBar
-                      percentage={selectedCity.economicScore}
-                      name="Economic Score"
-                      startColor="#7fff2aff"
-                      endColor="#00d400ff"
-                    />
-                    {selectedCity.economicScore >= 70 && (
-                      <p className="text-[#7fff2a] text-xs mt-1">Strong economic performance</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Update the chart comparison to use dynamic averages */}
-              <div className="mb-4 border-t border-white/10 pt-3">
-                <h4 className="text-white/90 font-semibold text-sm mb-2">Performance Comparison</h4>
-                <div className="relative h-24 w-full">
-                  {/* This is a basic bar chart comparing the city to average scores */}
-                  <div className="absolute bottom-0 left-0 w-full h-full flex items-end">
-                    <div className="flex flex-col items-center justify-end w-1/4">
-                      <div 
-                        className="w-6 bg-gradient-to-t from-[#00bfff] to-[#0080ff] rounded-t"
-                        style={{ height: `${selectedCity.transitScore * 0.3}px` }}
-                      ></div>
-                      <p className="text-white/80 text-xs mt-1">City</p>
-                    </div>
-                    <div className="flex flex-col items-center justify-end w-1/4">
-                      <div 
-                        className="w-6 bg-white/30 rounded-t" 
-                        style={{ height: `${cityAverages.transitScore * 0.3}px` }}
-                      ></div>
-                      <p className="text-white/80 text-xs mt-1">Avg</p>
-                    </div>
-                    <div className="flex flex-col items-center justify-end w-1/4">
-                      <div 
-                        className="w-6 bg-gradient-to-t from-[#7fff2aff] to-[#00d400ff] rounded-t"
-                        style={{ height: `${selectedCity.economicScore * 0.3}px` }}
-                      ></div>
-                      <p className="text-white/80 text-xs mt-1">City</p>
-                    </div>
-                    <div className="flex flex-col items-center justify-end w-1/4">
-                      <div 
-                        className="w-6 bg-white/30 rounded-t" 
-                        style={{ height: `${cityAverages.economicScore * 0.3}px` }}
-                      ></div>
-                      <p className="text-white/80 text-xs mt-1">Avg</p>
-                    </div>
-                  </div>
-                  <div className="absolute top-0 left-0 w-full text-xs flex text-white/70">
-                    <span className="w-1/2 text-center">Transit</span>
-                    <span className="w-1/2 text-center">Economic</span>
-                  </div>
+                  <h4 className="text-yellow-200 font-semibold text-lg mb-1">Coming Soon</h4>
+                  <p className="text-white/90 text-center text-sm">
+                    Transit and economic data for {selectedCity.name} will be available in a future update.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <h4 className="text-white/90 font-semibold text-sm mb-2">City Performance</h4>
+                    {selectedCity.transitScore && (
+                      <div className="mb-3">
+                        <ProgressBar
+                          percentage={selectedCity.transitScore}
+                          name="Transit Score"
+                          startColor="#00bfff"
+                          endColor="#0080ff"
+                        />
+                        {selectedCity.transitScore >= 80 && (
+                          <p className="text-[#00bfff] text-xs mt-1">Top tier transit system</p>
+                        )}
+                      </div>
+                    )}
+                    {selectedCity.economicScore && (
+                      <div className="mb-2">
+                        <ProgressBar
+                          percentage={selectedCity.economicScore}
+                          name="Economic Score"
+                          startColor="#7fff2aff"
+                          endColor="#00d400ff"
+                        />
+                        {selectedCity.economicScore >= 70 && (
+                          <p className="text-[#7fff2a] text-xs mt-1">Strong economic performance</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-              <div className="flex flex-wrap gap-2">
-                {selectedCity.transitScore > 75 && (
-                  <span className="bg-blue-500/20 text-blue-300 text-xs py-1 px-2 rounded-full">
-                    Transit Hub
-                  </span>
-                )}
-                {selectedCity.economicScore > 60 && (
-                  <span className="bg-green-500/20 text-green-300 text-xs py-1 px-2 rounded-full">
-                    Economic Transit
-                  </span>
-                )}
-                {selectedCity.population > 5000000 && (
-                  <span className="bg-purple-500/20 text-purple-300 text-xs py-1 px-2 rounded-full">
-                    Megacity
-                  </span>
-                )}
-                {selectedCity.population_density > 5000 && (
-                  <span className="bg-orange-500/20 text-orange-300 text-xs py-1 px-2 rounded-full">
-                    High-Density
-                  </span>
-                )}
-              </div>
+                  <div className="mb-4 border-t border-white/10 pt-3">
+                    <h4 className="text-white/90 font-semibold text-sm mb-2">Performance Comparison</h4>
+                    <div className="relative h-24 w-full">
+                      <div className="absolute bottom-0 left-0 w-full h-full flex items-end">
+                        <div className="flex flex-col items-center justify-end w-1/4">
+                          <div 
+                            className="w-6 bg-gradient-to-t from-[#00bfff] to-[#0080ff] rounded-t"
+                            style={{ height: `${selectedCity.transitScore * 0.3}px` }}
+                          ></div>
+                          <p className="text-white/80 text-xs mt-1">City</p>
+                        </div>
+                        <div className="flex flex-col items-center justify-end w-1/4">
+                          <div 
+                            className="w-6 bg-white/30 rounded-t" 
+                            style={{ height: `${cityAverages.transitScore * 0.3}px` }}
+                          ></div>
+                          <p className="text-white/80 text-xs mt-1">Avg</p>
+                        </div>
+                        <div className="flex flex-col items-center justify-end w-1/4">
+                          <div 
+                            className="w-6 bg-gradient-to-t from-[#7fff2aff] to-[#00d400ff] rounded-t"
+                            style={{ height: `${selectedCity.economicScore * 0.3}px` }}
+                          ></div>
+                          <p className="text-white/80 text-xs mt-1">City</p>
+                        </div>
+                        <div className="flex flex-col items-center justify-end w-1/4">
+                          <div 
+                            className="w-6 bg-white/30 rounded-t" 
+                            style={{ height: `${cityAverages.economicScore * 0.3}px` }}
+                          ></div>
+                          <p className="text-white/80 text-xs mt-1">Avg</p>
+                        </div>
+                      </div>
+                      <div className="absolute top-0 left-0 w-full text-xs flex text-white/70">
+                        <span className="w-1/2 text-center">Transit</span>
+                        <span className="w-1/2 text-center">Economic</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCity.transitScore > 75 && (
+                      <span className="bg-blue-500/20 text-blue-300 text-xs py-1 px-2 rounded-full">
+                        Transit Hub
+                      </span>
+                    )}
+                    {selectedCity.economicScore > 60 && (
+                      <span className="bg-green-500/20 text-green-300 text-xs py-1 px-2 rounded-full">
+                        Economic Transit
+                      </span>
+                    )}
+                    {selectedCity.population > 5000000 && (
+                      <span className="bg-purple-500/20 text-purple-300 text-xs py-1 px-2 rounded-full">
+                        Megacity
+                      </span>
+                    )}
+                    {selectedCity.population_density > 5000 && (
+                      <span className="bg-orange-500/20 text-orange-300 text-xs py-1 px-2 rounded-full">
+                        High-Density
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Update the popup buttons with city parameter */}
             <div className="w-full flex justify-center mt-5">
-              <Link 
-                href={`/map?city=${getCitySlug(selectedCity.name)}`} 
-                passHref
-              >
+              {selectedCity.coming_soon ? (
                 <button
-                  className="bg-white px-4 py-1.5 rounded-xl text-black font-body text-sm hover:bg-opacity-90 transition">
-                  Explore Map &rarr;
+                  className="bg-white/50 px-4 py-1.5 rounded-xl text-black font-body text-sm cursor-not-allowed"
+                  disabled
+                >
+                  Data Coming Soon
                 </button>
-              </Link>
+              ) : (
+                <Link 
+                  href={`/map?city=${getCitySlug(selectedCity.name)}`} 
+                  passHref
+                >
+                  <button
+                    className="bg-white px-4 py-1.5 rounded-xl text-black font-body text-sm hover:bg-opacity-90 transition">
+                    Explore Map &rarr;
+                  </button>
+                </Link>
+              )}
             </div>
           </div>
         )}
@@ -514,6 +540,10 @@ export default function CountrySelectPage() {
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full bg-[#d1b99e] mr-2"></div>
               <span className="text-xs">City Points</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-4 h-4 rounded-full bg-[#555555] mr-2"></div>
+              <span className="text-xs">Coming Soon</span>
             </div>
           </div>
         </div>

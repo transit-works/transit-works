@@ -13,6 +13,8 @@ pub struct GridNetwork {
     pub rtree: RTree<RTreeNode>,
     /// Allows for relations between zones (if needed) e.g. travel demand between 2 zones
     pub graph: Graph<Zone, Link>,
+    /// Mapping of zone id to Zone node index
+    node_map: HashMap<u32, NodeIndex>,
 }
 
 impl GridNetwork {
@@ -56,6 +58,7 @@ impl GridNetwork {
         Ok(GridNetwork {
             rtree: rtree,
             graph: graph,
+            node_map: node_map,
         })
     }
 
@@ -69,6 +72,10 @@ impl GridNetwork {
 
     pub fn get_zone(&self, node_index: NodeIndex) -> &Zone {
         &self.graph[node_index]
+    }
+
+    pub fn get_zone_idx_by_id(&self, zoneid: u32) -> NodeIndex {
+        self.node_map[&zoneid]
     }
 
     pub fn demand_between_zones(&self, from: NodeIndex, to: NodeIndex) -> f64 {

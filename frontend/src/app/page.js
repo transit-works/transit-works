@@ -54,7 +54,7 @@ export default function Home() {
           {/* Right Div */}
           <div className="ml-10 flex items-center space-x-2">
             <Link
-              href="/map"
+              href="/city-select"
               className="rounded-lg bg-background px-4 py-1.5 font-body text-black hover:bg-primary hover:text-text"
             >
               Get Started
@@ -76,7 +76,7 @@ export default function Home() {
             Optimize your transit networks with TransitWorks.
           </p>
           <Link
-            href="/map"
+            href="/city-select"
             className="mt-16 rounded-lg bg-primary px-8 py-3 font-body text-text hover:bg-background hover:text-black"
           >
             Get Started
@@ -85,7 +85,7 @@ export default function Home() {
       </ParallaxLayer>
 
       {/* Optimize & Visualize Section */}
-      <ParallaxLayer offset={1} speed={0.75}>
+      <ParallaxLayer offset={1} speed={0.35}>
         <div className="fixed -right-1/2 -top-1/4">
           <Spline scene="https://prod.spline.design/N65bCqhDNa1MQxts/scene.splinecode" />
         </div>

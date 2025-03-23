@@ -147,7 +147,9 @@ export default function FlatMap({ events = false }) {
                 className={`min-w-[100px] h-16 rounded-md flex flex-col items-center justify-between shadow-lg transition-all duration-300 ${
                   selectedCity?.name === city.name 
                     ? 'bg-accent text-white scale-105 ring-1 ring-white/30' 
-                    : 'bg-zinc-900 text-white hover:bg-zinc-700'
+                    : city.coming_soon
+                      ? 'bg-zinc-900 text-gray-300 hover:bg-zinc-700' // Gray for coming soon cities
+                      : 'bg-zinc-900 text-white hover:bg-zinc-700'
                 } p-1.5`}
               >
                 {/* City content remains the same */}
@@ -162,22 +164,38 @@ export default function FlatMap({ events = false }) {
                   <span className="font-medium text-xs truncate">{city.name}</span>
                 </div>
                 
-                {/* Compact Transit Score */}
+                {/* Compact Transit Score or Coming Soon */}
                 <div className="w-full mt-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs">Transit:</span>
-                    <span className="text-xs font-medium">{city.transitScore}%</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-black rounded-full overflow-hidden mt-0.5">
-                    <div 
-                      className={`h-full ${
-                        selectedCity?.name === city.name 
-                          ? 'bg-white' 
-                          : 'bg-gradient-to-r from-rose-600 to-orange-600'
-                      }`}
-                      style={{ width: `${city.transitScore}%` }}
-                    ></div>
-                  </div>
+                  {city.coming_soon ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-400">Coming Soon</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-black rounded-full overflow-hidden mt-0.5">
+                        <div 
+                          className="h-full bg-gray-600"
+                          style={{ width: '100%' }}
+                        ></div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs">Transit:</span>
+                        <span className="text-xs font-medium">{city.transitScore}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-black rounded-full overflow-hidden mt-0.5">
+                        <div 
+                          className={`h-full ${
+                            selectedCity?.name === city.name 
+                              ? 'bg-white' 
+                              : 'bg-gradient-to-r from-rose-600 to-orange-600'
+                          }`}
+                          style={{ width: `${city.transitScore}%` }}
+                        ></div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </button>
             ))}
@@ -235,7 +253,13 @@ export default function FlatMap({ events = false }) {
                     cx={x}
                     cy={y}
                     r={6}
-                    fill={selectedCity?.name === city.name ? colors.red : colors.brown}
+                    fill={
+                      selectedCity?.name === city.name 
+                        ? colors.red 
+                        : city.coming_soon 
+                          ? '#555555' // Gray for coming soon cities
+                          : colors.brown
+                    }
                     stroke="#000000"
                     strokeWidth={1}
                     onClick={() => handleCityClick(city)}
@@ -326,54 +350,83 @@ export default function FlatMap({ events = false }) {
               </div>
             </div>
 
-            {/* Progress Bars - More Compact Version */}
-            <div className="space-y-3"> {/* Reduced space between items */}
-              <div className="flex items-center justify-between mb-0.5"> {/* Changed to flex for horizontal layout */}
-                <p className="text-zinc-400 text-xs font-medium">City Metrics</p>
-                <div className="h-px flex-grow mx-2 bg-zinc-700/50"></div> {/* Slimmer divider */}
-              </div>
-              
-              {/* Transit Score - Compact Layout */}
-              <div className="space-y-1"> {/* Reduced vertical spacing */}
-                <div className="flex justify-between items-center mb-0.5">
-                  <span className="text-zinc-400 text-xs font-body">Transit Score</span>
-                  <span className="text-white text-xs font-semibold">{selectedCity.transitScore}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-zinc-800/80 rounded-sm overflow-hidden"> {/* Slimmer progress bar */}
-                  <div 
-                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-600"
-                    style={{ width: `${selectedCity.transitScore}%` }}
-                  ></div>
+            {/* Check if city is coming soon */}
+            {selectedCity.coming_soon ? (
+              <div className="space-y-3">
+                <div className="bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/30 text-center">
+                  <div className="text-yellow-200 mb-2 flex justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="8" x2="12" y2="12"></line>
+                      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                  </div>
+                  <h4 className="text-yellow-200 font-semibold text-base mb-1">Coming Soon</h4>
+                  <p className="text-white/90 text-xs">
+                    Transit and economic data for {selectedCity.name} will be available in a future update.
+                  </p>
                 </div>
               </div>
-              
-              {/* Economic Score - Compact Layout */}
-              <div className="space-y-1"> {/* Reduced vertical spacing */}
-                <div className="flex justify-between items-center mb-0.5">
-                  <span className="text-zinc-400 text-xs font-body">Economic Score</span>
-                  <span className="text-white text-xs font-semibold">{selectedCity.economicScore}%</span>
+            ) : (
+              /* Progress Bars - More Compact Version - Only shown if not coming soon */
+              <div className="space-y-3">
+                <div className="flex items-center justify-between mb-0.5">
+                  <p className="text-zinc-400 text-xs font-medium">City Metrics</p>
+                  <div className="h-px flex-grow mx-2 bg-zinc-700/50"></div>
                 </div>
-                <div className="h-1.5 w-full bg-zinc-800/80 rounded-sm overflow-hidden"> {/* Slimmer progress bar */}
-                  <div 
-                    className="h-full bg-gradient-to-r from-accent-2 to-green-500"
-                    style={{ width: `${selectedCity.economicScore}%` }}
-                  ></div>
+                
+                {/* Transit Score - Compact Layout */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center mb-0.5">
+                    <span className="text-zinc-400 text-xs font-body">Transit Score</span>
+                    <span className="text-white text-xs font-semibold">{selectedCity.transitScore}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-zinc-800/80 rounded-sm overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-cyan-500 to-blue-600"
+                      style={{ width: `${selectedCity.transitScore}%` }}
+                    ></div>
+                  </div>
+                </div>
+                
+                {/* Economic Score - Compact Layout */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center mb-0.5">
+                    <span className="text-zinc-400 text-xs font-body">Economic Score</span>
+                    <span className="text-white text-xs font-semibold">{selectedCity.economicScore}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-zinc-800/80 rounded-sm overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-accent-2 to-green-500"
+                      style={{ width: `${selectedCity.economicScore}%` }}
+                    ></div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Action Button */}
+          {/* Action Button - Modified for coming soon cities */}
           <div className="w-full flex justify-end mt-5 pt-3 border-t border-zinc-700/50">
-            <Link href={`/cities/${selectedCity.name.toLowerCase().replace(/\s+/g, '-')}`} passHref>
+            {selectedCity.coming_soon ? (
               <button
-                className="bg-gradient-to-r from-rose-500 to-accent px-3.5 py-1.5 rounded-md text-white font-body text-xs shadow-md hover:from-white hover:to-white hover:text-black transition duration-300 ease-in-out transform hover:translate-y-[-1px] flex items-center gap-1.5 group">
-                <span>View Details</span>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 transform group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
+                className="bg-zinc-700 px-3.5 py-1.5 rounded-md text-zinc-300 font-body text-xs cursor-not-allowed"
+                disabled
+              >
+                Coming Soon
               </button>
-            </Link>
+            ) : (
+              <Link href={`/cities/${selectedCity.name.toLowerCase().replace(/\s+/g, '-')}`} passHref>
+                <button
+                  className="bg-gradient-to-r from-rose-500 to-accent px-3.5 py-1.5 rounded-md text-white font-body text-xs shadow-md hover:from-white hover:to-white hover:text-black transition duration-300 ease-in-out transform hover:translate-y-[-1px] flex items-center gap-1.5 group"
+                >
+                  <span>View Details</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 transform group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </Link>
+            )}
           </div>
         </div>
       )}
