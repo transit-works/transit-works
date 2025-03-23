@@ -14,6 +14,8 @@ use crate::layers::{
     transit_network::{TransitRoute, TransitRouteType, TransitStop},
 };
 
+use super::eval::TransitRouteEvals;
+
 // should be less than 1.0
 const PUNISHMENT_NONLINEARITY: f64 = 0.3;
 // const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
@@ -281,6 +283,8 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     }
 
     if gen_best_eval > init_eval {
+        let evals = TransitRouteEvals::for_route(&city.transit, &gen_best_route, &city.grid);
+        gen_best_route.evals = Some(evals);
         gen_best_route.stop_times = route.stop_times.clone();
         return Some((gen_best_route, gen_best_eval));
     } else {
@@ -567,15 +571,14 @@ fn adjust_route(
         return None;
     }
 
-    Some(TransitRoute::with_evals(
-        &city.transit,
-        &city.grid,
-        route.route_id.clone(),
-        route.route_type.clone(),
-        new_stops,
-        vec![],
-        route.stop_times.clone(),
-    ))
+    Some(TransitRoute {
+        route_id: route.route_id.clone(),
+        route_type: route.route_type.clone(),
+        outbound_stops: new_stops,
+        inbound_stops: vec![],
+        evals: None,
+        stop_times: HashMap::new(),
+    })
 }
 
 /// Stochastically select a stop based on ACO formula using heuristic and pheomone values
