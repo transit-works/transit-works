@@ -5,7 +5,7 @@ import RouteList from '@/components/transit/RouteList';
 import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
 // Import the icons
-import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt, FaPlus, FaSubway, FaPaintBrush, FaTrain } from 'react-icons/fa';
+import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt, FaPlus, FaSubway, FaPaintBrush, FaTrain, FaBusAlt } from 'react-icons/fa';
 
 function Sidebar({ 
   data, 
@@ -34,6 +34,9 @@ function Sidebar({
   earlyConvergedRoutes,
   colorByRouteType,
   onToggleRouteTypeColors,
+  websocketData,  
+  showCoverageHeatmap,
+  onToggleCoverageHeatmap,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showExtraControls, setShowExtraControls] = useState(false);
@@ -80,7 +83,7 @@ function Sidebar({
 
         {/* Map Control Section */}
         <div className="mt-3 mb-2">
-          <div className="flex justify-center gap-3">
+          <div className="flex justify-center gap-2">
             {/* 3D Buildings Toggle */}
             <div className="relative group">
               <button

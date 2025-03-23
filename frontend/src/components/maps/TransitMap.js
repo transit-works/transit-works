@@ -54,6 +54,7 @@ function TransitMap({
   show3DRoutes,
   useRandomColors,
   showPopulationHeatmap,
+  showCoverageHeatmap,
   multiSelectMode,
   setMultiSelectMode,
   acoParams,
