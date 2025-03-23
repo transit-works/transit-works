@@ -6,7 +6,7 @@ function ParametersPopup({ show, setShow, acoParams, setAcoParams }) {
 
   useEffect(() => {
     setInitialAcoParams(acoParams);
-  }, [show, acoParams]);
+  }, [show]);
 
   if (!show) return null;
 
