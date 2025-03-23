@@ -273,7 +273,10 @@ async fn evaluate_coverage(
     data: web::Data<AppState>,
 ) -> impl Responder {
     let route_id = route_id.into_inner();
-    println!("Evaluating coverage and economic score for route: {}", route_id);
+    println!(
+        "Evaluating coverage and economic score for route: {}",
+        route_id
+    );
 
     let city_guard = data.city.lock().unwrap();
 
