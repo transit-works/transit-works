@@ -14,7 +14,9 @@ function MapControls({
   selectedRoute,
   onOptimize,
   fetchRidershipData,
-  setShowParametersPopup
+  setShowParametersPopup,
+  isBusRoute,
+  areSelectedRoutesBusRoutes
 }) {
   if (!open) return null;
   
@@ -129,12 +131,14 @@ function MapControls({
         <button
           onClick={handleOptimize}
           disabled={
-            (multiSelectMode && effectiveSelectedRoutes.size === 0) || 
-            (!multiSelectMode && !selectedRoute) || 
+            (multiSelectMode && (effectiveSelectedRoutes.size === 0 || !areSelectedRoutesBusRoutes)) || 
+            (!multiSelectMode && (!selectedRoute || !isBusRoute)) || 
             isOptimizing
           }
           className={`flex-1 py-2 px-4 rounded flex items-center justify-center gap-2 
-            ${(multiSelectMode && effectiveSelectedRoutes.size === 0) || (!multiSelectMode && !selectedRoute) || isOptimizing
+            ${(multiSelectMode && (effectiveSelectedRoutes.size === 0 || !areSelectedRoutesBusRoutes)) || 
+              (!multiSelectMode && (!selectedRoute || !isBusRoute)) || 
+              isOptimizing
               ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed' 
               : 'bg-accent hover:bg-accent/90 text-white'}`}
         >
@@ -151,6 +155,9 @@ function MapControls({
               <img src="/assets/icons/speed.png" alt="Speed" className="w-5 h-5" />
               Optimize {multiSelectMode && effectiveSelectedRoutes.size > 0 ? `(${effectiveSelectedRoutes.size})` : ''}
             </>
+          )}
+          {!isOptimizing && multiSelectMode && effectiveSelectedRoutes.size > 0 && !areSelectedRoutesBusRoutes && (
+            <span className="text-xs">Only bus routes can be optimized</span>
           )}
         </button>
         
@@ -173,6 +180,12 @@ function MapControls({
           </div>
         </div>
       </div>
+      {(!multiSelectMode && selectedRoute && !isBusRoute) || 
+       (multiSelectMode && effectiveSelectedRoutes.size > 0 && !areSelectedRoutesBusRoutes) ? (
+        <div className="text-xs text-amber-400 mt-1 text-center">
+          Only bus routes (type 3) can be optimized
+        </div>
+      ) : null}
     </div>
   );
 }

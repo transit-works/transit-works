@@ -79,6 +79,7 @@ function TransitMap({
   const [showOptimizedBanner, setShowOptimizedBanner] = useState(false);
   const [collapsedBanner, setCollapsedBanner] = useState(false);
   const [showColorLegend, setShowColorLegend] = useState(true);
+  const [isBusRoute, setIsBusRoute] = useState(false);
   const [coverageData, setCoverageData] = useState(null);
   
   // Use either props or local state
@@ -367,6 +368,47 @@ function TransitMap({
     }
   }, [selectedRoute, multiSelectMode, effectiveSelectedRoutes, popupInfo, colorByRouteType]);
 
+  useEffect(() => {
+    if (selectedRoute && data && data.features) {
+      // Find selected route in data
+      const routeFeature = data.features.find(
+        feature => feature.properties.route_id === selectedRoute &&
+                  feature.geometry.type === 'LineString'
+      );
+      
+      // Check if route is a bus route (route_type 3)
+      if (routeFeature && routeFeature.properties.route_type) {
+        const routeType = parseInt(routeFeature.properties.route_type, 10);
+        setIsBusRoute(routeType === 3);
+      } else {
+        setIsBusRoute(false);
+      }
+    } else {
+      setIsBusRoute(false);
+    }
+  }, [selectedRoute, data]);
+
+  const areSelectedRoutesBusRoutes = () => {
+    if (!multiSelectMode || effectiveSelectedRoutes.size === 0 || !data || !data.features) {
+      return false;
+    }
+    
+    // Check if all selected routes are bus routes
+    for (const routeId of effectiveSelectedRoutes) {
+      const routeFeature = data.features.find(
+        feature => feature.properties.route_id === routeId &&
+                  feature.geometry.type === 'LineString'
+      );
+      
+      if (!routeFeature || !routeFeature.properties.route_type || 
+          parseInt(routeFeature.properties.route_type, 10) !== 3) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
   return (
     <>
       <Map
@@ -416,6 +458,8 @@ function TransitMap({
           fetchRidershipData={fetchRidershipData}
           setShowParametersPopup={setShowParametersPopup}
           setShowColorLegend={setShowColorLegend}
+          isBusRoute={isBusRoute}
+          areSelectedRoutesBusRoutes={areSelectedRoutesBusRoutes()}
         />
       </Map>
       
