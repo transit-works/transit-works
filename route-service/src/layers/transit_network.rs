@@ -16,7 +16,7 @@ use super::geo_util;
 use super::road_network::RoadNetwork;
 
 // Layer 3 - Data structure describing the transit network
-#[derive( Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct TransitNetwork {
     /// Set of all the transit routes in the network
     pub routes: Vec<TransitRoute>,
@@ -112,22 +112,30 @@ impl TransitNetwork {
                         if let Some(departure_time) = &s.departure_time {
                             if let Ok(time) = NaiveTime::parse_from_str(departure_time, "%H:%M:%S")
                             {
-                                //let start_time = NaiveTime::from_hms_opt(1, 0, 0);
-                                //let end_time = NaiveTime::from_hms_opt(23, 0, 0);
-                                if time >= NaiveTime::from_hms_opt(5, 0, 0).unwrap() && time <= NaiveTime::from_hms_opt(7, 0, 0).unwrap() {
-                                    *freq_hash.entry((s.stop_id.clone(), 1)).or_insert(0) += 1;
-                                }
-                                else if time >= NaiveTime::from_hms_opt(7, 0, 0).unwrap() && time <= NaiveTime::from_hms_opt(9, 30, 0).unwrap() {
-                                    *freq_hash.entry((s.stop_id.clone(), 2)).or_insert(0) += 1;
-                                }
-                                else if time >= NaiveTime::from_hms_opt(9, 30, 0).unwrap() && time <= NaiveTime::from_hms_opt(15, 0, 0).unwrap() {
-                                    *freq_hash.entry((s.stop_id.clone(), 3)).or_insert(0) += 1;
-                                }
-                                else if time >= NaiveTime::from_hms_opt(15, 0, 0).unwrap() && time <= NaiveTime::from_hms_opt(19, 0, 0).unwrap() {
-                                    *freq_hash.entry((s.stop_id.clone(), 4)).or_insert(0) += 1;
-                                }
-                                else if time >= NaiveTime::from_hms_opt(19, 0, 0).unwrap() && time <= NaiveTime::from_hms_opt(22, 0, 0).unwrap() {
-                                    *freq_hash.entry((s.stop_id.clone(), 5)).or_insert(0) += 1;
+                                if s.stop_sequence == 1 {
+                                    //let start_time = NaiveTime::from_hms_opt(1, 0, 0);
+                                    //let end_time = NaiveTime::from_hms_opt(23, 0, 0);
+                                    if time >= NaiveTime::from_hms_opt(5, 0, 0).unwrap()
+                                        && time <= NaiveTime::from_hms_opt(7, 0, 0).unwrap()
+                                    {
+                                        *freq_hash.entry((s.stop_id.clone(), 1)).or_insert(0) += 1;
+                                    } else if time >= NaiveTime::from_hms_opt(7, 0, 0).unwrap()
+                                        && time <= NaiveTime::from_hms_opt(9, 30, 0).unwrap()
+                                    {
+                                        *freq_hash.entry((s.stop_id.clone(), 2)).or_insert(0) += 1;
+                                    } else if time >= NaiveTime::from_hms_opt(9, 30, 0).unwrap()
+                                        && time <= NaiveTime::from_hms_opt(15, 0, 0).unwrap()
+                                    {
+                                        *freq_hash.entry((s.stop_id.clone(), 3)).or_insert(0) += 1;
+                                    } else if time >= NaiveTime::from_hms_opt(15, 0, 0).unwrap()
+                                        && time <= NaiveTime::from_hms_opt(19, 0, 0).unwrap()
+                                    {
+                                        *freq_hash.entry((s.stop_id.clone(), 4)).or_insert(0) += 1;
+                                    } else if time >= NaiveTime::from_hms_opt(19, 0, 0).unwrap()
+                                        && time <= NaiveTime::from_hms_opt(22, 0, 0).unwrap()
+                                    {
+                                        *freq_hash.entry((s.stop_id.clone(), 5)).or_insert(0) += 1;
+                                    }
                                 }
                             }
                         }

@@ -273,7 +273,7 @@ async fn evaluate_coverage(
     data: web::Data<AppState>,
 ) -> impl Responder {
     let route_id = route_id.into_inner();
-    println!("Evaluating coverage for route: {}", route_id);
+    println!("Evaluating coverage and economic score for route: {}", route_id);
 
     let city_guard = data.city.lock().unwrap();
 
@@ -282,10 +282,12 @@ async fn evaluate_coverage(
 
         if let Some(route) = route {
             let coverage = eval::evaluate_coverage(&route.outbound_stops, &city.grid);
+            let economic_score = eval::evaluate_economic_score(route, &city.grid, &city.transit);
 
             return HttpResponse::Ok().json(serde_json::json!({
                 "route_id": route_id,
-                "coverage": coverage
+                "coverage": coverage,
+                "economic_score": economic_score,
             }));
         } else {
             HttpResponse::NotFound().json(serde_json::json!({
