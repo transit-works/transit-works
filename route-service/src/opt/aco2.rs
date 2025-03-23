@@ -211,6 +211,7 @@ impl PheromoneMap {
     }
 }
 
+/// TODO: get the optimized TransitNetwork struct and use that instead of city.transit
 pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(TransitRoute, f64)> {
     if route.route_type != TransitRouteType::Bus {
         return None;
@@ -566,13 +567,15 @@ fn adjust_route(
         return None;
     }
 
-    Some(TransitRoute {
-        route_id: route.route_id.clone(),
-        route_type: route.route_type.clone(),
-        outbound_stops: new_stops,
-        inbound_stops: vec![],
-        stop_times: HashMap::new(),
-    })
+    Some(TransitRoute::with_evals(
+        &city.transit,
+        &city.grid,
+        route.route_id.clone(),
+        route.route_type.clone(),
+        new_stops,
+        vec![],
+        route.stop_times.clone(),
+    ))
 }
 
 /// Stochastically select a stop based on ACO formula using heuristic and pheomone values

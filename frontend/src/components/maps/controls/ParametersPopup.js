@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fetchFromAPI } from '@/utils/api';
 
 function ParametersPopup({ show, setShow, acoParams, setAcoParams }) {
   const [initialAcoParams, setInitialAcoParams] = useState(acoParams);
@@ -12,13 +13,15 @@ function ParametersPopup({ show, setShow, acoParams, setAcoParams }) {
 
   // Parameters with custom min, max, and type (int/decimal) for each slider
   const params = [
-    { label: 'Ants', name: 'aco_num_ant', count: '20', sliderMin: 0, sliderMax: 250, type: 'int' },
-    { label: 'Ant iterations', name: 'aco_max_gen', count: '200', sliderMin: 0, sliderMax: 1000, type: 'int' },
-    { label: 'Iterations', name: 'max_gen', count: '4', sliderMin: 0, sliderMax: 15, type: 'int' },
-    { label: 'Alpha', name: 'alpha', count: '2', sliderMin: 0, sliderMax: 50, type: 'float' },
-    { label: 'Beta', name: 'beta', count: '3', sliderMin: 0, sliderMax: 50, type: 'float' },
-    { label: 'Rho', name: 'rho', count: '0.1', sliderMin: 0, sliderMax: 10, type: 'float' },
-    { label: 'Q', name: 'q', count: '1', sliderMin: 0, sliderMax: 50, type: 'float' },
+    { label: 'Ants', name: 'num_ant', count: '20', sliderMin: 1, sliderMax: 100, type: 'int' },
+    { label: 'Ant iterations', name: 'max_gen', count: '50', sliderMin: 1, sliderMax: 300, type: 'int' },
+    { label: 'Alpha (heuristic weight)', name: 'alpha', count: '2', sliderMin: 0, sliderMax: 10, type: 'float' },
+    { label: 'Beta (pheromone weight)', name: 'beta', count: '3', sliderMin: 0, sliderMax: 10, type: 'float' },
+    { label: 'Rho (decay rate)', name: 'rho', count: '0.2', sliderMin: 0, sliderMax: 1, type: 'float' },
+    { label: 'Initial Pheromone', name: 'init_pheromone', count: '20', sliderMin: 0, sliderMax: 50, type: 'float' },
+    { label: 'Min Pheromone', name: 'pheromone_min', count: '10', sliderMin: 0, sliderMax: 50, type: 'float' },
+    { label: 'Max Pheromone', name: 'pheromone_max', count: '100', sliderMin: 50, sliderMax: 200, type: 'float' },
+    { label: 'Max non-linearity', name: 'max_nonlinearity', count: '2.0', sliderMin: 0, sliderMax: 5, type: 'float' },
   ];
 
   // Update value
@@ -59,9 +62,20 @@ function ParametersPopup({ show, setShow, acoParams, setAcoParams }) {
     return validationErrors.length === 0;
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (validateParams()) {
-      // Proceed with apply action if validation is successful
+      const body = {};
+      params.forEach((param) => {
+        const value = param.type === 'int' ? parseInt(acoParams[param.name]) : parseFloat(acoParams[param.name]);
+        body[param.name] = value;
+      });
+
+      await fetchFromAPI('/update-aco-params', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
       setShow(false);
     }
   };

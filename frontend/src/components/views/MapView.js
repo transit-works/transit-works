@@ -26,13 +26,15 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   const [websocketData, setWebsocketData] = useState(null);
 
   const [acoParams, setAcoParams] = useState({
-    'aco_num_ant': '20',
-    'aco_max_gen': '200',
-    'max_gen': '4',
-    'alpha': '2',
-    'beta': '3',
-    'rho': '0.1',
-    'q': '1',
+    'num_ant': '20',
+    'max_gen': '50',
+    'alpha': '2.0',
+    'beta': '3.0',
+    'rho': '0.2',
+    'init_pheromone': '20.0',
+    'pheromone_min': '10.0',
+    'pheromone_max': '100.0',
+    'max_nonlinearity': '2.0'
   });
 
   // Add map control state variables

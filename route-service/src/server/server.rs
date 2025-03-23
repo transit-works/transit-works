@@ -19,7 +19,6 @@ pub(crate) struct AppState {
     pub optimized_transit: Mutex<Option<TransitNetwork>>, // Stores optimized routes
     pub optimized_route_ids: Mutex<Vec<String>>,          // Tracks which routes have been optimized
     pub noop_route_ids: Mutex<Vec<String>>, // Tracks which routes which cannot be optimized
-    pub cached_transfers: Mutex<Option<(Vec<String>, f64, HashMap<NodeIndex, f64>)>>, // Cache (route_ids, avg_transfers, zone_transfers)
     pub aco_params: Mutex<aco2::ACO>, // ACO parameters
 }
 
@@ -252,8 +251,7 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
         let route = city.transit.routes.iter().find(|r| r.route_id == route_id);
 
         if let Some(route) = route {
-            let (ridership, avg_occupancy) =
-                eval::ridership_over_route(&city.transit, &route, &city.grid);
+            let (ridership, avg_occupancy) = (&route.evals.as_ref().unwrap().ridership, route.evals.as_ref().unwrap().avg_ridership);
 
             // Only evaluate the optimized route if it has been optimized
             if optimized_route_ids.contains(&route_id) {
@@ -263,7 +261,7 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
                     .find(|r| r.route_id == route_id)
                 {
                     let (opt_ridership, opt_avg_occupancy) =
-                        eval::ridership_over_route(&optimized_transit, &opt_route, &city.grid);
+                        (&opt_route.evals.as_ref().unwrap().ridership, opt_route.evals.as_ref().unwrap().avg_ridership);
 
                     return HttpResponse::Ok().json(serde_json::json!({
                         "route_id": route_id,
@@ -369,54 +367,22 @@ async fn get_avg_transfers(data: web::Data<AppState>) -> impl Responder {
     println!("Getting average transfers");
 
     let city_guard = data.city.lock().unwrap();
-    let optimized_route_ids = data.optimized_route_ids.lock().unwrap().clone();
 
     if let Some(city) = &*city_guard {
-        let mut cached_transfers_guard = data.cached_transfers.lock().unwrap();
-
-        // Check if we have a valid cache
-        if let Some((cached_route_ids, cached_avg, cached_zone_transfers)) =
-            &*cached_transfers_guard
-        {
-            if *cached_route_ids == optimized_route_ids {
-                println!("Using cached transfers data");
-
-                // Convert cached zone transfers to JSON
-                let zone_transfers_json: Vec<serde_json::Value> = cached_zone_transfers
-                    .iter()
-                    .map(|(ni, transfers)| {
-                        let zone = city.grid.get_zone(*ni);
-                        serde_json::json!({
-                            "TRANSFERS": transfers,
-                            "COORDINATES": match zone.polygon.centroid() {
-                                Some(centroid) => [centroid.x(), centroid.y()],
-                                None => [0.0, 0.0], // Default coordinates if centroid is None
-                            }
-                        })
-                    })
-                    .collect();
-
-                return HttpResponse::Ok().json(serde_json::json!({
-                    "average_transfers": cached_avg,
-                    "zone_transfers": zone_transfers_json
-                }));
-            }
-        }
-
         println!("Computing new transfers data");
         let optimized_transit_guard = data.optimized_transit.lock().unwrap();
         let optimized_transit = optimized_transit_guard.as_ref().unwrap();
-        let (avg_transfers, zone_transfers) =
-            eval::average_transfers(optimized_transit, &city.grid);
+        if optimized_transit.evals.is_none() {
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Optimized transit data not loaded"
+            }));
+        }
+
+        let evals = optimized_transit.evals.as_ref().unwrap();
+
+        let (avg_transfers, zone_transfers) = (evals.avg_transfers, &evals.zone_to_transfers);
 
         println!("Average transfers: {}", avg_transfers);
-
-        // Update cache
-        *cached_transfers_guard = Some((
-            optimized_route_ids.clone(),
-            avg_transfers,
-            zone_transfers.clone(),
-        ));
 
         // Convert zone transfers to JSON
         let zone_transfers_json: Vec<serde_json::Value> = zone_transfers
@@ -572,7 +538,6 @@ pub async fn start_server(
         optimized_transit: Mutex::new(city_result.as_ref().ok().map(|c| c.transit.clone())),
         optimized_route_ids: Mutex::new(Vec::new()),
         noop_route_ids: Mutex::new(Vec::new()),
-        cached_transfers: Mutex::new(None),
         city: Mutex::new(city_result.ok()),
         aco_params: Mutex::new(aco2::ACO::init()),
     });
@@ -592,6 +557,7 @@ pub async fn start_server(
             .service(get_optimizations)
             .service(get_avg_transfers)
             .service(get_noop_route_ids)
+            .service(update_aco_params)
     })
     .bind(addr)?
     .run()

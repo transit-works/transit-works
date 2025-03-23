@@ -23,6 +23,42 @@ use super::consts;
 const ADJUSTMENT_FACTOR: f64 = 20.0;
 const DEFAULT_FREQUENCY: f64 = 10.0;
 
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct TransitNetworkEvals {
+    pub avg_transfers: f64,
+    pub zone_to_transfers: HashMap<NodeIndex, f64>,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct TransitRouteEvals {
+    pub ridership: Vec<f64>,
+    pub avg_ridership: f64,
+}
+
+impl TransitNetworkEvals {
+    pub fn for_network(transit: &TransitNetwork, od: &GridNetwork) -> TransitNetworkEvals {
+        let (avg_transfers, zone_to_transfers) = average_transfers(transit, od);
+        TransitNetworkEvals {
+            avg_transfers,
+            zone_to_transfers,
+        }
+    }
+}
+
+impl TransitRouteEvals {
+    pub fn for_route(
+        transit: &TransitNetwork,
+        route: &TransitRoute,
+        od: &GridNetwork,
+    ) -> TransitRouteEvals {
+        let (ridership, avg_ridership) = ridership_over_route(transit, route, od);
+        TransitRouteEvals {
+            ridership,
+            avg_ridership,
+        }
+    }
+}
+
 /// Evaluate the ridership of a route at each stop
 ///
 /// # Arguments

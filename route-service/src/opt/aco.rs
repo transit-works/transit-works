@@ -376,13 +376,16 @@ impl ACO {
             }
         }
 
-        Some(TransitRoute {
-            route_id: route.route_id.clone(),
-            route_type: route.route_type.clone(),
-            inbound_stops: ACO::construct_inbound_stops(&stops, transit),
-            outbound_stops: stops,
-            stop_times: route.stop_times.clone(),
-        })
+        let inbound_stops = ACO::construct_inbound_stops(&stops, transit);
+        Some(TransitRoute::with_evals(
+            transit,
+            od,
+            route.route_id.clone(),
+            route.route_type.clone(),
+            stops,
+            inbound_stops,
+            route.stop_times.clone(),
+        ))
     }
 
     /// Given a list of outbound stops, find the nearest inbound stop for each outbound stop
