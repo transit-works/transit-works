@@ -119,7 +119,6 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           },
           body: JSON.stringify({
             routes: routesToOptimize,
-            params: acoParams
           })
         });
         
@@ -217,10 +216,6 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
 
       ws.onopen = () => {
         console.log('WebSocket connection established');
-
-        ws.send(JSON.stringify({
-          params: acoParams
-        }));
       };
 
       ws.onmessage = (event) => {
