@@ -144,10 +144,42 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             const optimizedIds = optimizedRoutesData.routes || [];
             const noopIds = noopRoutesData.routes || [];
             
-            // Filter to just the routes we attempted to optimize
-            const successfulRoutes = optimizedIds.filter(id => routesToOptimize.includes(id));
-            const failedRoutes = noopIds.filter(id => routesToOptimize.includes(id));
+            // Convert arrays to Sets for better performance
+            const optimizedIdsSet = new Set(optimizedIds);
+            const routesToOptimizeSet = new Set(routesToOptimize);
             
+            // Find intersection between optimizedIds and routesToOptimize
+            const successfulRouteIds = [...optimizedIdsSet].filter(id => routesToOptimizeSet.has(id));
+            const successfulRouteIdsSet = new Set(successfulRouteIds);
+            
+            // Find noop routes that we attempted to optimize but weren't successful
+            const failedRouteIds = [...new Set(noopIds)].filter(id => 
+              routesToOptimizeSet.has(id) && !successfulRouteIdsSet.has(id)
+            );
+
+            // Enrich with route details from your data source
+            const successfulRoutes = successfulRouteIds.map(id => {
+              const routeFeature = data.features.find(f => 
+                f.properties.route_id === id && f.geometry.type === 'LineString'
+              );
+              return routeFeature ? {
+                id: id,
+                short_name: routeFeature.properties.route_short_name,
+                name: routeFeature.properties.route_long_name
+              } : id;
+            });
+
+            const failedRoutes = failedRouteIds.map(id => {
+              const routeFeature = data.features.find(f => 
+                f.properties.route_id === id && f.geometry.type === 'LineString'
+              );
+              return routeFeature ? {
+                id: id,
+                short_name: routeFeature.properties.route_short_name,
+                name: routeFeature.properties.route_long_name
+              } : id;
+            });
+
             setOptimizationResults({
               successful: successfulRoutes,
               failed: failedRoutes
@@ -284,7 +316,42 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             
             // If this is the last iteration, mark optimization as complete
             if (data.iteration === data.total_iterations || data.early_completion) {
-              // Set isOptimizing to false since we're done
+              // Convert arrays to Sets for better performance
+              const optimizedIdsSet = new Set(optimizedIds);
+              const routesToOptimizeSet = new Set(routesToOptimize);
+              
+              // Find intersection between optimizedIds and routesToOptimize
+              const successfulRoutes = [...optimizedIdsSet].filter(id => routesToOptimizeSet.has(id));
+              const successfulRoutesSet = new Set(successfulRoutes);
+              
+              // Find noop routes that we attempted to optimize but weren't successful
+              const failedRoutes = [...new Set(noopIds)].filter(id => 
+                routesToOptimizeSet.has(id) && !successfulRoutesSet.has(id)
+              );
+              
+              // Get route names from your data source
+              const routesWithNames = filteredData.features.reduce((acc, feature) => {
+                if (feature.geometry.type === 'LineString' && feature.properties.route_id) {
+                  acc[feature.properties.route_id] = {
+                    id: feature.properties.route_id,
+                    name: feature.properties.route_long_name || feature.properties.route_name,
+                    short_name: feature.properties.route_short_name
+                  };
+                }
+                return acc;
+              }, {});
+              
+              // Create enriched route objects with names
+              const enrichedSuccessful = successfulRoutes.map(id => routesWithNames[id] || { id });
+              const enrichedFailed = failedRoutes.map(id => routesWithNames[id] || { id });
+              
+              // Set optimization results first
+              setOptimizationResults({
+                successful: enrichedSuccessful,
+                failed: enrichedFailed
+              });
+              
+              // Then set isOptimizing to false
               setIsOptimizing(false);
             }
           }
@@ -360,9 +427,32 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
                 const noopIds = noopData.routes || [];
                 
                 // Filter to just the routes we attempted to optimize
-                const successfulRoutes = optimizedIds.filter(id => routesToOptimize.includes(id));
-                const failedRoutes = noopIds.filter(id => routesToOptimize.includes(id));
-                
+                const successfulRouteIds = optimizedIds.filter(id => routesToOptimize.includes(id));
+                const failedRouteIds = noopIds.filter(id => routesToOptimize.includes(id) && !successfulRouteIds.includes(id));
+
+                // Enrich with route details from your data source
+                const successfulRoutes = successfulRouteIds.map(id => {
+                  const routeFeature = data.features.find(f => 
+                    f.properties.route_id === id && f.geometry.type === 'LineString'
+                  );
+                  return routeFeature ? {
+                    id: id,
+                    short_name: routeFeature.properties.route_short_name,
+                    name: routeFeature.properties.route_long_name
+                  } : id;
+                });
+
+                const failedRoutes = failedRouteIds.map(id => {
+                  const routeFeature = data.features.find(f => 
+                    f.properties.route_id === id && f.geometry.type === 'LineString'
+                  );
+                  return routeFeature ? {
+                    id: id,
+                    short_name: routeFeature.properties.route_short_name,
+                    name: routeFeature.properties.route_long_name
+                  } : id;
+                });
+
                 setOptimizationResults({
                   successful: successfulRoutes,
                   failed: failedRoutes
