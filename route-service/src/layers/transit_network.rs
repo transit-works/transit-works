@@ -115,7 +115,7 @@ impl TransitNetwork {
             }
 
             // Get the stop_times for all the trips in a route
-            let mut freq_hash: HashMap<(String, usize), usize> = HashMap::new();
+            let mut freq_hash: HashMap<usize, usize> = HashMap::new();
             let trips = gtfs.trips.get(&route.route_id);
             if !trips.is_none() {
                 for trip in trips.unwrap() {
@@ -124,28 +124,26 @@ impl TransitNetwork {
                             if let Ok(time) = NaiveTime::parse_from_str(departure_time, "%H:%M:%S")
                             {
                                 if s.stop_sequence == 1 {
-                                    //let start_time = NaiveTime::from_hms_opt(1, 0, 0);
-                                    //let end_time = NaiveTime::from_hms_opt(23, 0, 0);
                                     if time >= NaiveTime::from_hms_opt(5, 0, 0).unwrap()
                                         && time <= NaiveTime::from_hms_opt(7, 0, 0).unwrap()
                                     {
-                                        *freq_hash.entry((s.stop_id.clone(), 1)).or_insert(0) += 1;
+                                        *freq_hash.entry(1).or_insert(0) += 1;
                                     } else if time >= NaiveTime::from_hms_opt(7, 0, 0).unwrap()
                                         && time <= NaiveTime::from_hms_opt(9, 30, 0).unwrap()
                                     {
-                                        *freq_hash.entry((s.stop_id.clone(), 2)).or_insert(0) += 1;
+                                        *freq_hash.entry(2).or_insert(0) += 1;
                                     } else if time >= NaiveTime::from_hms_opt(9, 30, 0).unwrap()
                                         && time <= NaiveTime::from_hms_opt(15, 0, 0).unwrap()
                                     {
-                                        *freq_hash.entry((s.stop_id.clone(), 3)).or_insert(0) += 1;
+                                        *freq_hash.entry(3).or_insert(0) += 1;
                                     } else if time >= NaiveTime::from_hms_opt(15, 0, 0).unwrap()
                                         && time <= NaiveTime::from_hms_opt(19, 0, 0).unwrap()
                                     {
-                                        *freq_hash.entry((s.stop_id.clone(), 4)).or_insert(0) += 1;
+                                        *freq_hash.entry(4).or_insert(0) += 1;
                                     } else if time >= NaiveTime::from_hms_opt(19, 0, 0).unwrap()
                                         && time <= NaiveTime::from_hms_opt(22, 0, 0).unwrap()
                                     {
-                                        *freq_hash.entry((s.stop_id.clone(), 5)).or_insert(0) += 1;
+                                        *freq_hash.entry(5).or_insert(0) += 1;
                                     }
                                 }
                             }
@@ -576,7 +574,7 @@ pub struct TransitRoute {
     pub route_type: TransitRouteType,
     pub inbound_stops: Vec<Arc<TransitStop>>,
     pub outbound_stops: Vec<Arc<TransitStop>>,
-    pub stop_times: HashMap<(String, usize), usize>,
+    pub stop_times: HashMap<usize, usize>,
 }
 
 #[derive(PartialEq, Clone, Deserialize, Serialize)]

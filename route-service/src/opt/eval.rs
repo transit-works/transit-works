@@ -1,4 +1,5 @@
 use actix_web::cookie::time::{convert, Time};
+use actix_web::web::to;
 use core::f64;
 use std::{collections::HashMap, collections::HashSet, sync::Arc};
 
@@ -17,7 +18,7 @@ use crate::layers::{
 
 use super::consts;
 
-const ADJUSTMENT_FACTOR: f64 = 10.0;
+const ADJUSTMENT_FACTOR: f64 = 20.0;
 const DEFAULT_FREQUENCY: f64 = 10.0;
 
 /// Evaluate the ridership of a route at each stop
@@ -79,9 +80,19 @@ pub fn ridership_over_route(
     let mut ridership = vec![];
     for stop in stops {
         if let Some(zone) = stop_to_zone.get(&stop.stop_id) {
-            let ridership_stop =
-                *zone_to_ridership.get(zone).unwrap() / *zone_to_count.get(zone).unwrap() as f64;
-            ridership.push(ridership_stop);
+            // Check if both maps contain the zone
+            if let (Some(&ridership_key), Some(&count)) = (zone_to_ridership.get(zone), zone_to_count.get(zone)) {
+                // Make sure count is not zero to avoid division by zero
+                if count > 0 {
+                    let ridership_stop = ridership_key / count as f64;
+                    ridership.push(ridership_stop);
+                } else {
+                    ridership.push(0.0);
+                }
+            } else {
+                // Either zone_to_ridership or zone_to_count doesn't have this zone
+                ridership.push(0.0);
+            }
         } else {
             ridership.push(0.0);
         }
@@ -140,9 +151,19 @@ pub fn ridership_over_route2(
     let mut ridership = vec![];
     for stop in stops {
         if let Some(zone) = stop_to_zone.get(&stop.stop_id) {
-            let ridership_stop =
-                *zone_to_ridership.get(zone).unwrap() / *zone_to_count.get(zone).unwrap() as f64;
-            ridership.push(ridership_stop);
+            // Check if both maps contain the zone
+            if let (Some(&ridership_key), Some(&count)) = (zone_to_ridership.get(zone), zone_to_count.get(zone)) {
+                // Make sure count is not zero to avoid division by zero
+                if count > 0 {
+                    let ridership_stop = ridership_key / count as f64;
+                    ridership.push(ridership_stop);
+                } else {
+                    ridership.push(0.0);
+                }
+            } else {
+                // Either zone_to_ridership or zone_to_count doesn't have this zone
+                ridership.push(0.0);
+            }
         } else {
             ridership.push(0.0);
         }
@@ -314,15 +335,8 @@ pub fn evaluate_economic_score(
         .fold(0.0, |max: f64, &val| max.max(val));
 
     let stop_frequencies = &route.stop_times;
-    let max_frequency_stop = stop_frequencies
-        .iter()
-        .max_by(|a, b| a.1.cmp(b.1))
-        .map(|((stop_id, _), _)| stop_id.clone());
 
-    let mut f = None;
-    if let Some(stop_id) = max_frequency_stop {
-        f = stop_frequencies.get(&(stop_id, period));
-    }
+    let f = stop_frequencies.get(&period);
 
     if f.is_none() {
         let res = (max_ridership / (consts::BUS_CAPACITY as f64)
@@ -351,7 +365,9 @@ pub fn evaluate_network_economic_score(transit: &TransitNetwork, od: &GridNetwor
     for route in &transit.routes {
         let score = evaluate_economic_score(route, od, transit);
         total_score += score;
+        println!("score : {}", score);
     }
+    println!("avg : {}", total_score / transit.routes.len() as f64);
     total_score / transit.routes.len() as f64
 }
 
