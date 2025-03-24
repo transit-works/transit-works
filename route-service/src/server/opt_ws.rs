@@ -184,7 +184,7 @@ impl OptimizationWs {
                 // Increment the optimization attempt counter for this route
                 self.optimize_attempts_per_route[current_route_index] += 1;
 
-                match aco2::run_aco(aco, &route, &city) {
+                match aco2::run_aco(aco, &route, &city, &optimized_transit) {
                     Some((opt_route, eval)) => {
                         // Update the route in optimized_transit for next iteration
                         optimized_transit.routes.retain(|r| r.route_id != route_id);

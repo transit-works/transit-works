@@ -264,7 +264,7 @@ impl TransitNetwork {
             .iter()
             .map(|route| TransitRouteEvals::for_route(&network, route, grid))
             .collect();
-        
+
         // Then update the routes with their evaluations
         for (route, eval) in network.routes.iter_mut().zip(route_evals) {
             route.evals = Some(eval);

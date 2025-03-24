@@ -19,7 +19,7 @@ pub(crate) struct AppState {
     pub optimized_transit: Mutex<Option<TransitNetwork>>, // Stores optimized routes
     pub optimized_route_ids: Mutex<Vec<String>>,          // Tracks which routes have been optimized
     pub noop_route_ids: Mutex<Vec<String>>, // Tracks which routes which cannot be optimized
-    pub aco_params: Mutex<aco2::ACO>, // ACO parameters
+    pub aco_params: Mutex<aco2::ACO>,       // ACO parameters
 }
 
 #[derive(Deserialize)]
@@ -125,11 +125,11 @@ async fn optimize_route(route_id: web::Path<String>, data: web::Data<AppState>) 
     if let Some(route) = original_route {
         // Create ACO instance on demand for this optimization
         let params = data.aco_params.lock().unwrap().clone();
-        if let Some((opt_route, eval)) = aco2::run_aco(params, &route, city) {
-            let mut optimized_transit_guard = data.optimized_transit.lock().unwrap();
-            let optimized_transit = optimized_transit_guard.as_mut().unwrap();
-            let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
 
+        let mut optimized_transit_guard = data.optimized_transit.lock().unwrap();
+        let optimized_transit = optimized_transit_guard.as_mut().unwrap();
+        let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
+        if let Some((opt_route, eval)) = aco2::run_aco(params, &route, city, optimized_transit) {
             // Update the optimized transit with the new route
             optimized_transit.routes.retain(|r| r.route_id != route_id);
             optimized_transit.routes.push(opt_route);
@@ -194,7 +194,7 @@ async fn optimize_routes(
         .collect::<Vec<&TransitRoute>>();
 
     let params = data.aco_params.lock().unwrap().clone();
-    let results = aco2::run_aco_batch(params, &routes, city);
+    let results = aco2::run_aco_batch(params, &routes, city, &optimized_transit);
 
     // Track successful optimizations and evaluations
     let success_count = results.len();
@@ -251,7 +251,10 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
         let route = city.transit.routes.iter().find(|r| r.route_id == route_id);
 
         if let Some(route) = route {
-            let (ridership, avg_occupancy) = (&route.evals.as_ref().unwrap().ridership, route.evals.as_ref().unwrap().avg_ridership);
+            let (ridership, avg_occupancy) = (
+                &route.evals.as_ref().unwrap().ridership,
+                route.evals.as_ref().unwrap().avg_ridership,
+            );
 
             // Only evaluate the optimized route if it has been optimized
             if optimized_route_ids.contains(&route_id) {
@@ -260,8 +263,10 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
                     .iter()
                     .find(|r| r.route_id == route_id)
                 {
-                    let (opt_ridership, opt_avg_occupancy) =
-                        (&opt_route.evals.as_ref().unwrap().ridership, opt_route.evals.as_ref().unwrap().avg_ridership);
+                    let (opt_ridership, opt_avg_occupancy) = (
+                        &opt_route.evals.as_ref().unwrap().ridership,
+                        opt_route.evals.as_ref().unwrap().avg_ridership,
+                    );
 
                     return HttpResponse::Ok().json(serde_json::json!({
                         "route_id": route_id,

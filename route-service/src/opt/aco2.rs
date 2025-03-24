@@ -11,7 +11,7 @@ use serde::Deserialize;
 use crate::layers::{
     city::City,
     geo_util,
-    transit_network::{TransitRoute, TransitRouteType, TransitStop},
+    transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
 };
 
 use super::eval::TransitRouteEvals;
@@ -213,8 +213,12 @@ impl PheromoneMap {
     }
 }
 
-/// TODO: get the optimized TransitNetwork struct and use that instead of city.transit
-pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(TransitRoute, f64)> {
+pub fn run_aco(
+    params: ACO,
+    route: &TransitRoute,
+    city: &City,
+    opt_transit: &TransitNetwork,
+) -> Option<(TransitRoute, f64)> {
     if route.route_type != TransitRouteType::Bus {
         return None;
     }
@@ -227,7 +231,7 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     // get the stop choices
     let stops = filter_stops_by_route_bbox(route, city, 250.0);
     // can speed up by precomputing stops to zone mapping in city struct?
-    let zone_to_zone_coverage = filter_zones_by_stops(&stops, city);
+    let zone_to_zone_coverage = filter_zones_by_stops(&stops, city, opt_transit);
 
     // Run the ACO algorithm
     let mut gen_best_route = route.clone();
@@ -283,7 +287,7 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     }
 
     if gen_best_eval > init_eval {
-        let evals = TransitRouteEvals::for_route(&city.transit, &gen_best_route, &city.grid);
+        let evals = TransitRouteEvals::for_route(opt_transit, &gen_best_route, &city.grid);
         gen_best_route.evals = Some(evals);
         gen_best_route.stop_times = route.stop_times.clone();
         return Some((gen_best_route, gen_best_eval));
@@ -296,6 +300,7 @@ pub fn run_aco_batch(
     params: ACO,
     routes: &Vec<&TransitRoute>,
     city: &City,
+    opt_transit: &TransitNetwork,
 ) -> Vec<(TransitRoute, f64)> {
     // sort the routes by evaluation ascending (worst first)
     let mut routes = routes
@@ -304,7 +309,7 @@ pub fn run_aco_batch(
             // get the stop choices
             let stops = filter_stops_by_route_bbox(route, city, 250.0);
             // can speed up by precomputing stops to zone mapping in city struct?
-            let zone_to_zone_coverage = filter_zones_by_stops(&stops, city);
+            let zone_to_zone_coverage = filter_zones_by_stops(&stops, city, opt_transit);
             let eval = evaluate_route(&params, route, city, &zone_to_zone_coverage);
             (route, eval.0)
         })
@@ -314,7 +319,7 @@ pub fn run_aco_batch(
     // run aco on the routes and construct output list
     let mut optimized_routes = vec![];
     for (route, _) in routes {
-        if let Some((optimized_route, eval)) = run_aco(params.clone(), route, city) {
+        if let Some((optimized_route, eval)) = run_aco(params.clone(), route, city, opt_transit) {
             optimized_routes.push((optimized_route, eval));
         }
     }
@@ -693,7 +698,11 @@ fn filter_stops_by_route_bbox(
         .collect::<Vec<_>>()
 }
 
-fn filter_zones_by_stops(stops: &Vec<Arc<TransitStop>>, city: &City) -> HashMap<(u32, u32), u32> {
+fn filter_zones_by_stops(
+    stops: &Vec<Arc<TransitStop>>,
+    city: &City,
+    opt_transit: &TransitNetwork,
+) -> HashMap<(u32, u32), u32> {
     let mut zone_to_zone_coverage = HashMap::new();
     let mut zones = vec![];
     for stop in stops {
@@ -706,7 +715,7 @@ fn filter_zones_by_stops(stops: &Vec<Arc<TransitStop>>, city: &City) -> HashMap<
     }
     for i in 0..zones.len() {
         for j in i + 1..zones.len() {
-            for route in city.transit.routes.iter() {
+            for route in opt_transit.routes.iter() {
                 if route
                     .outbound_stops
                     .iter()
