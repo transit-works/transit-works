@@ -265,7 +265,7 @@ pub fn evaluate_coverage(route_stops: &Vec<Arc<TransitStop>>, od: &GridNetwork) 
         total_population += total_population_stop * 0.6;
     }
 
-    curr_populations / total_population * 100.0
+    curr_populations / (total_population + 1.0) * 100.0
 }
 
 pub fn evaluate_network_coverage(transit: &TransitNetwork, od: &GridNetwork) -> f64 {

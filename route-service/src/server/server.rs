@@ -607,18 +607,18 @@ async fn evaluate_network(data: web::Data<AppState>) -> impl Responder {
 
         HttpResponse::Ok().json(serde_json::json!({
             "original": {
-                "coverage": original_coverage_score,
-                "economic_score": original_economic_score,
+                "coverage": original_coverage_score.min(99.0),
+                "economic_score": original_economic_score.min(99.0),
                 "avg_transfers": original_avg_transfers,
                 "avg_ridership": original_avg_ridership,
-                "transit_score": original_transit_score,
+                "transit_score": original_transit_score.min(99.0),
             },
             "optimized": {
-                "coverage": optimized_coverage_score,
-                "economic_score": optimized_economic_score,
+                "coverage": optimized_coverage_score.min(99.0),
+                "economic_score": optimized_economic_score.min(99.0),
                 "avg_transfers": optimized_avg_transfers,
                 "avg_ridership": optimized_avg_ridership,
-                "transit_score": optimized_transit_score,
+                "transit_score": optimized_transit_score.min(99.0),
             },
         }))
     } else {

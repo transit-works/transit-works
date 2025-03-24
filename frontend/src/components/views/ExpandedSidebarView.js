@@ -7,6 +7,8 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
   const [loading, setLoading] = useState(true);
   const [rankedRoutes, setRankedRoutes] = useState([]);
   const [routesLoading, setRoutesLoading] = useState(true);
+  const [networkData, setNetworkData] = useState(null);
+  const [networkLoading, setNetworkLoading] = useState(true);
   
   // Fetch city data based on city name
   useEffect(() => {
@@ -25,6 +27,31 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
     
     fetchCityData();
   }, [cityName]);
+  
+  // Fetch network evaluation data
+  useEffect(() => {
+    if (!isVisible) return;
+    
+    const fetchNetworkData = async () => {
+      try {
+        console.log(`Fetching network evaluation data for ${cityName}...`);
+        setNetworkLoading(true);
+        const data = await fetchFromAPI('/evaluate-network', {}, cityName);
+        if (data && data.original && data.optimized) {
+          setNetworkData(data);
+          console.log('Network evaluation data:', data);
+        } else {
+          console.log("No network evaluation data returned from API");
+        }
+      } catch (error) {
+        console.error(`Failed to fetch network evaluation data for ${cityName}:`, error);
+      } finally {
+        setNetworkLoading(false);
+      }
+    };
+    
+    fetchNetworkData();
+  }, [cityName, isVisible]);
   
   useEffect(() => {
     // Only perform fetch if the sidebar is visible
@@ -62,49 +89,28 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
     fetchRankedRoutes();
   }, [cityName, isVisible]);
 
-  // Performance metrics that will leverage both current and future optimized data
-  const performanceMetrics = [
-    {
-      name: 'Transit Coverage',
-      current: 68,
-      optimized: 86,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M12 1.586l-4 4v12.828l4-4V1.586zM3.707 3.293A1 1 0 002 4v10a1 1 0 00.293.707L6 18.414V5.586L3.707 3.293zM17.707 5.293L14 1.586v12.828l2.293 2.293A1 1 0 0018 16V6a1 1 0 00-.293-.707z" clipRule="evenodd" />
-        </svg>
-      )
-    },
-    {
-      name: 'Service Frequency',
-      current: 55,
-      optimized: 78,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-        </svg>
-      )
-    },
-    {
-      name: 'Cost Efficiency',
-      current: 63,
-      optimized: 85, 
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-        </svg>
-      )
-    },
-    {
-      name: 'Environmental Impact',
-      current: 59,
-      optimized: 81,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-        </svg>
-      )
-    }
-  ];
+  // Calculate improvement percentages for the Key Improvement Cards if network data is available
+  const getImprovementData = () => {
+    if (!networkData) return {
+      coverage: 0,
+      ridership: 0,
+      transfers: 0,
+    };
+    
+    const { original, optimized } = networkData;
+    const coverageImprovement = ((optimized.coverage - original.coverage) / original.coverage) * 100;
+    const ridershipImprovement = ((optimized.avg_ridership - original.avg_ridership) / original.avg_ridership) * 100;
+    // For transfers, a decrease is an improvement so we negate the value
+    const transfersImprovement = ((original.avg_transfers - optimized.avg_transfers) / original.avg_transfers) * 100;
+    
+    return {
+      coverage: parseFloat(coverageImprovement.toFixed(1)),
+      ridership: parseFloat(ridershipImprovement.toFixed(1)),
+      transfers: parseFloat(transfersImprovement.toFixed(1)),
+    };
+  };
+  
+  const improvements = getImprovementData();
 
   if (loading) {
     return (
@@ -178,19 +184,47 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
           <div>
             <div className="flex justify-between items-center mb-1">
               <span className="text-zinc-300 text-sm">Transit Score</span>
-              <span className="text-green-500 text-sm">+24%</span>
+              {networkData && (
+                <span className="text-green-500 text-sm">
+                  +{((networkData.optimized.transit_score - networkData.original.transit_score) / networkData.original.transit_score * 100).toFixed(1)}%
+                </span>
+              )}
             </div>
-            <ProgressBar percentage={cityData.transitScore.toString()} name="Current" startColor="#f43f5e" endColor="#fb923c" />
-            <ProgressBar percentage={(cityData.transitScore * 1.24).toFixed(0)} name="Optimized" startColor="#7231ec" endColor="#1fd2fb" />
+            <ProgressBar 
+              percentage={networkData ? networkData.original.transit_score.toFixed(0) : cityData.transitScore.toString()} 
+              name="Current" 
+              startColor="#f43f5e" 
+              endColor="#fb923c" 
+            />
+            <ProgressBar 
+              percentage={networkData ? networkData.optimized.transit_score.toFixed(0) : (cityData.transitScore * 1.24).toFixed(0)} 
+              name="Optimized" 
+              startColor="#7231ec" 
+              endColor="#1fd2fb" 
+            />
           </div>
           
           <div>
             <div className="flex justify-between items-center mb-1">
               <span className="text-zinc-300 text-sm">Economic Score</span>
-              <span className="text-green-500 text-sm">+18%</span>
+              {networkData && (
+                <span className="text-green-500 text-sm">
+                  +{((networkData.optimized.economic_score - networkData.original.economic_score) / networkData.original.economic_score * 100).toFixed(1)}%
+                </span>
+              )}
             </div>
-            <ProgressBar percentage={cityData.economicScore.toString()} name="Current" startColor="#f43f5e" endColor="#fb923c" />
-            <ProgressBar percentage={(cityData.economicScore * 1.18).toFixed(0)} name="Optimized" startColor="#7231ec" endColor="#1fd2fb" />
+            <ProgressBar 
+              percentage={networkData ? networkData.original.economic_score.toFixed(0) : cityData.economicScore.toString()} 
+              name="Current" 
+              startColor="#f43f5e" 
+              endColor="#fb923c" 
+            />
+            <ProgressBar 
+              percentage={networkData ? networkData.optimized.economic_score.toFixed(0) : (cityData.economicScore * 1.18).toFixed(0)} 
+              name="Optimized" 
+              startColor="#7231ec" 
+              endColor="#1fd2fb" 
+            />
           </div>
         </div>
       </div>
@@ -205,39 +239,39 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
                 <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1v-5h2.05a2.5 2.5 0 014.9 0H19a1 1 0 001-1v-5a1 1 0 00-1-1H3z" />
               </svg>
             </div>
-            <h3 className="text-zinc-300 text-sm font-medium">Transit Routes</h3>
+            <h3 className="text-zinc-300 text-sm font-medium">Coverage</h3>
           </div>
           <div className="flex items-baseline">
-            <span className="text-3xl font-bold text-white">+12.6%</span>
-            <span className="ml-2 text-purple-400 text-sm">↑ Coverage</span>
+            <span className="text-3xl font-bold text-white">+{networkLoading ? "..." : improvements.coverage}%</span>
+            <span className="ml-2 text-purple-400 text-sm">↑ Improved</span>
           </div>
         </div>
         <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg">
           <div className="flex items-center mb-3">
             <div className="rounded-full bg-green-500/20 p-2 mr-3">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
               </svg>
             </div>
-            <h3 className="text-zinc-300 text-sm font-medium">Operating Cost</h3>
+            <h3 className="text-zinc-300 text-sm font-medium">Ridership</h3>
           </div>
           <div className="flex items-baseline">
-            <span className="text-3xl font-bold text-white">-8.7%</span>
-            <span className="ml-2 text-green-500 text-sm">↓ Lower costs</span>
+            <span className="text-3xl font-bold text-white">+{networkLoading ? "..." : improvements.ridership}%</span>
+            <span className="ml-2 text-green-500 text-sm">↑ Higher</span>
           </div>
         </div>
         <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg">
           <div className="flex items-center mb-3">
             <div className="rounded-full bg-blue-500/20 p-2 mr-3">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                <path fillRule="evenodd" d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v7h-2l-1 2H8l-1-2H5V5z" clipRule="evenodd" />
               </svg>
             </div>
-            <h3 className="text-zinc-300 text-sm font-medium">Rider Experience</h3>
+            <h3 className="text-zinc-300 text-sm font-medium">Avg Transfers</h3>
           </div>
           <div className="flex items-baseline">
-            <span className="text-3xl font-bold text-white">+19.2%</span>
-            <span className="ml-2 text-blue-400 text-sm">↑ Improved</span>
+            <span className="text-3xl font-bold text-white">{networkLoading ? "..." : (improvements.transfers >= 0 ? "+" : "")}{improvements.transfers}%</span>
+            <span className="ml-2 text-blue-400 text-sm">{improvements.transfers >= 0 ? "↓ Fewer" : "↑ More"}</span>
           </div>
         </div>
       </div>

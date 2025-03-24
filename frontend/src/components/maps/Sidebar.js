@@ -4,6 +4,7 @@ import ProgressDial from '@/components/visualization/ProgressDial';
 import RouteList from '@/components/transit/RouteList';
 import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
+import { fetchFromAPI } from '@/utils/api';
 // Import the icons
 import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt, FaPlus, FaSubway, FaPaintBrush, FaTrain, FaBusAlt } from 'react-icons/fa';
 
@@ -40,6 +41,8 @@ function Sidebar({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showExtraControls, setShowExtraControls] = useState(false);
+  const [networkData, setNetworkData] = useState(null);
+  const [networkLoading, setNetworkLoading] = useState(true);
 
   const toggleSidebar = () => {
     setIsExpanded(!isExpanded);
@@ -55,6 +58,26 @@ function Sidebar({
       setShowExtraControls(false);
     }
   }, [isExpanded]);
+  
+  // Fetch network evaluation data
+  useEffect(() => {
+    const fetchNetworkData = async () => {
+      try {
+        setNetworkLoading(true);
+        const data = await fetchFromAPI('/evaluate-network', {}, city);
+        if (data && data.original && data.optimized) {
+          setNetworkData(data);
+          console.log('Network evaluation data:', data);
+        }
+      } catch (error) {
+        console.error(`Failed to fetch network evaluation data:`, error);
+      } finally {
+        setNetworkLoading(false);
+      }
+    };
+    
+    fetchNetworkData();
+  }, [city]);
 
   return (
     <div className="relative flex h-screen flex-col">
@@ -76,10 +99,16 @@ function Sidebar({
         {/* Progress Dial Section */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
-            <ProgressDial percentage={82} name="Transit Score" />
+            <ProgressDial 
+              percentage={networkData ? Math.round(networkData.optimized.transit_score) : 82}
+              name="Transit Score" 
+            />
           </div>
           <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
-            <ProgressDial percentage={77} name="Economic Score" />
+            <ProgressDial 
+              percentage={networkData ? Math.round(networkData.optimized.economic_score) : 77}
+              name="Economic Score" 
+            />
           </div>
         </div>
 
