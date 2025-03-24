@@ -7,10 +7,8 @@ use crate::server::opt_ws::OptimizationWs;
 use actix_web::{get, post, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
 use geo::Centroid;
-use petgraph::graph::NodeIndex;
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Mutex;
 
@@ -267,6 +265,12 @@ async fn evaluate_route(route_id: web::Path<String>, data: web::Data<AppState>) 
                         &opt_route.evals.as_ref().unwrap().ridership,
                         opt_route.evals.as_ref().unwrap().avg_ridership,
                     );
+                    let coverage = opt_route.evals.as_ref().unwrap().coverage;
+                    let economic_score = opt_route.evals.as_ref().unwrap().economic_score;
+                    println!(
+                        "Route {}: coverage={}, economic_score={}",
+                        route_id, coverage, economic_score
+                    );
 
                     return HttpResponse::Ok().json(serde_json::json!({
                         "route_id": route_id,
@@ -315,8 +319,8 @@ async fn evaluate_coverage(
         let route = city.transit.routes.iter().find(|r| r.route_id == route_id);
 
         if let Some(route) = route {
-            let coverage = eval::evaluate_coverage(&route.outbound_stops, &city.grid);
-            let economic_score = eval::evaluate_economic_score(route, &city.grid, &city.transit);
+            let coverage = route.evals.as_ref().unwrap().coverage;
+            let economic_score = route.evals.as_ref().unwrap().economic_score;
 
             return HttpResponse::Ok().json(serde_json::json!({
                 "route_id": route_id,
@@ -551,6 +555,79 @@ async fn rank_route_improvements(data: web::Data<AppState>) -> impl Responder {
     }
 }
 
+#[get("/evaluate-network")]
+async fn evaluate_network(data: web::Data<AppState>) -> impl Responder {
+    println!("Evaluating network metrics");
+
+    let city_guard = data.city.lock().unwrap();
+    let optimized_transit_guard = data.optimized_transit.lock().unwrap();
+
+    if let (Some(city), Some(optimized_transit)) = (&*city_guard, &*optimized_transit_guard) {
+        // Calculate metrics for original network
+        let original_coverage_score = eval::evaluate_network_coverage(&city.transit, &city.grid);
+        let original_economic_score =
+            eval::evaluate_network_economic_score(&city.transit, &city.grid);
+        let original_avg_ridership = eval::avg_ridership(&city.transit, &city.grid);
+
+        // Get cached average transfers or calculate if not available
+        let original_avg_transfers = match &city.transit.evals {
+            Some(evals) => evals.avg_transfers,
+            None => {
+                let (avg, _) = eval::average_transfers(&city.transit, &city.grid);
+                avg
+            }
+        };
+
+        let original_transit_score = eval::transit_score(
+            original_avg_transfers,
+            original_avg_ridership,
+            original_coverage_score,
+        );
+
+        // Calculate metrics for optimized network
+        let optimized_coverage_score = eval::evaluate_network_coverage(&optimized_transit, &city.grid);
+        let optimized_economic_score =
+            eval::evaluate_network_economic_score(&optimized_transit, &city.grid);
+        let optimized_avg_ridership = eval::avg_ridership(&optimized_transit, &city.grid);
+
+        // Get cached average transfers or calculate if not available
+        let optimized_avg_transfers = match &optimized_transit.evals {
+            Some(evals) => evals.avg_transfers,
+            None => {
+                let (avg, _) = eval::average_transfers(&optimized_transit, &city.grid);
+                avg
+            }
+        };
+
+        let optimized_transit_score = eval::transit_score(
+            optimized_avg_transfers,
+            optimized_avg_ridership,
+            optimized_coverage_score,
+        );
+
+        HttpResponse::Ok().json(serde_json::json!({
+            "original": {
+                "coverage": original_coverage_score,
+                "economic_score": original_economic_score,
+                "avg_transfers": original_avg_transfers,
+                "avg_ridership": original_avg_ridership,
+                "transit_score": original_transit_score,
+            },
+            "optimized": {
+                "coverage": optimized_coverage_score,
+                "economic_score": optimized_economic_score,
+                "avg_transfers": optimized_avg_transfers,
+                "avg_ridership": optimized_avg_ridership,
+                "transit_score": optimized_transit_score,
+            },
+        }))
+    } else {
+        HttpResponse::InternalServerError().json(serde_json::json!({
+            "error": "City data not loaded"
+        }))
+    }
+}
+
 pub async fn start_server(
     city_name: &str,
     gtfs_path: &str,
@@ -600,6 +677,7 @@ pub async fn start_server(
             .service(get_noop_route_ids)
             .service(update_aco_params)
             .service(rank_route_improvements)
+            .service(evaluate_network)
     })
     .bind(addr)?
     .run()
