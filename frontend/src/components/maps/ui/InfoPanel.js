@@ -1,5 +1,6 @@
 import React from 'react';
 import RidershipChart from '../../visualization/RidershipChart';
+import { routeTypeColorsRGB, routeTypeNames } from '../../../utils/routeTypeColors';
 
 function InfoPanel({ popupInfo, setPopupInfo, optimizedRoutes, ridershipData, optRidershipData }) {
   if (!popupInfo) return null;
@@ -49,6 +50,21 @@ function InfoPanel({ popupInfo, setPopupInfo, optimizedRoutes, ridershipData, op
                   </svg>
                 </span>
                 Route
+                {popupInfo.properties.route_type !== undefined && (
+                  <span 
+                    className="ml-2 text-xs px-2 py-0.5 rounded-full flex items-center gap-1 font-medium border-[1.5px]"
+                    style={{ 
+                      backgroundColor: `${routeTypeColorsRGB[popupInfo.properties.route_type] || routeTypeColorsRGB.default}10`, 
+                      color: routeTypeColorsRGB[popupInfo.properties.route_type] || routeTypeColorsRGB.default,
+                      borderColor: routeTypeColorsRGB[popupInfo.properties.route_type] || routeTypeColorsRGB.default
+                    }}
+                  >
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 6 6" fill="currentColor">
+                      <circle cx="3" cy="3" r="3" />
+                    </svg>
+                    {routeTypeNames[popupInfo.properties.route_type] || routeTypeNames.default}
+                  </span>
+                )}
               </h4>
               <button 
                 onClick={() => setPopupInfo(null)}
@@ -62,10 +78,10 @@ function InfoPanel({ popupInfo, setPopupInfo, optimizedRoutes, ridershipData, op
             </div>
             
             <div className="space-y-2 text-sm mb-3">
-              <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-rose-600">
+              {/* <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-rose-600">
                 <span className="font-medium font-heading text-zinc-300 w-16">ID:</span>
                 <span className="text-white font-body">{popupInfo.properties.route_id}</span>
-              </div>
+              </div> */}
               <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-rose-600">
                 <span className="font-medium font-heading text-zinc-300 w-16">Name:</span>
                 <span className="text-white font-body">{popupInfo.properties.route_long_name}</span>

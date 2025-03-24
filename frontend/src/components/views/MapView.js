@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import Sidebar from '../maps/Sidebar';
 import OptimizationProgress from '../maps/OptimizationProgress';
 import { fetchFromAPI, createWebSocket } from '@/utils/api';
+import OptimizationResultsModal from '../maps/OptimizationResultsModal';
 
 // Dynamically import MapView with no SSR to ensure it runs only on the client
 const TransitMap = dynamic(() => import('../maps/TransitMap'), { ssr: false });
@@ -16,6 +17,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationError, setOptimizationError] = useState(null);
   const [optimizedRoutes, setOptimizedRoutes] = useState(new Set(initialOptimizedRoutes));
+  const [noopRoutes, setNoopRoutes] = useState(new Set());
+  const [optimizationResults, setOptimizationResults] = useState(null);
   const [optimizationProgress, setOptimizationProgress] = useState(0);
   const [currentEvaluation, setCurrentEvaluation] = useState(null);
   const [useLiveOptimization, setUseLiveOptimization] = useState(true);
@@ -79,6 +82,18 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     setShowCoverageHeatmap(!showCoverageHeatmap);
   };
 
+  // Add function to fetch noop routes
+  const fetchNoopRoutes = async () => {
+    try {
+      const data = await fetchFromAPI('/get-noop-routes');
+      if (data && data.routes) {
+        setNoopRoutes(new Set(data.routes));
+      }
+    } catch (error) {
+      console.error('Error fetching noop routes:', error);
+    }
+  };
+
   // Modified handleOptimize function to work with multiple routes
   const handleOptimize = async () => {
     // Check if any routes are selected
@@ -92,6 +107,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     try {
       setIsOptimizing(true);
       setOptimizationError(null);
+      setOptimizationResults(null); // Reset results
       
       try {
         const result = await fetchFromAPI('/optimize-routes', {
@@ -114,6 +130,28 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             routesToOptimize.forEach(routeId => newSet.add(routeId));
             return newSet;
           });
+          
+          // Fetch noop routes to update the set
+          await fetchNoopRoutes();
+          
+          // Create results summary for multi-select mode
+          if (multiSelectMode && routesToOptimize.length > 1) {
+            // Fetch both optimized and noop routes to show complete results
+            const optimizedRoutesData = await fetchFromAPI('/get-optimizations');
+            const noopRoutesData = await fetchFromAPI('/get-noop-routes');
+            
+            const optimizedIds = optimizedRoutesData.routes || [];
+            const noopIds = noopRoutesData.routes || [];
+            
+            // Filter to just the routes we attempted to optimize
+            const successfulRoutes = optimizedIds.filter(id => routesToOptimize.includes(id));
+            const failedRoutes = noopIds.filter(id => routesToOptimize.includes(id));
+            
+            setOptimizationResults({
+              successful: successfulRoutes,
+              failed: failedRoutes
+            });
+          }
         } else {
           throw new Error('Invalid response format from optimization service');
         }
@@ -156,6 +194,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setOptimizationProgress(0);
       setCurrentEvaluation(null);
       setWebsocketData(null);
+      setOptimizationResults(null); // Reset results
       
       // Clear previously tracked converged routes
       setConvergedRoutes(new Set());
@@ -311,6 +350,29 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         } else {
           // Clear any previous error if this is a normal completion
           setOptimizationError(null);
+          
+          // Fetch noop routes to update our state
+          fetchNoopRoutes().then(() => {
+            // If this was a multi-route optimization, prepare results summary
+            if (multiSelectMode && routesToOptimize.length > 1) {
+              Promise.all([
+                fetchFromAPI('/get-optimizations'),
+                fetchFromAPI('/get-noop-routes')
+              ]).then(([optimizedData, noopData]) => {
+                const optimizedIds = optimizedData.routes || [];
+                const noopIds = noopData.routes || [];
+                
+                // Filter to just the routes we attempted to optimize
+                const successfulRoutes = optimizedIds.filter(id => routesToOptimize.includes(id));
+                const failedRoutes = noopIds.filter(id => routesToOptimize.includes(id));
+                
+                setOptimizationResults({
+                  successful: successfulRoutes,
+                  failed: failedRoutes
+                });
+              });
+            }
+          });
         }
         
         wsRef.current = null;
@@ -373,7 +435,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       setIsOptimizing(true);
       setOptimizationError(null);
 
-      const response = await fetchFromAPI('/reset-optimizations', {
+      await fetchFromAPI('/reset-optimizations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -383,19 +445,15 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
       // Clear optimized routes data
       setOptimizedRoutes(new Set());
       setOptimizedRoutesData(null);
+      setNoopRoutes(new Set()); // Explicitly clear noop routes
       
-      // Verify the reset worked by checking with the server
-      const verifyData = await fetchFromAPI('/get-optimizations');
-      if (verifyData.routes && verifyData.routes.length > 0) {
-        console.warn('Warning: Server still has optimized routes after reset');
-        // Force another reset if needed
-        await fetchFromAPI('/reset-optimizations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-      } else {
-        console.log('Reset verification successful - server confirms no optimized routes');
-      }
+      // Verify the reset worked
+      const [optimizedData, noopData] = await Promise.all([
+        fetchFromAPI('/get-optimizations'),
+        fetchFromAPI('/get-noop-routes')
+      ]);
+      
+      // Rest of your verification code...
     } catch (error) {
       console.error('Error resetting optimizations:', error);
       setOptimizationError(error.message);
@@ -439,6 +497,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
 
   useEffect(() => {
     fetchOptimizedRoutes();
+    fetchNoopRoutes();
   }, []);
 
   // Listen for route selection to determine if carousel should be visible
@@ -481,6 +540,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           city={city} // Pass city prop to Sidebar
           colorByRouteType={colorByRouteType}
           onToggleRouteTypeColors={toggleRouteTypeColors}
+          noopRoutes={noopRoutes}
+          optimizationResults={optimizationResults}
         />
       </div>
       <div className="absolute inset-0 z-0 h-full w-full">
@@ -513,6 +574,9 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           setIsRouteCarouselVisible={setIsRouteCarouselVisible}
           city={city} // Pass city prop to TransitMap
           colorByRouteType={colorByRouteType}
+          noopRoutes={noopRoutes}
+          optimizationResults={optimizationResults}
+          setOptimizationResults={setOptimizationResults}
         />
 
         {/* Update the floating OptimizationProgress component position to bottom left with higher z-index */}
@@ -527,6 +591,14 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           />
         </div>
       </div>
+      
+      {/* Add optimization results notification for multi-select mode */}
+      {optimizationResults && multiSelectMode && (
+        <OptimizationResultsModal 
+          results={optimizationResults}
+          onClose={() => setOptimizationResults(null)}
+        />
+      )}
     </div>
   );
 }

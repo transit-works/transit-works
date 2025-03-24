@@ -5,27 +5,27 @@
 
 // RGB array format for deck.gl layers
 export const routeTypeColorsArray = {
-  0: [132, 66, 245, 220],    // Tram/Streetcar/Light rail - Purple
-  1: [250, 192, 94, 220],    // Subway/Metro - Yellow
-  2: [184, 28, 198, 220],    // Rail - Magenta
-  3: [200, 0, 80, 220],      // Bus - Original reddish color
-  4: [96, 0, 128, 220],      // Ferry - Deep purple
-  5: [175, 138, 0, 220],     // Cable car - Gold/amber
-  6: [227, 55, 105, 220],    // Gondola - Coral pink
-  7: [168, 0, 84, 220],      // Funicular - Raspberry
-  default: [200, 0, 80, 220] // Default - same as bus
+  0: [250, 0, 80, 220],         // Tram/Streetcar/Light rail
+  1: [250, 192, 94, 220],       // Subway/Metro
+  2: [132, 66, 245, 220],       // Rail
+  3: [220, 220, 220, 220],      // Bus
+  4: [179, 99, 5, 220],         // Ferry
+  5: [229, 26, 255, 220],       // Cable car
+  6: [0, 154, 152, 220],        // Gondola
+  7: [243, 169, 187, 220],      // Funicular
+  default: [200, 0, 80, 220]    // Default
 };
 
 // CSS-friendly RGB format for UI components
 export const routeTypeColorsRGB = {
-  0: 'rgb(132, 66, 245)',      // Tram/Streetcar/Light rail
+  0: 'rgb(250, 0, 80)',        // Tram/Streetcar/Light rail
   1: 'rgb(250, 192, 94)',      // Subway/Metro
-  2: 'rgb(184, 28, 198)',      // Rail
-  3: 'rgb(200, 0, 80)',        // Bus
-  4: 'rgb(96, 0, 128)',        // Ferry
-  5: 'rgb(175, 138, 0)',       // Cable car
-  6: 'rgb(227, 55, 105)',      // Gondola
-  7: 'rgb(168, 0, 84)',        // Funicular
+  2: 'rgb(132, 66, 245)',      // Rail
+  3: 'rgb(220, 220, 220)',     // Bus
+  4: 'rgb(179, 99, 5)',        // Ferry
+  5: 'rgb(229, 26, 255)',      // Cable car
+  6: 'rgb(0, 154, 152)',      // Gondola
+  7: 'rgb(243, 169, 187)',     // Funicular
   default: 'rgb(200, 0, 80)'   // Default
 };
 

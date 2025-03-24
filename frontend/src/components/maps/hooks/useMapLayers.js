@@ -19,6 +19,7 @@ export default function useMapLayers({
   effectiveSelectedRoutes,
   useRandomColors,
   optimizedRoutes,
+  noopRoutes,
   showPopulationHeatmap,
   populationData,
   onClick,
@@ -27,14 +28,18 @@ export default function useMapLayers({
   colorByRouteType,
   showCoverageHeatmap,
   coverageData,
+  resetFlag = false,
+  layerVersion = 0,
 }) {
-  const layers = [];
-  
-  // Define default colors for when colorByRouteType is false
+  // Define colors
+  const NOOP_COLOR = [255, 140, 0, 200]; // Orange for noop routes
   const DEFAULT_BUS_COLOR = [220, 0, 80, 180]; // More visible red for buses
   const DEFAULT_OTHER_COLOR = [100, 100, 100, 255]; // Grey for other transit types
   
-  // In your component before passing data to the map
+  // Initialize the layers array
+  const layers = [];
+  
+  // Process data - keep this part the same
   const processedData = {
     ...filteredData,
     features: filteredData.features.map(feature => {
@@ -60,6 +65,16 @@ export default function useMapLayers({
       }
       return feature;
     })
+  };
+  
+  // Create a separate dataset just for noop routes
+  const noopRoutesData = {
+    ...filteredData,
+    features: filteredData.features.filter(feature => 
+      feature.geometry.type === 'LineString' && 
+      noopRoutes && 
+      noopRoutes.has(feature.properties.route_id)
+    )
   };
   
   // Add stop points layer
@@ -115,20 +130,44 @@ export default function useMapLayers({
     })
   );
   
-  // Add routes layer
+  // Add main routes layer - but exclude noop routes since they'll be in their own layer
   layers.push(
     new GeoJsonLayer({
-      id: `routes-layer-${useRandomColors ? 'random' : (colorByRouteType ? 'typecolor' : 'default')}`,
-      data: processedData,
+      id: `routes-layer-${useRandomColors ? 'random' : (colorByRouteType ? 'typecolor' : 'default')}-${layerVersion || 0}`,
+      data: {
+        ...processedData,
+        features: processedData.features.filter(feature => 
+          !(feature.geometry.type === 'LineString' && 
+            noopRoutes && 
+            noopRoutes.has(feature.properties.route_id))
+        )
+      },
       stroked: true,
       filled: false,
       getLineColor: d => {
         const routeId = d.properties.route_id;
         
-        // In multi-select mode, highlight selected routes
-        if (multiSelectMode && effectiveSelectedRoutes.has(routeId)) {
-          return [30, 144, 255, 220]; // Blue for selected routes in multi-select
+        // When reset flag is true, never use noop colors
+        if (resetFlag) {
+          // Skip noop route coloring and go straight to default colors
+          if (useRandomColors) {
+            return routeColorMap[routeId] || [200, 0, 80, 180];
+          }
+          
+          const routeType = parseInt(d.properties.route_type, 10);
+          if (colorByRouteType) {
+            return routeTypeColorsArray[routeType] || routeTypeColorsArray.default;
+          } else {
+            return routeType === 3 ? DEFAULT_BUS_COLOR : DEFAULT_OTHER_COLOR;
+          }
         }
+        
+        // Normal color logic for non-reset mode
+        if (multiSelectMode && effectiveSelectedRoutes.has(routeId)) {
+          return [30, 144, 255, 220];
+        }
+        
+        // REMOVE the noop route coloring from here since they're in a separate layer
         
         // Use random colors if that option is selected
         if (useRandomColors) {
@@ -166,6 +205,37 @@ export default function useMapLayers({
       filterRange: [0.9, 1]
     })
   );
+  
+  // Add a dedicated layer just for noop routes
+  if (noopRoutes && noopRoutes.size > 0) {
+    layers.push(
+      new GeoJsonLayer({
+        id: `noop-routes-layer-${noopRoutes.size}-${layerVersion || 0}`,
+        data: noopRoutesData,
+        stroked: true,
+        filled: false,
+        getLineColor: NOOP_COLOR, // Always orange for noop routes
+        getLineWidth: d => {
+          // Use the same line width logic as your main routes layer
+          const routeId = d.properties.route_id;
+          return multiSelectMode && effectiveSelectedRoutes.has(routeId) ? 6 : 4;
+        },
+        lineWidthMinPixels: 2,
+        lineWidthScale: 5,
+        pickable: true,
+        autoHighlight: true,
+        onClick,
+        beforeId: 'watername_ocean',
+        parameters: {
+          depthTest: mapStyle === '/styles/dark_matter_3d.json',
+          depthMask: true
+        },
+        visible: !show3DRoutes,
+        getFilterValue: (feature) => (feature.geometry.type === 'LineString' ? 1 : 0),
+        filterRange: [0.9, 1]
+      })
+    );
+  }
   
   // Add optimized routes layer
   if (filteredOptimizedData) {
@@ -259,6 +329,10 @@ export default function useMapLayers({
       // Multi-select mode - highlight selected routes with blue
       if (multiSelectMode && effectiveSelectedRoutes.has(routeId)) {
         color = [30, 144, 255, 220]; // Blue for selected routes (changed from orange)
+      }
+      // Check if this is a noop route
+      else if (noopRoutes && noopRoutes.has(routeId)) {
+        color = NOOP_COLOR; // Orange for noop routes
       }
       // Check if optimized 
       else if (optimizedRoutes && optimizedRoutes.has(routeId)) {
