@@ -6,6 +6,7 @@ use std::{
 use geo::Contains;
 use petgraph::graph::NodeIndex;
 use rand::{distributions::WeightedIndex, prelude::Distribution, rngs::StdRng, Rng, SeedableRng};
+use serde::Deserialize;
 
 use crate::layers::{
     city::City,
@@ -13,8 +14,14 @@ use crate::layers::{
     transit_network::{TransitRoute, TransitRouteType, TransitStop},
 };
 
+// should be less than 1.0
+const PUNISHMENT_NONLINEARITY: f64 = 0.3;
+// const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
+const PUNISHMENT_BAD_TURN: f64 = 0.4;
+const PUNISHMENT_STOP_DIST: f64 = 0.1;
+
 // struct to store all the tunable parameters for the ACO algorithm
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct ACO {
     // ACO specific parameters
     pub alpha: f64,
@@ -37,11 +44,29 @@ pub struct ACO {
     pub avg_stop_dist: f64,
 }
 
-// should be less than 1.0
-const PUNISHMENT_NONLINEARITY: f64 = 0.3;
-// const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
-const PUNISHMENT_BAD_TURN: f64 = 0.4;
-const PUNISHMENT_STOP_DIST: f64 = 0.1;
+// struct to support partial updates to ACO parameters
+#[derive(Clone, Deserialize)]
+pub struct PartialACO {
+    // ACO specific parameters
+    pub alpha: Option<f64>,
+    pub beta: Option<f64>,
+    pub rho: Option<f64>,
+    pub q0: Option<f64>,
+    pub num_ant: Option<usize>,
+    pub max_gen: Option<usize>,
+    pub pheromone_max: Option<f64>,
+    pub pheromone_min: Option<f64>,
+    pub init_pheromone: Option<f64>,
+    // Bus specific parameters
+    pub bus_capacity: Option<usize>,
+    pub min_stop_dist: Option<f64>,
+    pub max_stop_dist: Option<f64>,
+    // Punishment parameter
+    pub min_route_len: Option<usize>,
+    pub max_route_len: Option<usize>,
+    pub max_nonlinearity: Option<f64>,
+    pub avg_stop_dist: Option<f64>,
+}
 
 impl ACO {
     // function to initialize the ACO struct with default values
@@ -84,6 +109,58 @@ impl ACO {
         println!("  max_stop_dist: {}", self.max_stop_dist);
         println!("  max_nonlinearity: {}", self.max_nonlinearity);
         println!("  avg_stop_dist: {}", self.avg_stop_dist);
+    }
+
+    // Update ACO parameters from a PartialACO
+    pub fn update_from_partial(&mut self, partial: PartialACO) {
+        if let Some(alpha) = partial.alpha {
+            self.alpha = alpha;
+        }
+        if let Some(beta) = partial.beta {
+            self.beta = beta;
+        }
+        if let Some(rho) = partial.rho {
+            self.rho = rho;
+        }
+        if let Some(q0) = partial.q0 {
+            self.q0 = q0;
+        }
+        if let Some(num_ant) = partial.num_ant {
+            self.num_ant = num_ant;
+        }
+        if let Some(max_gen) = partial.max_gen {
+            self.max_gen = max_gen;
+        }
+        if let Some(pheromone_max) = partial.pheromone_max {
+            self.pheromone_max = pheromone_max;
+        }
+        if let Some(pheromone_min) = partial.pheromone_min {
+            self.pheromone_min = pheromone_min;
+        }
+        if let Some(init_pheromone) = partial.init_pheromone {
+            self.init_pheromone = init_pheromone;
+        }
+        if let Some(bus_capacity) = partial.bus_capacity {
+            self.bus_capacity = bus_capacity;
+        }
+        if let Some(min_stop_dist) = partial.min_stop_dist {
+            self.min_stop_dist = min_stop_dist;
+        }
+        if let Some(max_stop_dist) = partial.max_stop_dist {
+            self.max_stop_dist = max_stop_dist;
+        }
+        if let Some(min_route_len) = partial.min_route_len {
+            self.min_route_len = min_route_len;
+        }
+        if let Some(max_route_len) = partial.max_route_len {
+            self.max_route_len = max_route_len;
+        }
+        if let Some(max_nonlinearity) = partial.max_nonlinearity {
+            self.max_nonlinearity = max_nonlinearity;
+        }
+        if let Some(avg_stop_dist) = partial.avg_stop_dist {
+            self.avg_stop_dist = avg_stop_dist;
+        }
     }
 }
 
@@ -208,6 +285,35 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     } else {
         return None;
     }
+}
+
+pub fn run_aco_batch(
+    params: ACO,
+    routes: &Vec<&TransitRoute>,
+    city: &City,
+) -> Vec<(TransitRoute, f64)> {
+    // sort the routes by evaluation ascending (worst first)
+    let mut routes = routes
+        .iter()
+        .map(|route| {
+            // get the stop choices
+            let stops = filter_stops_by_route_bbox(route, city, 250.0);
+            // can speed up by precomputing stops to zone mapping in city struct?
+            let zone_to_zone_coverage = filter_zones_by_stops(&stops, city);
+            let eval = evaluate_route(&params, route, city, &zone_to_zone_coverage);
+            (route, eval.0)
+        })
+        .collect::<Vec<_>>();
+    routes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+    // run aco on the routes and construct output list
+    let mut optimized_routes = vec![];
+    for (route, _) in routes {
+        if let Some((optimized_route, eval)) = run_aco(params.clone(), route, city) {
+            optimized_routes.push((optimized_route, eval));
+        }
+    }
+    optimized_routes
 }
 
 // Helpers for ACO

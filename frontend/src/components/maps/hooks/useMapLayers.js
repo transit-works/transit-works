@@ -24,7 +24,9 @@ export default function useMapLayers({
   onClick,
   busMesh,
   busScale,
-  colorByRouteType // Add this parameter
+  colorByRouteType,
+  showCoverageHeatmap,
+  coverageData,
 }) {
   const layers = [];
   
@@ -317,6 +319,27 @@ export default function useMapLayers({
         threshold: 0.05,
         opacity: 0.6,
         visible: showPopulationHeatmap,
+      })
+    );
+  }
+
+  if (showCoverageHeatmap) {
+    layers.push(
+      new HeatmapLayer({
+        id: 'coverage-heatmap',
+        data: coverageData,
+        getPosition: d => d.COORDINATES,
+        getWeight: d => d.TRANSFERS,
+        radiusPixels: 275,
+        intensity: 1.2,
+        threshold: 0.05,
+        opacity: 0.6,
+        colorRange: [
+          [51, 153, 255],   // Light blue
+          [0, 102, 204],    // Medium blue
+          [0, 51, 153],     // Dark blue
+        ],
+        visible: showCoverageHeatmap,
       })
     );
   }

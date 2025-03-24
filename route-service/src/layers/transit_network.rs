@@ -99,6 +99,15 @@ impl TransitNetwork {
                                         stop_times.stop.stop_lat.unwrap_or_default(),
                                     )
                                     .map(|idx| grid.get_zone(idx).zoneid),
+                                nearby_zones: grid
+                                    .rtree
+                                    .locate_in_envelope_intersecting(&geo_util::compute_envelope(
+                                        stop_times.stop.stop_lat.unwrap_or_default(),
+                                        stop_times.stop.stop_lon.unwrap_or_default(),
+                                        400.0,
+                                    ))
+                                    .map(|node| grid.get_zone(node.get_node_index()).zoneid)
+                                    .collect(),
                             });
                             stops_map.insert(stop_times.stop_id.clone(), Arc::clone(&new_stop));
                             let rtree_node = RTreeNode {
@@ -639,8 +648,9 @@ fn is_intercity(trip: &Trip, road: &RoadNetwork) -> bool {
 pub struct TransitStop {
     pub stop_id: String,
     pub geom: Point,
-    osmid: Option<u64>, // nearby road network osmid, if one exists
-    zone: Option<u32>,  // nearby zone id, if one exists
+    osmid: Option<u64>,     // nearby road network osmid, if one exists
+    zone: Option<u32>,      // nearby zone id, if one exists
+    nearby_zones: Vec<u32>, // zones within 400m radius of this stop (walking distance)
 }
 
 impl TransitStop {
@@ -679,6 +689,20 @@ impl TransitStop {
         } else {
             None
         }
+    }
+
+    pub fn nearby_zones<'a>(&self, grid: &'a GridNetwork) -> Vec<&'a Zone> {
+        self.nearby_zones
+            .iter()
+            .map(|zoneid| grid.get_zone(grid.get_zone_idx_by_id(*zoneid)))
+            .collect()
+    }
+
+    pub fn nearby_zone_indices(&self, grid: &GridNetwork) -> Vec<NodeIndex> {
+        self.nearby_zones
+            .iter()
+            .map(|zoneid| grid.get_zone_idx_by_id(*zoneid))
+            .collect()
     }
 }
 

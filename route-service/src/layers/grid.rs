@@ -96,6 +96,13 @@ impl GridNetwork {
             _ => 0.0,
         }
     }
+
+    pub fn get_all_valid_zones(&self) -> Vec<NodeIndex> {
+        self.graph
+            .node_indices()
+            .filter(|&node| self.get_zone(node).valid_zone())
+            .collect()
+    }
 }
 
 #[derive(PartialOrd, Ord, Clone, Deserialize, Serialize, Hash, Eq, PartialEq)]
@@ -133,6 +140,12 @@ pub struct Zone {
     pub zoneid: u32,
     pub polygon: Polygon<f64>,
     pub population: u32,
+}
+
+impl Zone {
+    pub fn valid_zone(&self) -> bool {
+        self.population > 0
+    }
 }
 
 #[derive(Deserialize, Serialize)]

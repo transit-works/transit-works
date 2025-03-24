@@ -6,13 +6,15 @@ use std::{collections::HashMap, collections::HashSet, sync::Arc};
 use geo::{Area, Contains};
 use geo::{Intersects, Point, Polygon};
 use geo_types::Coord;
+use std::collections::VecDeque;
+use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
 
 use crate::layers::grid::TimePeriod;
 use crate::layers::{
     geo_util,
     grid::{GridNetwork, Link, Zone},
-    road_network::RoadNetwork,
+    road_network::{Node, RoadNetwork},
     transit_network::{TransitNetwork, TransitRoute, TransitStop},
 };
 
@@ -412,4 +414,165 @@ pub fn determine_routes_zone_to_zone_coverage(
         }
     }
     num_routes
+}
+
+/// Evaluate the expected number of transfers for trips using the transit network
+///
+/// # Arguments
+/// - `transit`: Transit network data
+/// - `od`: Origin-Destination matrix data
+///
+/// # Returns
+/// - Expected number of transfers
+/// - Map of zone index to expected number of transfers
+///
+/// The expected number of transfers is calculated by determining the number of transfers to complete all possible
+/// zone-to-zone trips in the city. A weight is applied based on the volume for that OD edge.
+pub fn average_transfers(
+    transit: &TransitNetwork,
+    od: &GridNetwork,
+) -> (f64, HashMap<NodeIndex, f64>) {
+    // save which routes access which zones to speed up computation
+    // define some acceptable walking radius for a transfer
+    let mut zone_to_routes = HashMap::new();
+    let mut route_to_zones = HashMap::new();
+
+    for route in &transit.routes {
+        let mut zones = HashSet::new();
+        for stop in &route.outbound_stops {
+            let nearby_zones = stop.nearby_zone_indices(od);
+            for zone in nearby_zones {
+                zones.insert(zone);
+            }
+        }
+        for zone in &zones {
+            zone_to_routes
+                .entry(*zone)
+                .or_insert_with(Vec::new)
+                .push(route.route_id.clone());
+        }
+        route_to_zones.insert(route.route_id.clone(), zones);
+    }
+
+    let zones = od.get_all_valid_zones();
+
+    let mut expected_transfers = 0.0;
+    let mut total_volume = 0.0;
+    let mut zone_to_transfers = HashMap::new();
+    for from in &zones {
+        if !zone_to_routes.contains_key(from) {
+            continue;
+        }
+        log::trace!("Zone {:?}", od.get_zone(*from).zoneid);
+
+        let transfers_map =
+            compute_all_transfers_from_zone(&zone_to_routes, &route_to_zones, *from, &zones);
+
+        let mut zone_expected_transfers = 0.0;
+        let mut zone_total_volume = 0.0;
+
+        for to in &zones {
+            if from == to {
+                continue;
+            }
+            let demand = od.demand_between_zones(*from, *to);
+
+            if let Some(transfers) = transfers_map.get(to) {
+                zone_expected_transfers += *transfers * demand;
+                zone_total_volume += demand;
+            }
+        }
+
+        if zone_total_volume > 0.0 {
+            zone_to_transfers.insert(*from, zone_expected_transfers / zone_total_volume);
+            expected_transfers += zone_expected_transfers;
+            total_volume += zone_total_volume;
+        }
+    }
+
+    let avg_transfers = if total_volume > 0.0 {
+        expected_transfers / total_volume
+    } else {
+        0.0
+    };
+    (avg_transfers, zone_to_transfers)
+}
+
+/// Calculate minimum transfers from a source zone to all possible destination zones
+/// using a single BFS traversal
+fn compute_all_transfers_from_zone(
+    zone_to_routes: &HashMap<NodeIndex, Vec<String>>,
+    route_to_zones: &HashMap<String, HashSet<NodeIndex>>,
+    from: NodeIndex,
+    zones: &Vec<NodeIndex>,
+) -> HashMap<NodeIndex, f64> {
+    let mut transfers_map = HashMap::new();
+
+    // If source zone has no routes, all destinations are unreachable
+    if !zone_to_routes.contains_key(&from) {
+        return transfers_map;
+    }
+
+    // Source to source is always 0 transfers
+    transfers_map.insert(from, 0.0);
+
+    // Track visited zones to avoid cycles
+    let mut visited = HashSet::new();
+    visited.insert(from);
+
+    // Queue of (zone, transfers)
+    let mut queue = VecDeque::new();
+    queue.push_back((from, 0.0));
+
+    // Initialize with direct connections (0 transfers)
+    for route in zone_to_routes[&from].iter() {
+        if let Some(reachable_zones) = route_to_zones.get(route) {
+            for &zone in reachable_zones {
+                if zone != from {
+                    transfers_map.insert(zone, 0.0); // Direct connection = 0 transfers
+                    visited.insert(zone);
+                    queue.push_back((zone, 0.0));
+                }
+            }
+        }
+    }
+
+    while let Some((current_zone, transfers)) = queue.pop_front() {
+        // Get all routes from the current zone
+        if let Some(routes) = zone_to_routes.get(&current_zone) {
+            for route in routes {
+                // Get all zones reachable from this route
+                if let Some(reachable_zones) = route_to_zones.get(route) {
+                    for &next_zone in reachable_zones {
+                        if next_zone == from || visited.contains(&next_zone) {
+                            continue;
+                        }
+
+                        // If we haven't seen this zone yet or found a better path
+                        let new_transfers = transfers + 1.0;
+                        let update = match transfers_map.get(&next_zone) {
+                            None => true,
+                            Some(&existing) => new_transfers < existing,
+                        };
+
+                        if update {
+                            transfers_map.insert(next_zone, new_transfers);
+                            visited.insert(next_zone);
+                            queue.push_back((next_zone, new_transfers));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Apply a penalty for unreachable zones
+    let penalty = 5.0;
+    for &zone in zones {
+        if zone != from && !transfers_map.contains_key(&zone) {
+            transfers_map.insert(zone, penalty);
+        }
+    }
+
+    transfers_map
 }
