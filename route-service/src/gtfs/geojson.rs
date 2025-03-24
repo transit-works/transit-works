@@ -104,30 +104,28 @@ fn build_route_shape_mapping(trips: &HashMap<String, Vec<Trip>>) -> HashMap<Stri
 
 // Map route_id to [stop_id]
 fn build_route_stop_mapping(trips: &HashMap<String, Vec<Trip>>) -> HashMap<String, Vec<String>> {
-    let mut set_mapping: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut mapping: HashMap<String, Vec<String>> = HashMap::new();
     for trip_list in trips.values() {
         for trip in trip_list {
-            let stop_id = trip
+            let stop_ids = trip
                 .stop_times
                 .iter()
                 .map(|stop_time| stop_time.stop_id.clone())
-                .collect::<HashSet<String>>();
+                .collect::<Vec<String>>();
 
-            if let Some(set) = set_mapping.get_mut(&trip.route_id) {
-                set.extend(stop_id);
+            if let Some(vec) = mapping.get_mut(&trip.route_id) {
+                for stop_id in stop_ids {
+                    if !vec.contains(&stop_id) {
+                        vec.push(stop_id.clone());
+                    }
+                }
             } else {
-                set_mapping.insert(trip.route_id.clone(), stop_id);
+                mapping.insert(trip.route_id.clone(), stop_ids);
             }
         }
     }
 
-    set_mapping
-        .into_iter()
-        .map(|(route_id, stop_ids)| {
-            let stop_ids = stop_ids.into_iter().collect();
-            (route_id, stop_ids)
-        })
-        .collect::<HashMap<String, Vec<String>>>()
+    mapping
 }
 
 fn get_route_coords(
