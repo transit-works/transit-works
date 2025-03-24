@@ -78,10 +78,10 @@ function InfoPanel({ popupInfo, setPopupInfo, optimizedRoutes, ridershipData, op
             </div>
             
             <div className="space-y-2 text-sm mb-3">
-              <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-rose-600">
+              {/* <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-rose-600">
                 <span className="font-medium font-heading text-zinc-300 w-16">ID:</span>
                 <span className="text-white font-body">{popupInfo.properties.route_id}</span>
-              </div>
+              </div> */}
               <div className="bg-zinc-800/50 p-2 rounded-md flex items-center border-l-2 border-rose-600">
                 <span className="font-medium font-heading text-zinc-300 w-16">Name:</span>
                 <span className="text-white font-body">{popupInfo.properties.route_long_name}</span>

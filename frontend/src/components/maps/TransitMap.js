@@ -15,6 +15,7 @@ import OptimizedBanner from './ui/OptimizedBanner';
 import RouteStopsCarousel from './ui/RouteStopsCarousel';
 import { getInitialViewState } from './utils/mapUtils';
 import RouteColorLegend from './ui/RouteColorLegend';
+import NoopBanner from './ui/NoopBanner';
 
 // Create the overlay for Deck.gl layers
 function DeckGLOverlay(props) {
@@ -62,6 +63,9 @@ function TransitMap({
   setIsRouteCarouselVisible,
   city,
   colorByRouteType,
+  noopRoutes,
+  optimizationResults,
+  setOptimizationResults,
 }) {
   const mapRef = useRef(null);
   
@@ -77,10 +81,17 @@ function TransitMap({
   const [panelOpen, setPanelOpen] = useState(true);
   const [showParametersPopup, setShowParametersPopup] = useState(false);
   const [showOptimizedBanner, setShowOptimizedBanner] = useState(false);
+  const [showNoopBanner, setShowNoopBanner] = useState(false);
   const [collapsedBanner, setCollapsedBanner] = useState(false);
+  const [collapsedNoopBanner, setCollapsedNoopBanner] = useState(false);
   const [showColorLegend, setShowColorLegend] = useState(true);
   const [isBusRoute, setIsBusRoute] = useState(false);
   const [coverageData, setCoverageData] = useState(null);
+  const [deckGlKey, setDeckGlKey] = useState(0);
+  const [layerVersion, setLayerVersion] = useState(0);
+  const prevOptimizedSize = useRef(optimizedRoutes.size);
+  const prevNoopSize = useRef(noopRoutes.size);
+  const [isResetting, setIsResetting] = useState(false);
   
   // Use either props or local state
   const selectedRoute = propsSelectedRoute || localSelectedRoute;
@@ -214,11 +225,15 @@ function TransitMap({
         if (isCurrentlySelected) {
           setSelectedRoute(null);
           effectiveSetSelectedRoutes(new Set());
-          setShowOptimizedBanner(false); // Hide banner when deselecting
+          setShowOptimizedBanner(false);
+          setShowNoopBanner(false);
         } else {
           setSelectedRoute(routeId);
           effectiveSetSelectedRoutes(new Set([routeId]));
-          setShowOptimizedBanner(optimizedRoutes.has(routeId)); // Show banner if optimized route
+          
+          // Show appropriate banner based on route status
+          setShowOptimizedBanner(optimizedRoutes.has(routeId));
+          setShowNoopBanner(noopRoutes.has(routeId));
         }
       }
   
@@ -280,6 +295,7 @@ function TransitMap({
     effectiveSelectedRoutes,
     useRandomColors,
     optimizedRoutes,
+    noopRoutes, // Make sure to pass noopRoutes here
     showPopulationHeatmap,
     populationData,
     onClick: handleClick,
@@ -288,6 +304,8 @@ function TransitMap({
     colorByRouteType,
     showCoverageHeatmap,
     coverageData,
+    layerVersion, // Include the layer version
+    resetFlag: isResetting,
   });
 
   // Effects
@@ -328,11 +346,17 @@ function TransitMap({
           type: 'LineString'
         });
         fetchRidershipData(selectedRoute);
+        
+        // Set banner visibility based on route status
+        setShowOptimizedBanner(optimizedRoutes.has(selectedRoute));
+        setShowNoopBanner(noopRoutes.has(selectedRoute));
       }
     } else if (!multiSelectMode) {
       setPopupInfo(null);
+      setShowOptimizedBanner(false);
+      setShowNoopBanner(false);
     }
-  }, [selectedRoute, multiSelectMode, data, optimizedRoutesData]);
+  }, [selectedRoute, multiSelectMode, data, optimizedRoutesData, optimizedRoutes, noopRoutes]);
 
   // Add the Escape key functionality here
   useEffect(() => {
@@ -342,7 +366,12 @@ function TransitMap({
           setSelectedRoute(null);
           effectiveSetSelectedRoutes(new Set());
           setShowOptimizedBanner(false);
+          setShowNoopBanner(false);
           setPopupInfo(null);
+          // Also close optimization results if open
+          if (setOptimizationResults) {
+            setOptimizationResults(null);
+          }
         }
       }
     };
@@ -351,7 +380,7 @@ function TransitMap({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedRoute, setSelectedRoute, effectiveSetSelectedRoutes, setShowOptimizedBanner, setPopupInfo]);
+  }, [selectedRoute, setSelectedRoute, effectiveSetSelectedRoutes, setPopupInfo, setOptimizationResults]);
 
   useEffect(() => {
     if (useRandomColors) {
@@ -409,6 +438,44 @@ function TransitMap({
     return true;
   };
 
+  useEffect(() => {
+    // Check if routes were reset (went from non-zero to zero)
+    const wasReset = 
+      (prevOptimizedSize.current > 0 && optimizedRoutes.size === 0) ||
+      (prevNoopSize.current > 0 && noopRoutes.size === 0);
+    
+    // Update references
+    prevOptimizedSize.current = optimizedRoutes.size;
+    prevNoopSize.current = noopRoutes.size;
+    
+    // If routes were reset, increment layer version to force rerender
+    if (wasReset) {
+      console.log('Routes reset detected - forcing layer rerender');
+      setLayerVersion(v => v + 1);
+      setDeckGlKey(k => k + 1); // Also update the DeckGL key
+    }
+  }, [optimizedRoutes.size, noopRoutes.size]);
+  
+  // Create a custom reset function with brute force approach
+  const handleResetOptimization = async () => {
+    try {
+      await resetOptimization();
+      
+      // Set the reset flag to force route colors back to default
+      setIsResetting(true);
+      
+      // Force re-render with the reset flag
+      setDeckGlKey(k => k + 1);
+      
+      // Clear the reset flag after a short delay
+      setTimeout(() => {
+        setIsResetting(false);
+      }, 200);
+    } catch (error) {
+      console.error('Error in reset handling:', error);
+    }
+  };
+
   return (
     <>
       <Map
@@ -417,7 +484,10 @@ function TransitMap({
         mapStyle={mapStyle}
         onLoad={handleMapLoad}
       >
-        <DeckGLOverlay layers={layers} />
+        <DeckGLOverlay 
+          key={`deck-gl`} 
+          layers={layers} 
+        />
         <NavigationControl position="top-right" />
         
         <InfoPanel 
@@ -435,6 +505,13 @@ function TransitMap({
           setCollapsedBanner={setCollapsedBanner}
         />
         
+        <NoopBanner 
+          isVisible={showNoopBanner}
+          selectedRoute={selectedRoute}
+          collapsedBanner={collapsedNoopBanner}
+          setCollapsedBanner={setCollapsedNoopBanner}
+        />
+        
         <button
           className={`absolute bottom-12 ${panelOpen ? 'right-72' : 'right-0'} w-8 h-12 bg-zinc-900/60 backdrop-blur-md text-white flex items-center justify-center rounded-l-md z-20 hover:bg-accent/80 hover:text-white focus:outline-none transition-all duration-300`}
           onClick={togglePanel}
@@ -446,7 +523,8 @@ function TransitMap({
         <MapControls
           open={panelOpen}
           optimizedRoutes={optimizedRoutes}
-          resetOptimization={resetOptimization}
+          noopRoutes={noopRoutes} // Add this prop
+          resetOptimization={handleResetOptimization} // Use our wrapper instead of the original
           multiSelectMode={multiSelectMode}
           setMultiSelectMode={setMultiSelectMode}
           useLiveOptimization={useLiveOptimization}
@@ -457,7 +535,6 @@ function TransitMap({
           onOptimize={onOptimize}
           fetchRidershipData={fetchRidershipData}
           setShowParametersPopup={setShowParametersPopup}
-          setShowColorLegend={setShowColorLegend}
           isBusRoute={isBusRoute}
           areSelectedRoutesBusRoutes={areSelectedRoutesBusRoutes()}
         />

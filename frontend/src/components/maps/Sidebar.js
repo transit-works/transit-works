@@ -225,12 +225,6 @@ function Sidebar({
           disabled={selectedRoutes?.size === 0 || isOptimizing}
           isLoading={isOptimizing}
         />
-        
-        {optimizationError && (
-          <div className="mt-1 text-xs text-red-500 text-center">
-            {optimizationError}
-          </div>
-        )}
 
         <div className="flex justify-around pt-2">
           <Link href="/" className="w-full pr-1" passHref>

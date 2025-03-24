@@ -385,7 +385,7 @@ async fn get_avg_transfers(data: web::Data<AppState>) -> impl Responder {
                             "TRANSFERS": transfers,
                             "COORDINATES": match zone.polygon.centroid() {
                                 Some(centroid) => [centroid.x(), centroid.y()],
-                                None => [0.0, 0.0],
+                                None => [0.0, 0.0], // Default coordinates if centroid is None
                             }
                         })
                     })
@@ -455,6 +455,12 @@ async fn reset_optimizations(data: web::Data<AppState>) -> impl Responder {
         {
             let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
             optimized_route_ids.clear();
+        }
+
+        // Clear the list of noop route IDs
+        {
+            let mut noop_route_ids = data.noop_route_ids.lock().unwrap();
+            noop_route_ids.clear();
         }
 
         return HttpResponse::Ok().json(serde_json::json!({
