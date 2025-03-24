@@ -585,7 +585,8 @@ async fn evaluate_network(data: web::Data<AppState>) -> impl Responder {
         );
 
         // Calculate metrics for optimized network
-        let optimized_coverage_score = eval::evaluate_network_coverage(&optimized_transit, &city.grid);
+        let optimized_coverage_score =
+            eval::evaluate_network_coverage(&optimized_transit, &city.grid);
         let optimized_economic_score =
             eval::evaluate_network_economic_score(&optimized_transit, &city.grid);
         let optimized_avg_ridership = eval::avg_ridership(&optimized_transit, &city.grid);
