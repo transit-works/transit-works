@@ -34,7 +34,13 @@ export function getInitialViewState(city = 'toronto') {
       bearing: 0,
       pitch: 30
     },
-    // Add more cities as needed
+    austin: {
+      latitude: 30.2672,
+      longitude: -97.7431,
+      zoom: 12,
+      bearing: 0,
+      pitch: 30
+    },
   };
 
   return cityCoordinates[city.toLowerCase()] || cityCoordinates.toronto;

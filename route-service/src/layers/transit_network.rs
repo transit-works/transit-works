@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::gtfs::gtfs::Gtfs;
 use crate::gtfs::structs::{Frequency, Route, RouteType, Shape, Stop, StopTime, Trip};
 use crate::layers::error::Error;
+use crate::opt::eval::{TransitNetworkEvals, TransitRouteEvals};
 
 use super::geo_util;
 use super::grid::{GridNetwork, Zone};
@@ -26,6 +27,75 @@ pub struct TransitNetwork {
     pub inbound_stops: RTree<RTreeNode>,
     /// `outbound_stops` are stops that are part of the outbound direction of a route
     pub outbound_stops: RTree<RTreeNode>,
+    /// Evaluation metrics for the transit network
+    pub evals: Option<TransitNetworkEvals>,
+}
+
+#[derive(PartialEq, Clone, Deserialize, Serialize)]
+pub struct TransitRoute {
+    pub route_id: String,
+    pub route_type: TransitRouteType,
+    pub inbound_stops: Vec<Arc<TransitStop>>,
+    pub outbound_stops: Vec<Arc<TransitStop>>,
+    pub evals: Option<TransitRouteEvals>,
+    pub stop_times: HashMap<usize, usize>,
+}
+
+#[derive(PartialEq, Clone, Deserialize, Serialize)]
+pub enum TransitRouteType {
+    Tram,
+    Subway,
+    Rail,
+    Bus,
+    Ferry,
+    CableTram,
+    AerialLift,
+    Funicular,
+    Trolleybus,
+    Monorail,
+    IntercityBus,
+    Unkown,
+}
+
+impl From<RouteType> for TransitRouteType {
+    fn from(route_type: RouteType) -> Self {
+        match route_type {
+            RouteType::Tram => TransitRouteType::Tram,
+            RouteType::Subway => TransitRouteType::Subway,
+            RouteType::Rail => TransitRouteType::Rail,
+            RouteType::Bus => TransitRouteType::Bus,
+            RouteType::Ferry => TransitRouteType::Ferry,
+            RouteType::CableTram => TransitRouteType::CableTram,
+            RouteType::AerialLift => TransitRouteType::AerialLift,
+            RouteType::Funicular => TransitRouteType::Funicular,
+            RouteType::Trolleybus => TransitRouteType::Trolleybus,
+            RouteType::Monorail => TransitRouteType::Monorail,
+            RouteType::Unknown => TransitRouteType::Unkown,
+        }
+    }
+}
+
+impl TransitRoute {
+    pub fn with_evals(
+        network: &TransitNetwork,
+        grid: &GridNetwork,
+        route_id: String,
+        route_type: TransitRouteType,
+        outbound_stops: Vec<Arc<TransitStop>>,
+        inbound_stops: Vec<Arc<TransitStop>>,
+        stop_times: HashMap<usize, usize>,
+    ) -> TransitRoute {
+        let mut route = TransitRoute {
+            route_id: route_id,
+            route_type: route_type,
+            inbound_stops: inbound_stops,
+            outbound_stops: outbound_stops,
+            evals: None,
+            stop_times: stop_times,
+        };
+        route.evals = Some(TransitRouteEvals::for_route(network, &route, grid));
+        route
+    }
 }
 
 impl TransitNetwork {
@@ -177,13 +247,32 @@ impl TransitNetwork {
                 inbound_stops: inbound_stops,
                 outbound_stops: outbound_stops,
                 stop_times: freq_hash,
+                evals: None,
             });
         }
-        Ok(TransitNetwork {
+
+        let mut network = TransitNetwork {
             routes: routes,
             inbound_stops: inbound_stops_tree,
             outbound_stops: outbound_stops_tree,
-        })
+            evals: None,
+        };
+
+        // Calculate all route evals first
+        let route_evals: Vec<_> = network
+            .routes
+            .iter()
+            .map(|route| TransitRouteEvals::for_route(&network, route, grid))
+            .collect();
+
+        // Then update the routes with their evaluations
+        for (route, eval) in network.routes.iter_mut().zip(route_evals) {
+            route.evals = Some(eval);
+        }
+
+        network.evals = Some(TransitNetworkEvals::for_network(&network, grid));
+
+        Ok(network)
     }
 
     pub fn to_gtfs(&self, src_gtfs: &Gtfs, road: &RoadNetwork) -> Gtfs {
@@ -575,49 +664,6 @@ fn trip_is_outbound(trip: &Trip) -> bool {
         ),
     );
     geo_util::is_outbound(a, b)
-}
-
-#[derive(PartialEq, Clone, Deserialize, Serialize)]
-pub struct TransitRoute {
-    pub route_id: String,
-    pub route_type: TransitRouteType,
-    pub inbound_stops: Vec<Arc<TransitStop>>,
-    pub outbound_stops: Vec<Arc<TransitStop>>,
-    pub stop_times: HashMap<usize, usize>,
-}
-
-#[derive(PartialEq, Clone, Deserialize, Serialize)]
-pub enum TransitRouteType {
-    Tram,
-    Subway,
-    Rail,
-    Bus,
-    Ferry,
-    CableTram,
-    AerialLift,
-    Funicular,
-    Trolleybus,
-    Monorail,
-    IntercityBus,
-    Unkown,
-}
-
-impl From<RouteType> for TransitRouteType {
-    fn from(route_type: RouteType) -> Self {
-        match route_type {
-            RouteType::Tram => TransitRouteType::Tram,
-            RouteType::Subway => TransitRouteType::Subway,
-            RouteType::Rail => TransitRouteType::Rail,
-            RouteType::Bus => TransitRouteType::Bus,
-            RouteType::Ferry => TransitRouteType::Ferry,
-            RouteType::CableTram => TransitRouteType::CableTram,
-            RouteType::AerialLift => TransitRouteType::AerialLift,
-            RouteType::Funicular => TransitRouteType::Funicular,
-            RouteType::Trolleybus => TransitRouteType::Trolleybus,
-            RouteType::Monorail => TransitRouteType::Monorail,
-            RouteType::Unknown => TransitRouteType::Unkown,
-        }
-    }
 }
 
 /// Classify intercity bus routes

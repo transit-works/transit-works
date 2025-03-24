@@ -1,7 +1,10 @@
 use rand::Rng;
 
 use crate::{
-    layers::{city::City, transit_network::TransitRoute},
+    layers::{
+        city::City,
+        transit_network::{TransitNetwork, TransitRoute},
+    },
     opt::aco2::{run_aco, ACO},
 };
 
@@ -67,6 +70,8 @@ impl GAConfig {
     pub fn optimize_aco_params(&self, route: &TransitRoute, city: &City) -> Option<(ACO, f64)> {
         let mut rng = rand::thread_rng();
 
+        let transit = city.transit.clone();
+
         log::info!(
             "Starting GA optimization for route {} with population={}, generations={}",
             route.route_id,
@@ -85,7 +90,7 @@ impl GAConfig {
         log::info!("Evaluating initial population");
         for (i, individual) in population.iter_mut().enumerate() {
             log::debug!("Evaluating individual {}/{}", i + 1, self.population_size);
-            self.evaluate_fitness(individual, route, city);
+            self.evaluate_fitness(individual, route, city, &transit);
         }
 
         // Keep track of best solution
@@ -146,7 +151,7 @@ impl GAConfig {
             for (i, individual) in population.iter_mut().enumerate() {
                 if individual.fitness.is_none() {
                     log::trace!("Evaluating individual {}/{}", i + 1, self.population_size);
-                    self.evaluate_fitness(individual, route, city);
+                    self.evaluate_fitness(individual, route, city, &transit);
                 }
             }
 
@@ -239,9 +244,15 @@ impl GAConfig {
     }
 
     /// Evaluate fitness of an individual
-    fn evaluate_fitness(&self, individual: &mut ACOChromosome, route: &TransitRoute, city: &City) {
+    fn evaluate_fitness(
+        &self,
+        individual: &mut ACOChromosome,
+        route: &TransitRoute,
+        city: &City,
+        transit: &TransitNetwork,
+    ) {
         // Run ACO with the parameters and evaluate the result
-        if let Some((_, score)) = run_aco(individual.aco_params.clone(), route, city) {
+        if let Some((_, score)) = run_aco(individual.aco_params.clone(), route, city, transit) {
             individual.fitness = Some(score);
         } else {
             // If ACO fails to find a route, assign a low fitness

@@ -76,7 +76,6 @@ fn main() {
     // println!("old : {}", res);
     // println!("new : {}", new_res);
 
-
     let res = evaluate_network_economic_score(&transit, grid);
     return ();
 
