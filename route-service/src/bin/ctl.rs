@@ -9,8 +9,11 @@ use route_service::layers::city::City;
 use route_service::layers::{
     grid::GridNetwork, road_network::RoadNetwork, transit_network::TransitNetwork,
 };
-use route_service::opt::aco::ACO;
-use route_service::opt::eval::{evaluate_coverage, evaluate_network_coverage};
+use route_service::opt::aco2::{run_aco, ACO};
+use route_service::opt::eval::{
+    evaluate_coverage, evaluate_economic_score, evaluate_network_coverage,
+    evaluate_network_economic_score,
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -40,7 +43,7 @@ fn main() {
     let grid = &city.grid;
     let road = &city.road;
     let gtfs = &city.gtfs;
-    let mut transit = city.transit;
+    let transit = &city.transit;
 
     output_geojson(&gtfs, &format!("{}/gtfs.geojson", args.output_dir));
 
@@ -55,7 +58,7 @@ fn main() {
         .routes
         .iter()
         .filter(|r| {
-            r.route_id == "73672"
+            r.route_id == "73771"
             // || r.route_id == "73705"
             // || r.route_id == "73688"
             // || r.route_id == "73682"
@@ -63,7 +66,18 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    let res = evaluate_network_coverage(&transit, grid);
+    // let res = evaluate_economic_score(target_routes[0], &target_routes[0].outbound_stops, grid);
+
+    // let aco = ACO::init();
+    // let optimized_route = run_aco(aco, target_routes[0], &city);
+    // let test = optimized_route.unwrap().0;
+    // let new_res = evaluate_economic_score(&test, &test.outbound_stops, grid);
+
+    // println!("old : {}", res);
+    // println!("new : {}", new_res);
+
+
+    let res = evaluate_network_economic_score(&transit, grid);
     return ();
 
     // Only consider non-bus routes
@@ -143,7 +157,7 @@ fn main() {
         .routes
         .iter()
         .filter(|r| {
-            r.route_id == "73658"
+            r.route_id == "73643"
             // || r.route_id == "73705"
             // || r.route_id == "73688"
             // || r.route_id == "73682"
@@ -153,7 +167,7 @@ fn main() {
 
     println!("Running ACO!");
     let start = Instant::now();
-    let optimized_routes = aco.optimize_routes(&grid, &road, &mut transit.clone(), &target_routes);
+    //let optimized_routes = aco.optimize_routes(&grid, &road, &mut transit.clone(), &target_routes);
     println!("  ACO finished in {:?}", start.elapsed());
 
     // merge optimized routes to transit network routes
@@ -165,7 +179,7 @@ fn main() {
     //         .clone()
     // });
     // transit.print_stats();
-    transit.routes = optimized_routes;
+    //transit.routes = optimized_routes;
 
     let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
     output_routes_geojson(&transit, &gtfs, &road, &solution_path);

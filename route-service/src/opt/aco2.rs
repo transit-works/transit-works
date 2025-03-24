@@ -280,6 +280,7 @@ pub fn run_aco(params: ACO, route: &TransitRoute, city: &City) -> Option<(Transi
     }
 
     if gen_best_eval > init_eval {
+        gen_best_route.stop_times = route.stop_times.clone();
         return Some((gen_best_route, gen_best_eval));
     } else {
         return None;
@@ -570,6 +571,7 @@ fn adjust_route(
         route_type: route.route_type.clone(),
         outbound_stops: new_stops,
         inbound_stops: vec![],
+        stop_times: HashMap::new(),
     })
 }
 

@@ -37,7 +37,7 @@ impl Id for Agency {
 
 /// A physical stop, station, or area.
 /// https://gtfs.org/documentation/schedule/reference/#stopstxt
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Stop {
     pub stop_id: String,
     pub stop_code: Option<String>,
@@ -206,7 +206,7 @@ pub enum BikesAllowed {
 
 /// Scheduled stop time for a trip.
 /// https://gtfs.org/documentation/schedule/reference/#stop_timestxt
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, Default, Clone)]
 pub struct StopTime {
     pub trip_id: String,
     pub arrival_time: Option<String>,
@@ -432,7 +432,7 @@ pub enum ExactTimes {
 
 /// Rules for making connections at transfer points between routes.
 /// https://gtfs.org/documentation/schedule/reference/#transferstxt
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
 pub struct Transfer {
     pub from_stop_id: String,
     pub to_stop_id: String,
@@ -458,7 +458,7 @@ pub enum TransferType {
 
 /// Pathways within stations to guide passengers between locations.
 /// https://gtfs.org/documentation/schedule/reference/#pathwaystxt
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
 pub struct Pathway {
     pub pathway_id: String,
     pub from_stop_id: String,

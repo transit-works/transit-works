@@ -381,6 +381,7 @@ impl ACO {
             route_type: route.route_type.clone(),
             inbound_stops: ACO::construct_inbound_stops(&stops, transit),
             outbound_stops: stops,
+            stop_times: route.stop_times.clone(),
         })
     }
 
