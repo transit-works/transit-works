@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import ProgressBar from '@/components/visualization/ProgressBar';
+import { fetchFromAPI } from '@/utils/api';
 
-function ExpandedSection({ onClose, cityName = "Toronto" }) {
+function ExpandedSection({ onClose, cityName, isVisible = true }) {
   const [cityData, setCityData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [rankedRoutes, setRankedRoutes] = useState([]);
+  const [routesLoading, setRoutesLoading] = useState(true);
   
   // Fetch city data based on city name
   useEffect(() => {
@@ -11,7 +14,7 @@ function ExpandedSection({ onClose, cityName = "Toronto" }) {
       try {
         const response = await fetch('/data/city_stats.json');
         const data = await response.json();
-        const city = data.find(c => c.name === cityName);
+        const city = data.find(c => c.name.toLowerCase() === cityName.toLowerCase());
         setCityData(city);
         setLoading(false);
       } catch (error) {
@@ -23,15 +26,42 @@ function ExpandedSection({ onClose, cityName = "Toronto" }) {
     fetchCityData();
   }, [cityName]);
   
-  // Sample optimized routes data for leaderboard
-  const topOptimizedRoutes = [
-    { id: "R-104", name: "Downtown Express", improvement: 37.8, current: 65, optimized: 92 },
-    { id: "R-029", name: "East Side Connector", improvement: 29.4, current: 48, optimized: 75 },
-    { id: "R-056", name: "University Line", improvement: 24.2, current: 72, optimized: 89 },
-    { id: "R-018", name: "Airport Express", improvement: 21.5, current: 58, optimized: 76 },
-    { id: "R-033", name: "Waterfront Loop", improvement: 19.7, current: 61, optimized: 73 }
-  ];
-  
+  useEffect(() => {
+    // Only perform fetch if the sidebar is visible
+    if (!isVisible) {
+      return;
+    }
+    
+    const fetchRankedRoutes = async () => {
+      try {
+        console.log(`Fetching ranked route improvements for ${cityName}...`);
+        setRoutesLoading(true);
+        const data = await fetchFromAPI('/rank-route-improvements', {}, cityName);
+        if (data && data.ranked_routes) {
+          const formattedRoutes = data.ranked_routes.map(route => ({
+            id: route.route_id,
+            name: route.route_long_name || route.route_id,
+            improvement: route.improvement,
+            current: route.score_before,
+            optimized: route.score_after
+          }));
+          setRankedRoutes(formattedRoutes);
+          console.log(`Fetched ${formattedRoutes.length} optimized routes for ${cityName}`);
+        } else {
+          console.log("No ranked routes data returned from API");
+          setRankedRoutes([]);
+        }
+      } catch (error) {
+        console.error(`Failed to fetch ranked routes for ${cityName}:`, error);
+        setRankedRoutes([]);
+      } finally {
+        setRoutesLoading(false);
+      }
+    };
+    
+    fetchRankedRoutes();
+  }, [cityName, isVisible]);
+
   // Performance metrics that will leverage both current and future optimized data
   const performanceMetrics = [
     {
@@ -212,55 +242,74 @@ function ExpandedSection({ onClose, cityName = "Toronto" }) {
         </div>
       </div>
       
-      {/* Leaderboard Section - New */}
+      {/* Leaderboard Section - Updated to use API data */}
       <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg mb-6">
-        <h3 className="font-medium text-white mb-4">Top Routes by Improvement</h3>
+        <h3 className="font-medium text-white mb-4">
+          Top Routes by Improvement
+          {routesLoading && (
+            <span className="ml-2 text-xs text-zinc-400">(refreshing...)</span>
+          )}
+        </h3>
         <div className="overflow-hidden rounded-lg border border-zinc-700">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-zinc-800 text-xs uppercase text-zinc-400">
-                <th className="px-4 py-2 text-left">Route</th>
-                <th className="px-4 py-2 text-left">Name</th>
-                <th className="px-4 py-2 text-right">Improvement</th>
-                <th className="px-4 py-2 text-center">Before/After</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-700">
-              {topOptimizedRoutes.map((route, index) => (
-                <tr key={index} className="hover:bg-zinc-800/40">
-                  <td className="px-4 py-3 text-white font-medium">{route.id}</td>
-                  <td className="px-4 py-3 text-zinc-300">{route.name}</td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-green-500 font-medium">+{route.improvement.toFixed(1)}%</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-16 h-2 rounded-full bg-zinc-700 overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-orange-500 to-orange-400"
-                          style={{ width: `${route.current}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-xs text-zinc-400">{route.current}</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M12 1.586l-4 4v12.828l4-4V1.586zM3.707 3.293A1 1 0 002 4v10a1 1 0 00.293.707L6 18.414V5.586L3.707 3.293zM17.707 5.293L14 1.586v12.828l2.293 2.293A1 1 0 0018 16V6a1 1 0 00-.293-.707z" clipRule="evenodd" />
-                      </svg>
-                      <div className="w-16 h-2 rounded-full bg-zinc-700 overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-500"
-                          style={{ width: `${route.optimized}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-xs text-zinc-400">{route.optimized}</span>
-                    </div>
-                  </td>
+          {routesLoading ? (
+            <div className="p-6 text-center text-zinc-400">
+              <svg className="animate-spin h-5 w-5 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Loading route improvements...
+            </div>
+          ) : rankedRoutes.length === 0 ? (
+            <div className="p-6 text-center text-zinc-400">
+              <div className="mb-2">No optimized routes available</div>
+              <div className="text-xs">Select and optimize routes from the sidebar to see improvements here</div>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="bg-zinc-800 text-xs uppercase text-zinc-400">
+                  <th className="px-4 py-2 text-left">Route</th>
+                  <th className="px-4 py-2 text-left">Name</th>
+                  <th className="px-4 py-2 text-right">Improvement</th>
+                  <th className="px-4 py-2 text-center">Before/After</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-zinc-700">
+                {rankedRoutes.slice(0, 5).map((route, index) => (
+                  <tr key={index} className="hover:bg-zinc-800/40">
+                    <td className="px-4 py-3 text-white font-medium">{route.id}</td>
+                    <td className="px-4 py-3 text-zinc-300">{route.name}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-green-500 font-medium">+{route.improvement.toFixed(1)}%</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-16 h-2 rounded-full bg-zinc-700 overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-orange-500 to-orange-400"
+                            style={{ width: `${route.current}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-zinc-400">{route.current.toFixed(2)}</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M12 1.586l-4 4v12.828l4-4V1.586zM3.707 3.293A1 1 0 002 4v10a1 1 0 00.293.707L6 18.414V5.586L3.707 3.293zM17.707 5.293L14 1.586v12.828l2.293 2.293A1 1 0 0018 16V6a1 1 0 00-.293-.707z" clipRule="evenodd" />
+                        </svg>
+                        <div className="w-16 h-2 rounded-full bg-zinc-700 overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-indigo-500"
+                            style={{ width: `${route.optimized}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-zinc-400">{route.optimized.toFixed(2)}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
-      
     </div>
   );
 }

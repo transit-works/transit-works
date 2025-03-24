@@ -534,7 +534,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           onTogglePopulationHeatmap={togglePopulationHeatmap}
           showCoverageHeatmap={showCoverageHeatmap}
           onToggleCoverageHeatmap={toggleCoverageHeatmap}
-          city={city} // Pass city prop to Sidebar
+          city={city}
           colorByRouteType={colorByRouteType}
           onToggleRouteTypeColors={toggleRouteTypeColors}
           noopRoutes={noopRoutes}

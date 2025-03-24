@@ -6,11 +6,13 @@ use std::{collections::HashMap, collections::HashSet, sync::Arc};
 use geo::{Area, Contains};
 use geo::{Intersects, Point, Polygon};
 use geo_types::Coord;
-use std::collections::VecDeque;
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
+use crate::gtfs::gtfs::Gtfs;
 use crate::layers::grid::TimePeriod;
+
 use crate::layers::{
     geo_util,
     grid::{GridNetwork, Link, Zone},
@@ -119,7 +121,9 @@ pub fn ridership_over_route(
     for stop in stops {
         if let Some(zone) = stop_to_zone.get(&stop.stop_id) {
             // Check if both maps contain the zone
-            if let (Some(&ridership_key), Some(&count)) = (zone_to_ridership.get(zone), zone_to_count.get(zone)) {
+            if let (Some(&ridership_key), Some(&count)) =
+                (zone_to_ridership.get(zone), zone_to_count.get(zone))
+            {
                 // Make sure count is not zero to avoid division by zero
                 if count > 0 {
                     let ridership_stop = ridership_key / count as f64;
@@ -190,7 +194,9 @@ pub fn ridership_over_route2(
     for stop in stops {
         if let Some(zone) = stop_to_zone.get(&stop.stop_id) {
             // Check if both maps contain the zone
-            if let (Some(&ridership_key), Some(&count)) = (zone_to_ridership.get(zone), zone_to_count.get(zone)) {
+            if let (Some(&ridership_key), Some(&count)) =
+                (zone_to_ridership.get(zone), zone_to_count.get(zone))
+            {
                 // Make sure count is not zero to avoid division by zero
                 if count > 0 {
                     let ridership_stop = ridership_key / count as f64;
@@ -611,4 +617,61 @@ fn compute_all_transfers_from_zone(
     }
 
     transfers_map
+}
+
+#[derive(Serialize)]
+pub struct RankedRoute {
+    pub route_id: String,
+    pub route_short_name: String,
+    pub route_long_name: String,
+    pub score_before: f64,
+    pub score_after: f64,
+    pub improvement: f64,
+}
+
+pub fn rank_routes_by_improvement(
+    original_gtfs: &Gtfs,
+    original_transit: &TransitNetwork,
+    optimized_transit: &TransitNetwork,
+    optimized_route_ids: &Vec<String>,
+) -> Vec<RankedRoute> {
+    let mut ranked_routes = vec![];
+    for route_id in optimized_route_ids {
+        let original = original_transit
+            .routes
+            .iter()
+            .find(|r| r.route_id == *route_id);
+        let optimized = optimized_transit
+            .routes
+            .iter()
+            .find(|r| r.route_id == *route_id);
+        if let (Some(original), Some(optimized)) = (original, optimized) {
+            let original_score = original.evals.as_ref().map_or(0.0, |e| e.avg_ridership);
+            let optimized_score = optimized.evals.as_ref().map_or(0.0, |e| e.avg_ridership);
+            let improvement_pct = (optimized_score - original_score) / original_score * 100.0;
+            ranked_routes.push(RankedRoute {
+                route_id: route_id.clone(),
+                route_short_name: original_gtfs
+                    .routes
+                    .get(route_id)
+                    .unwrap()
+                    .route_short_name
+                    .clone()
+                    .unwrap_or_default(),
+                route_long_name: original_gtfs
+                    .routes
+                    .get(route_id)
+                    .unwrap()
+                    .route_long_name
+                    .clone()
+                    .unwrap_or_default(),
+                score_before: original_score,
+                score_after: optimized_score,
+                improvement: improvement_pct,
+            });
+        }
+    }
+    // sort by highest improvement first
+    ranked_routes.sort_by(|a, b| b.improvement.partial_cmp(&a.improvement).unwrap());
+    ranked_routes
 }

@@ -36,6 +36,7 @@ function Sidebar({
   onToggleRouteTypeColors,
   showCoverageHeatmap,
   onToggleCoverageHeatmap,
+  city,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showExtraControls, setShowExtraControls] = useState(false);
@@ -61,7 +62,9 @@ function Sidebar({
       <div className="bg-background-light flex h-full flex-col p-3 transition-all duration-300">
         {/* Expand Button */}
         <div className="flex flex-row items-center justify-between pb-3 pl-2 pt-1">
-          <h2 className="font-heading text-xl leading-none text-white">Toronto</h2>
+          <h2 className="font-heading text-xl leading-none text-white">
+            {city.charAt(0).toUpperCase() + city.slice(1)} {/* Display capitalized city name */}
+          </h2>
           <button
             onClick={toggleSidebar}
             className="px-2 text-right font-body text-xs leading-none text-white hover:text-accent"
@@ -241,7 +244,7 @@ function Sidebar({
         </div>
       </div>
 
-      {isExpanded && <SidebarReport onClose={closeExpandedSection} />}
+      {isExpanded && <SidebarReport onClose={closeExpandedSection} cityName={city} isVisible={isExpanded} />}
     </div>
   );
 }

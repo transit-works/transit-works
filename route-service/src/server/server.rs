@@ -515,6 +515,42 @@ async fn optimize_live(
     ws::start(ws, &req, stream)
 }
 
+#[get("/rank-route-improvements")]
+async fn rank_route_improvements(data: web::Data<AppState>) -> impl Responder {
+    println!("Ranking routes by improvement");
+
+    // Get the necessary data
+    let city_guard = data.city.lock().unwrap();
+    let optimized_transit_guard = data.optimized_transit.lock().unwrap();
+    let optimized_route_ids = data.optimized_route_ids.lock().unwrap();
+
+    if let (Some(city), Some(optimized_transit)) = (&*city_guard, &*optimized_transit_guard) {
+        if optimized_route_ids.is_empty() {
+            return HttpResponse::Ok().json(serde_json::json!({
+                "message": "No routes have been optimized yet",
+                "ranked_routes": []
+            }));
+        }
+
+        // Call the rank_routes_by_improvement function
+        let ranked_routes = eval::rank_routes_by_improvement(
+            &city.gtfs,
+            &city.transit,
+            optimized_transit,
+            &optimized_route_ids,
+        );
+
+        HttpResponse::Ok().json(serde_json::json!({
+            "message": format!("Ranked {} optimized routes", ranked_routes.len()),
+            "ranked_routes": ranked_routes
+        }))
+    } else {
+        HttpResponse::InternalServerError().json(serde_json::json!({
+            "error": "City data not loaded"
+        }))
+    }
+}
+
 pub async fn start_server(
     city_name: &str,
     gtfs_path: &str,
@@ -563,6 +599,7 @@ pub async fn start_server(
             .service(get_avg_transfers)
             .service(get_noop_route_ids)
             .service(update_aco_params)
+            .service(rank_route_improvements)
     })
     .bind(addr)?
     .run()
