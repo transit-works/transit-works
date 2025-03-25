@@ -10,7 +10,10 @@ use geo::Centroid;
 use serde::Deserialize;
 use serde_json::Value;
 use std::net::SocketAddr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use std::thread;
 
 pub(crate) struct AppState {
     pub city: Mutex<Option<City>>,
@@ -18,6 +21,7 @@ pub(crate) struct AppState {
     pub optimized_route_ids: Mutex<Vec<String>>,          // Tracks which routes have been optimized
     pub noop_route_ids: Mutex<Vec<String>>, // Tracks which routes which cannot be optimized
     pub aco_params: Mutex<aco2::ACO>,       // ACO parameters
+    pub shutdown_signal: Arc<AtomicBool>,   // Signal to stop background threads
 }
 
 #[derive(Deserialize)]
@@ -701,6 +705,50 @@ async fn get_route_improvements(
     }
 }
 
+/// Background worker function that periodically updates the TransitNetworkEvals
+fn background_evaluation_worker(
+    app_state: web::Data<AppState>,
+    update_interval: Duration,
+) {
+    println!("Starting background evaluation thread with interval of {:?}", update_interval);
+
+    while !app_state.shutdown_signal.load(Ordering::Relaxed) {
+        // Sleep first to allow initial setup to complete
+        for _ in 0..30 {
+            if app_state.shutdown_signal.load(Ordering::Relaxed) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        println!("Background thread: Updating transit network evaluations");
+
+        // Get locks on required data
+        {
+            let city_guard = app_state.city.lock().unwrap();
+            if let Some(city) = &*city_guard {
+                let mut optimized_transit_guard = app_state.optimized_transit.lock().unwrap();
+                if let Some(optimized_transit) = optimized_transit_guard.as_mut() {
+                    // Update the network evaluations
+                    let network_evals = eval::TransitNetworkEvals::for_network(optimized_transit, &city.grid);
+                    optimized_transit.evals = Some(network_evals);
+                    println!("Background thread: Evaluations updated successfully");
+                }
+            }
+        }
+        
+        // Sleep for the remaining time of the update interval
+        for _ in 0..(update_interval.as_secs() * 10) {
+            if app_state.shutdown_signal.load(Ordering::Relaxed) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+    
+    println!("Background evaluation thread shutting down");
+}
+
 pub async fn start_server(
     city_name: &str,
     gtfs_path: &str,
@@ -725,16 +773,26 @@ pub async fn start_server(
     }
 
     // Initialize application state with the city and a copy of transit for optimizations
+    let shutdown_signal = Arc::new(AtomicBool::new(false));
+    
     let app_state = web::Data::new(AppState {
         optimized_transit: Mutex::new(city_result.as_ref().ok().map(|c| c.transit.clone())),
         optimized_route_ids: Mutex::new(Vec::new()),
         noop_route_ids: Mutex::new(Vec::new()),
         city: Mutex::new(city_result.ok()),
         aco_params: Mutex::new(aco2::ACO::init()),
+        shutdown_signal: shutdown_signal.clone(),
+    });
+    
+    // Start the background evaluation thread
+    let app_state_clone = app_state.clone();
+    let update_interval = Duration::from_secs(180); // 3 minutes
+    thread::spawn(move || {
+        background_evaluation_worker(app_state_clone, update_interval);
     });
 
     println!("Starting server on {}:{}", host, port);
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone()) // Pass the state to all routes
             .service(get_data)
@@ -754,9 +812,19 @@ pub async fn start_server(
             .service(get_route_improvements)
     })
     .bind(addr)?
-    .run()
-    .await?;
+    .run();
+    
+    // Set up graceful shutdown handling
+    let srv = server.handle();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        println!("Shutting down background threads...");
+        shutdown_signal.store(true, Ordering::SeqCst);
+        thread::sleep(Duration::from_millis(500));
+        srv.stop(true).await;
+    });
 
     println!("Server started at {} on port {}.", host, port);
+    server.await?;
     Ok(())
 }

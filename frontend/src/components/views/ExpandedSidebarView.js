@@ -171,11 +171,11 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
           <h3 className="text-white font-medium">Transit Performance</h3>
           <div className="flex items-center gap-4">
             <span className="flex items-center">
-              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-[#b31736] to-[#ff1643] mr-2"></span>
+              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-[#e11d48] to-[#fb7185] mr-2"></span>
               <span className="text-zinc-400 text-sm">Current</span>
             </span>
             <span className="flex items-center">
-              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-[#72ab27] to-[#9beb34] mr-2"></span>
+              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-[#16a34a] to-[#4ade80] mr-2"></span>
               <span className="text-zinc-400 text-sm">Optimized</span>
             </span>
           </div>
@@ -193,14 +193,14 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
             <ProgressBar 
               percentage={networkData ? networkData.original.transit_score.toFixed(0) : cityData.transitScore.toString()} 
               name="Current" 
-              startColor="#b31736" 
-              endColor="#ff1643" 
+              startColor="#e11d48" 
+              endColor="#fb7185" 
             />
             <ProgressBar 
               percentage={networkData ? networkData.optimized.transit_score.toFixed(0) : (cityData.transitScore * 1.24).toFixed(0)} 
               name="Optimized" 
-              startColor="#72ab27" 
-              endColor="#9beb34" 
+              startColor="#16a34a" 
+              endColor="#4ade80" 
             />
           </div>
           
@@ -216,14 +216,14 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
             <ProgressBar 
               percentage={networkData ? networkData.original.economic_score.toFixed(0) : cityData.economicScore.toString()} 
               name="Current" 
-              startColor="#b31736" 
-              endColor="#ff1643" 
+              startColor="#e11d48" 
+              endColor="#fb7185" 
             />
             <ProgressBar 
               percentage={networkData ? networkData.optimized.economic_score.toFixed(0) : (cityData.economicScore * 1.18).toFixed(0)} 
               name="Optimized" 
-              startColor="#72ab27" 
-              endColor="#9beb34" 
+              startColor="#16a34a" 
+              endColor="#4ade80" 
             />
           </div>
         </div>
@@ -398,7 +398,7 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-16 h-2 rounded-full bg-zinc-700 overflow-hidden">
                           <div 
-                            className="h-full bg-gradient-to-r from-orange-500 to-orange-400"
+                            className="h-full bg-gradient-to-r from-[#e11d48] to-[#fb7185]"
                             style={{ width: `${route.current}%` }}
                           ></div>
                         </div>
@@ -408,7 +408,7 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
                         </svg>
                         <div className="w-16 h-2 rounded-full bg-zinc-700 overflow-hidden">
                           <div 
-                            className="h-full bg-gradient-to-r from-blue-500 to-indigo-500"
+                            className="h-full bg-gradient-to-r from-[#16a34a] to-[#4ade80]"
                             style={{ width: `${route.optimized}%` }}
                           ></div>
                         </div>
