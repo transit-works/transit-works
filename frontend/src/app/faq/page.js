@@ -14,16 +14,32 @@ export default function FAQ() {
 
   const faqs = [
     {
-      question: "Why optimize?",
-      answer: "Good for environment and saves time for passengers."
+      question: "What kind of transit routes gets optimized?",
+      answer: "Bus routes"
+    },
+    {
+      question: "What data does the software use?",
+      answer: "The software utilizes publicly available data, including transit schedules (GTFS), road network details (OpenStreetMap), population demographics, and land-use information."
+    },
+    {
+      question: "What kind of simulation does the software perform?",
+      answer: "The software leverages real-world data and meta-heuristic algorithms like Ant Colony Optimization to simulate improvements in bus routes. Routes are evaluated against multiple commuter-focused metrics such as minimizing total travel time, reducing transfers, improving service frequency, and enhancing geographic coverage."
+    },
+    {
+      question: "How does the software determine commuter flow and population density?",
+      answer: "The software calculates commuter flow between geographic zones using the Gravity Model, which estimates travel demand based on factors like population density, land use, and the distance between zones. This approach allows the software to accurately reflect real-world travel patterns and optimize bus routes to directly address commuter needs."
+    },
+    {
+      question: "Why use Ant Colony Optimization (ACO)?",
+      answer: "Ant Colony Optimization is chosen for its efficiency in solving complex routing problems involving multiple constraints and optimization criteria. ACO mimics the natural behavior of ants finding optimal paths, allowing our software to explore numerous potential transit solutions and converge quickly on effective route improvements."
     },
     {
       question: "Which geographical locations does this app support?",
-      answer: "Locations all over the world."
+      answer: "Currently, Austin, Toronto, Vancouver, and San Francisco are supported for optimization. More cities will be added in the future!"
     },
     {
-      question: "What kind of routes gets optimized?",
-      answer: "Bus and bike routes."
+      question: "How quickly can transit agencies expect to see results?",
+      answer: "Transit agencies can expect to see insights and initial recommendations shortly after inputting their data. Since the software builds upon existing infrastructure, improvements in transit efficiency can typically be done with minimal investment."
     },
   ];
 
