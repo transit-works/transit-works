@@ -606,6 +606,19 @@ async fn evaluate_network(data: web::Data<AppState>) -> impl Responder {
             optimized_coverage_score,
         );
 
+        println!("Original:");
+        println!("  Coverage: {}", original_coverage_score);
+        println!("  Economic Score: {}", original_economic_score);
+        println!("  Avg Transfers: {}", original_avg_transfers);
+        println!("  Avg Ridership: {}", original_avg_ridership);
+        println!("  Transit Score: {}", original_transit_score);
+        println!("Optimized:");
+        println!("  Coverage: {}", optimized_coverage_score);
+        println!("  Economic Score: {}", optimized_economic_score);
+        println!("  Avg Transfers: {}", optimized_avg_transfers);
+        println!("  Avg Ridership: {}", optimized_avg_ridership);
+        println!("  Transit Score: {}", optimized_transit_score);
+
         HttpResponse::Ok().json(serde_json::json!({
             "original": {
                 "coverage": original_coverage_score.min(99.0),

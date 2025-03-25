@@ -16,7 +16,7 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
       try {
         const response = await fetch('/data/city_stats.json');
         const data = await response.json();
-        const city = data.find(c => c.name.toLowerCase() === cityName.toLowerCase());
+        const city = data.find(c => c.key.toLowerCase() === cityName.toLowerCase());
         setCityData(city);
         setLoading(false);
       } catch (error) {

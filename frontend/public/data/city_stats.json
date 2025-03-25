@@ -1,5 +1,6 @@
 [
   {
+    "key": "toronto",
     "name": "Toronto",
     "coordinates": [-79.3832, 43.6532],
     "country": "Canada",
@@ -10,6 +11,7 @@
     "coming_soon": false
   },
   {
+    "key": "vancouver",
     "name": "Vancouver",
     "coordinates": [-123.1216, 49.2827],
     "country": "Canada",
@@ -20,6 +22,7 @@
     "coming_soon": false
   },
   {
+    "key": "newyork",
     "name": "New York",
     "coordinates": [-74.006, 40.7128],
     "country": "United States",
@@ -30,6 +33,7 @@
     "coming_soon": true
   },
   {
+    "key": "sanfrancisco",
     "name": "San Francisco",
     "coordinates": [-122.4194, 37.7749],
     "country": "United States",
@@ -40,6 +44,7 @@
     "coming_soon": false
   },
   {
+    "key": "austin",
     "name": "Austin",
     "coordinates": [-97.7431, 30.2672],
     "country": "United States",
@@ -50,6 +55,7 @@
     "coming_soon": false
   },
   {
+    "key": "singapore",
     "name": "Singapore",
     "coordinates": [103.8198, 1.3521],
     "country": "Singapore",
@@ -60,6 +66,7 @@
     "coming_soon": true
   },
   {
+    "key": "london",
     "name": "London",
     "coordinates": [-0.1278, 51.5074],
     "country": "United Kingdom",
@@ -70,6 +77,7 @@
     "coming_soon": true
   },
   {
+    "key": "berlin",
     "name": "Berlin",
     "coordinates": [13.405, 52.52],
     "country": "Germany",
@@ -80,6 +88,7 @@
     "coming_soon": true
   },
   {
+    "key": "amsterdam",
     "name": "Amsterdam",
     "coordinates": [4.9041, 52.3676],
     "country": "Netherlands",
@@ -90,6 +99,7 @@
     "coming_soon": true
   },
   {
+    "key": "madrid",
     "name": "Madrid",
     "coordinates": [-3.7038, 40.4168],
     "country": "Spain",

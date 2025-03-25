@@ -43,6 +43,8 @@ function Sidebar({
   const [showExtraControls, setShowExtraControls] = useState(false);
   const [networkData, setNetworkData] = useState(null);
   const [networkLoading, setNetworkLoading] = useState(true);
+  const [cityData, setCityData] = useState(null);
+  const [cityDataLoading, setCityDataLoading] = useState(true);
 
   const toggleSidebar = () => {
     setIsExpanded(!isExpanded);
@@ -59,9 +61,31 @@ function Sidebar({
     }
   }, [isExpanded]);
   
+  // Fetch city data from city_stats.json
+  useEffect(() => {
+    const fetchCityData = async () => {
+      try {
+        setCityDataLoading(true);
+        const response = await fetch('/data/city_stats.json');
+        const data = await response.json();
+        const cityInfo = data.find(c => c.key.toLowerCase() === city.toLowerCase());
+        setCityData(cityInfo);
+      } catch (error) {
+        console.error("Failed to fetch city data:", error);
+      } finally {
+        setCityDataLoading(false);
+      }
+    };
+    
+    fetchCityData();
+  }, [city]);
+  
   // Fetch network evaluation data
   useEffect(() => {
     const fetchNetworkData = async () => {
+      if (isOptimizing) {
+        return;
+      }
       try {
         setNetworkLoading(true);
         const data = await fetchFromAPI('/evaluate-network', {}, city);
@@ -77,7 +101,7 @@ function Sidebar({
     };
     
     fetchNetworkData();
-  }, [city]);
+  }, [city, isOptimizing]);
 
   return (
     <div className="relative flex h-screen flex-col">
@@ -86,7 +110,7 @@ function Sidebar({
         {/* Expand Button */}
         <div className="flex flex-row items-center justify-between pb-3 pl-2 pt-1">
           <h2 className="font-heading text-xl leading-none text-white">
-            {city.charAt(0).toUpperCase() + city.slice(1)} {/* Display capitalized city name */}
+            {cityData ? cityData.name : city.charAt(0).toUpperCase() + city.slice(1)} {/* Display city name from data */}
           </h2>
           <button
             onClick={toggleSidebar}

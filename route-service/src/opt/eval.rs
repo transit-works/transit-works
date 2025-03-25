@@ -170,8 +170,7 @@ pub fn ridership_over_route(
         ridership[i] += ridership[i - 1];
     }
 
-    let avg_ridership = ridership.iter()
-    .sum::<f64>() / ridership.len() as f64;
+    let avg_ridership = ridership.iter().sum::<f64>() / ridership.len().max(1) as f64;
 
     (ridership, avg_ridership)
 }
@@ -224,7 +223,14 @@ pub fn evaluate_economic_score(
     od: &GridNetwork,
     transit: &TransitNetwork,
 ) -> f64 {
-    let route_stops = &route.outbound_stops;
+    let route_stops = if route.outbound_stops.len() >= 2 {
+        &route.outbound_stops
+    } else {
+        &route.inbound_stops
+    };
+    if route_stops.len() < 2 {
+        return 0.0;
+    }
     let (ridership, _) = ridership_over_route(transit, route, od);
 
     let from_stop = &route_stops[0];
