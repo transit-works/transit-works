@@ -171,11 +171,11 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
           <h3 className="text-white font-medium">Transit Performance</h3>
           <div className="flex items-center gap-4">
             <span className="flex items-center">
-              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-[#f43f5e] to-[#fb923c] mr-2"></span>
+              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-[#b31736] to-[#ff1643] mr-2"></span>
               <span className="text-zinc-400 text-sm">Current</span>
             </span>
             <span className="flex items-center">
-              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-[#7231ec] to-[#1fd2fb] mr-2"></span>
+              <span className="w-3 h-3 rounded-full bg-gradient-to-r from-[#72ab27] to-[#9beb34] mr-2"></span>
               <span className="text-zinc-400 text-sm">Optimized</span>
             </span>
           </div>
@@ -193,14 +193,14 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
             <ProgressBar 
               percentage={networkData ? networkData.original.transit_score.toFixed(0) : cityData.transitScore.toString()} 
               name="Current" 
-              startColor="#f43f5e" 
-              endColor="#fb923c" 
+              startColor="#b31736" 
+              endColor="#ff1643" 
             />
             <ProgressBar 
               percentage={networkData ? networkData.optimized.transit_score.toFixed(0) : (cityData.transitScore * 1.24).toFixed(0)} 
               name="Optimized" 
-              startColor="#7231ec" 
-              endColor="#1fd2fb" 
+              startColor="#72ab27" 
+              endColor="#9beb34" 
             />
           </div>
           
@@ -216,14 +216,14 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
             <ProgressBar 
               percentage={networkData ? networkData.original.economic_score.toFixed(0) : cityData.economicScore.toString()} 
               name="Current" 
-              startColor="#f43f5e" 
-              endColor="#fb923c" 
+              startColor="#b31736" 
+              endColor="#ff1643" 
             />
             <ProgressBar 
               percentage={networkData ? networkData.optimized.economic_score.toFixed(0) : (cityData.economicScore * 1.18).toFixed(0)} 
               name="Optimized" 
-              startColor="#7231ec" 
-              endColor="#1fd2fb" 
+              startColor="#72ab27" 
+              endColor="#9beb34" 
             />
           </div>
         </div>
@@ -231,7 +231,7 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
       
       {/* Key Improvement Cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg">
+        <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg relative group">
           <div className="flex items-center mb-3">
             <div className="rounded-full bg-purple-500/20 p-2 mr-3">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
@@ -245,8 +245,34 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
             <span className="text-3xl font-bold text-white">+{networkLoading ? "..." : improvements.coverage}%</span>
             <span className="ml-2 text-purple-400 text-sm">↑ Improved</span>
           </div>
+          {/* Improved Tooltip for Coverage with column alignment */}
+          {networkData && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 absolute -top-24 left-0 w-64 bg-zinc-800 rounded-lg p-4 shadow-xl border border-zinc-600 text-left z-10">
+              <h4 className="text-white text-xs font-medium mb-3">Coverage Improvement</h4>
+              <div className="grid grid-cols-[45px_40px_1fr] gap-x-2 gap-y-3">
+                <span className="text-zinc-400 text-xs">Before</span>
+                <span className="text-white text-xs font-medium text-right">{networkData.original.coverage.toFixed(2)}</span>
+                <div className="w-full h-2 rounded-full bg-zinc-700 overflow-hidden self-center">
+                  <div 
+                    className="h-full bg-zinc-500"
+                    style={{ width: `${(networkData.original.coverage / Math.max(networkData.optimized.coverage, networkData.original.coverage) * 100)}%` }}
+                  ></div>
+                </div>
+                
+                <span className="text-zinc-400 text-xs">After</span>
+                <span className="text-purple-400 text-xs font-medium text-right">{networkData.optimized.coverage.toFixed(2)}</span>
+                <div className="w-full h-2 rounded-full bg-zinc-700 overflow-hidden self-center">
+                  <div 
+                    className="h-full bg-purple-500"
+                    style={{ width: `${(networkData.optimized.coverage / Math.max(networkData.optimized.coverage, networkData.original.coverage) * 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+              <div className="absolute bottom-[-6px] left-1/2 transform -translate-x-1/2 w-3 h-3 bg-zinc-800 rotate-45 border-r border-b border-zinc-600"></div>
+            </div>
+          )}
         </div>
-        <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg">
+        <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg relative group">
           <div className="flex items-center mb-3">
             <div className="rounded-full bg-green-500/20 p-2 mr-3">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
@@ -259,8 +285,34 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
             <span className="text-3xl font-bold text-white">+{networkLoading ? "..." : improvements.ridership}%</span>
             <span className="ml-2 text-green-500 text-sm">↑ Higher</span>
           </div>
+          {/* Improved Tooltip for Ridership with column alignment */}
+          {networkData && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 absolute -top-24 left-0 w-64 bg-zinc-800 rounded-lg p-4 shadow-xl border border-zinc-600 text-left z-10">
+              <h4 className="text-white text-xs font-medium mb-3">Ridership Improvement</h4>
+              <div className="grid grid-cols-[45px_40px_1fr] gap-x-2 gap-y-3">
+                <span className="text-zinc-400 text-xs">Before</span>
+                <span className="text-white text-xs font-medium text-right">{networkData.original.avg_ridership.toFixed(2)}</span>
+                <div className="w-full h-2 rounded-full bg-zinc-700 overflow-hidden self-center">
+                  <div 
+                    className="h-full bg-zinc-500"
+                    style={{ width: `${(networkData.original.avg_ridership / Math.max(networkData.optimized.avg_ridership, networkData.original.avg_ridership) * 100)}%` }}
+                  ></div>
+                </div>
+                
+                <span className="text-zinc-400 text-xs">After</span>
+                <span className="text-green-400 text-xs font-medium text-right">{networkData.optimized.avg_ridership.toFixed(2)}</span>
+                <div className="w-full h-2 rounded-full bg-zinc-700 overflow-hidden self-center">
+                  <div 
+                    className="h-full bg-green-500"
+                    style={{ width: `${(networkData.optimized.avg_ridership / Math.max(networkData.optimized.avg_ridership, networkData.original.avg_ridership) * 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+              <div className="absolute bottom-[-6px] left-1/2 transform -translate-x-1/2 w-3 h-3 bg-zinc-800 rotate-45 border-r border-b border-zinc-600"></div>
+            </div>
+          )}
         </div>
-        <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg">
+        <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/60 rounded-lg p-5 border border-zinc-700 shadow-lg relative group">
           <div className="flex items-center mb-3">
             <div className="rounded-full bg-blue-500/20 p-2 mr-3">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
@@ -273,6 +325,32 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
             <span className="text-3xl font-bold text-white">{networkLoading ? "..." : (improvements.transfers >= 0 ? "+" : "")}{improvements.transfers}%</span>
             <span className="ml-2 text-blue-400 text-sm">{improvements.transfers >= 0 ? "↓ Fewer" : "↑ More"}</span>
           </div>
+          {/* Improved Tooltip for Transfers with column alignment */}
+          {networkData && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 absolute -top-24 right-0 w-64 bg-zinc-800 rounded-lg p-4 shadow-xl border border-zinc-600 text-left z-10">
+              <h4 className="text-white text-xs font-medium mb-3">Transfer Reduction</h4>
+              <div className="grid grid-cols-[45px_40px_1fr] gap-x-2 gap-y-3">
+                <span className="text-zinc-400 text-xs">Before</span>
+                <span className="text-white text-xs font-medium text-right">{networkData.original.avg_transfers.toFixed(2)}</span>
+                <div className="w-full h-2 rounded-full bg-zinc-700 overflow-hidden self-center">
+                  <div 
+                    className="h-full bg-zinc-500"
+                    style={{ width: `${(networkData.original.avg_transfers / Math.max(networkData.original.avg_transfers, networkData.optimized.avg_transfers) * 100)}%` }}
+                  ></div>
+                </div>
+                
+                <span className="text-zinc-400 text-xs">After</span>
+                <span className="text-blue-400 text-xs font-medium text-right">{networkData.optimized.avg_transfers.toFixed(2)}</span>
+                <div className="w-full h-2 rounded-full bg-zinc-700 overflow-hidden self-center">
+                  <div 
+                    className="h-full bg-blue-500"
+                    style={{ width: `${(networkData.optimized.avg_transfers / Math.max(networkData.original.avg_transfers, networkData.optimized.avg_transfers) * 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+              <div className="absolute bottom-[-6px] left-1/2 transform -translate-x-1/2 w-3 h-3 bg-zinc-800 rotate-45 border-r border-b border-zinc-600"></div>
+            </div>
+          )}
         </div>
       </div>
       
