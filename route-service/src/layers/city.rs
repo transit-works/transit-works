@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-use crate::gtfs::gtfs::Gtfs;
+use crate::{gtfs::gtfs::Gtfs, opt::aco2::OptimizedTransitNetwork};
 
 use super::{
     error::Error, grid::GridNetwork, road_network::RoadNetwork, transit_network::TransitNetwork,
@@ -237,8 +237,8 @@ impl City {
     }
 
     /// Load transit network from cache
-    pub fn load_transit_from_cache(city_name: &str) -> Result<TransitNetwork, Error> {
-        let transit_cache_file = format!("{}/{}_transit.cached", CITY_CACHE_DIR, city_name);
+    pub fn load_opt_transit_from_cache(city_name: &str) -> Result<OptimizedTransitNetwork, Error> {
+        let transit_cache_file = format!("{}/{}_opt_transit.cached", CITY_CACHE_DIR, city_name);
 
         if std::path::Path::new(&transit_cache_file).exists() {
             log::debug!("Loading transit network from cache");
@@ -247,5 +247,17 @@ impl City {
         } else {
             Err(Error::CacheNotFound)
         }
+    }
+
+    pub fn save_opt_transit_to_cache(
+        city_name: &str,
+        transit: &OptimizedTransitNetwork,
+    ) -> Result<(), Error> {
+        let transit_cache_file = format!("{}/{}_opt_transit.cached", CITY_CACHE_DIR, city_name);
+        log::debug!("Caching transit network to {}", transit_cache_file);
+        std::fs::create_dir_all(CITY_CACHE_DIR).unwrap();
+        bincode::serialize_into(std::fs::File::create(transit_cache_file).unwrap(), transit)
+            .unwrap();
+        Ok(())
     }
 }

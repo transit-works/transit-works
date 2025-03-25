@@ -6,7 +6,7 @@ use std::{
 use geo::Contains;
 use petgraph::graph::NodeIndex;
 use rand::{distributions::WeightedIndex, prelude::Distribution, rngs::StdRng, Rng, SeedableRng};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::layers::{
     city::City,
@@ -14,13 +14,19 @@ use crate::layers::{
     transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
 };
 
-use super::eval::TransitRouteEvals;
+use super::eval::{TransitNetworkEvals, TransitRouteEvals};
 
 // should be less than 1.0
 const PUNISHMENT_NONLINEARITY: f64 = 0.3;
 // const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
 const PUNISHMENT_BAD_TURN: f64 = 0.4;
 const PUNISHMENT_STOP_DIST: f64 = 0.1;
+
+#[derive(Serialize, Deserialize)]
+pub struct OptimizedTransitNetwork {
+    pub network: TransitNetwork,
+    pub optimized_routes: Vec<String>,
+}
 
 // struct to store all the tunable parameters for the ACO algorithm
 #[derive(Clone, Deserialize)]
@@ -318,12 +324,49 @@ pub fn run_aco_batch(
 
     // run aco on the routes and construct output list
     let mut optimized_routes = vec![];
+    let (mut count, tot) = (1, routes.len());
     for (route, _) in routes {
+        println!("Optimizing route: {}, {}/{}", route.route_id, count, tot,);
+        count += 1;
         if let Some((optimized_route, eval)) = run_aco(params.clone(), route, city, opt_transit) {
+            println!("  Route optimized with score: {}", eval);
             optimized_routes.push((optimized_route, eval));
         }
     }
     optimized_routes
+}
+
+pub fn run_aco_network(params: ACO, city: &City) -> OptimizedTransitNetwork {
+    let routes = city.transit.routes.iter().collect::<Vec<_>>();
+
+    let new_routes = run_aco_batch(params, &routes, city, &city.transit);
+    let mut new_routes = new_routes.into_iter().map(|(r, _)| r).collect::<Vec<_>>();
+
+    // merge the unoptimized routes with the optimized routes
+    let opt_route_ids = new_routes
+        .iter()
+        .map(|r| r.route_id.clone())
+        .collect::<Vec<_>>();
+    let noop_routes = city
+        .transit
+        .routes
+        .iter()
+        .filter(|r| !opt_route_ids.contains(&r.route_id));
+    new_routes.extend(noop_routes.map(|r| (*r).clone()));
+
+    let mut new_transit = TransitNetwork {
+        routes: new_routes,
+        inbound_stops: city.transit.inbound_stops.clone(),
+        outbound_stops: city.transit.outbound_stops.clone(),
+        evals: None,
+    };
+
+    new_transit.evals = Some(TransitNetworkEvals::for_network(&new_transit, &city.grid));
+
+    OptimizedTransitNetwork {
+        network: new_transit,
+        optimized_routes: opt_route_ids,
+    }
 }
 
 // Helpers for ACO

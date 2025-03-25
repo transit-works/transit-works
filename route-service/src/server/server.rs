@@ -10,10 +10,10 @@ use geo::Centroid;
 use serde::Deserialize;
 use serde_json::Value;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 pub(crate) struct AppState {
     pub city: Mutex<Option<City>>,
@@ -705,12 +705,47 @@ async fn get_route_improvements(
     }
 }
 
+#[post("/optimize-network")]
+async fn optimize_network(data: web::Data<AppState>) -> impl Responder {
+    println!("Optimizing entire network");
+
+    let city_guard = data.city.lock().unwrap();
+    match &*city_guard {
+        Some(city) => {
+            let mut optimized_transit_guard = data.optimized_transit.lock().unwrap();
+            let optimized_transit = optimized_transit_guard.as_mut().unwrap();
+            let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
+            if let Ok(opt_transit) = City::load_opt_transit_from_cache(&city.name) {
+                println!("Loaded network from cache");
+                *optimized_transit = opt_transit.network;
+                *optimized_route_ids = opt_transit.optimized_routes;
+            } else {
+                println!("Failed to load network from cache");
+                return HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "Failed to load network from cache"
+                }));
+            }
+
+            return HttpResponse::Ok().json(serde_json::json!({
+                "message": format!("Found {} optimized routes", optimized_route_ids.len()),
+                "routes": *optimized_route_ids,
+                "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids)
+            }));
+        }
+        None => {
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "City data not loaded"
+            }));
+        }
+    };
+}
+
 /// Background worker function that periodically updates the TransitNetworkEvals
-fn background_evaluation_worker(
-    app_state: web::Data<AppState>,
-    update_interval: Duration,
-) {
-    println!("Starting background evaluation thread with interval of {:?}", update_interval);
+fn background_evaluation_worker(app_state: web::Data<AppState>, update_interval: Duration) {
+    println!(
+        "Starting background evaluation thread with interval of {:?}",
+        update_interval
+    );
 
     while !app_state.shutdown_signal.load(Ordering::Relaxed) {
         // Sleep first to allow initial setup to complete
@@ -730,13 +765,14 @@ fn background_evaluation_worker(
                 let mut optimized_transit_guard = app_state.optimized_transit.lock().unwrap();
                 if let Some(optimized_transit) = optimized_transit_guard.as_mut() {
                     // Update the network evaluations
-                    let network_evals = eval::TransitNetworkEvals::for_network(optimized_transit, &city.grid);
+                    let network_evals =
+                        eval::TransitNetworkEvals::for_network(optimized_transit, &city.grid);
                     optimized_transit.evals = Some(network_evals);
                     println!("Background thread: Evaluations updated successfully");
                 }
             }
         }
-        
+
         // Sleep for the remaining time of the update interval
         for _ in 0..(update_interval.as_secs() * 10) {
             if app_state.shutdown_signal.load(Ordering::Relaxed) {
@@ -745,7 +781,7 @@ fn background_evaluation_worker(
             thread::sleep(Duration::from_millis(100));
         }
     }
-    
+
     println!("Background evaluation thread shutting down");
 }
 
@@ -774,7 +810,7 @@ pub async fn start_server(
 
     // Initialize application state with the city and a copy of transit for optimizations
     let shutdown_signal = Arc::new(AtomicBool::new(false));
-    
+
     let app_state = web::Data::new(AppState {
         optimized_transit: Mutex::new(city_result.as_ref().ok().map(|c| c.transit.clone())),
         optimized_route_ids: Mutex::new(Vec::new()),
@@ -783,7 +819,7 @@ pub async fn start_server(
         aco_params: Mutex::new(aco2::ACO::init()),
         shutdown_signal: shutdown_signal.clone(),
     });
-    
+
     // Start the background evaluation thread
     let app_state_clone = app_state.clone();
     let update_interval = Duration::from_secs(180); // 3 minutes
@@ -813,7 +849,7 @@ pub async fn start_server(
     })
     .bind(addr)?
     .run();
-    
+
     // Set up graceful shutdown handling
     let srv = server.handle();
     tokio::spawn(async move {
