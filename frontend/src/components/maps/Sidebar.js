@@ -6,7 +6,7 @@ import SidebarReport from '@/components/views/ExpandedSidebarView';
 import ImageButton from '@/components/common/ImageButton';
 import { fetchFromAPI } from '@/utils/api';
 // Import the icons
-import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt, FaPlus, FaSubway, FaPaintBrush, FaTrain, FaBusAlt } from 'react-icons/fa';
+import { FaBuilding, FaLayerGroup, FaPalette, FaFireAlt, FaPlus, FaSubway, FaPaintBrush, FaTrain, FaBusAlt, FaNetworkWired } from 'react-icons/fa';
 
 function Sidebar({ 
   data, 
@@ -38,6 +38,7 @@ function Sidebar({
   showCoverageHeatmap,
   onToggleCoverageHeatmap,
   city,
+  onOptimizeNetwork,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showExtraControls, setShowExtraControls] = useState(false);
@@ -45,6 +46,7 @@ function Sidebar({
   const [networkLoading, setNetworkLoading] = useState(true);
   const [cityData, setCityData] = useState(null);
   const [cityDataLoading, setCityDataLoading] = useState(true);
+  const [showOptimizeOptions, setShowOptimizeOptions] = useState(false);
 
   const toggleSidebar = () => {
     setIsExpanded(!isExpanded);
@@ -52,6 +54,10 @@ function Sidebar({
 
   const closeExpandedSection = () => {
     setIsExpanded(false);
+  };
+
+  const toggleOptimizeOptions = () => {
+    setShowOptimizeOptions(!showOptimizeOptions);
   };
 
   // Automatically deactivate "More Controls" when "View Details" is open
@@ -274,13 +280,15 @@ function Sidebar({
           />
         </div>
         
-        <ImageButton
-          text={isOptimizing ? "Optimizing..." : "Optimize"}
-          imageSrc="/assets/icons/speed.png"
-          onClick={onOptimize}
-          disabled={selectedRoutes?.size === 0 || isOptimizing}
-          isLoading={isOptimizing}
-        />
+        <div className="relative">
+          <ImageButton
+            text={isOptimizing ? "Optimizing..." : "Optimize All"}
+            imageSrc="/assets/icons/speed.png"
+            onClick={onOptimizeNetwork}
+            disabled={selectedRoutes?.size !== 0 || isOptimizing}
+            isLoading={isOptimizing}
+          />
+        </div>
 
         <div className="flex justify-around pt-2">
           <Link href="/" className="w-full pr-1" passHref>

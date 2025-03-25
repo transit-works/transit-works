@@ -728,7 +728,7 @@ async fn optimize_network(data: web::Data<AppState>) -> impl Responder {
 
             return HttpResponse::Ok().json(serde_json::json!({
                 "message": format!("Found {} optimized routes", optimized_route_ids.len()),
-                "routes": *optimized_route_ids,
+                "routes": optimized_route_ids.clone(),
                 "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids)
             }));
         }
@@ -846,6 +846,7 @@ pub async fn start_server(
             .service(rank_route_improvements)
             .service(evaluate_network)
             .service(get_route_improvements)
+            .service(optimize_network)
     })
     .bind(addr)?
     .run();
