@@ -20,7 +20,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex h-screen items-center justify-center">
+      <div className="flex h-screen items-center justify-center">
           <div className="bg-red-500/20 p-6 rounded-lg text-white">
             <h2 className="text-xl font-bold mb-2">Something went wrong</h2>
             <p>{this.state.error?.message || "Unknown error"}</p>
@@ -221,16 +221,22 @@ export default function CountrySelectPage() {
     }
   }, [autoRotate]);
 
-  // Add this useMemo near your other useMemo hooks to calculate averages
+  // Updated useMemo to exclude cities with coming_soon=true when calculating averages
   const cityAverages = useMemo(() => {
     if (!cities.length) return { transitScore: 0, economicScore: 0 };
     
-    const transitTotal = cities.reduce((sum, city) => sum + (city.transitScore || 0), 0);
-    const economicTotal = cities.reduce((sum, city) => sum + (city.economicScore || 0), 0);
+    // Filter out cities marked as coming soon
+    const availableCities = cities.filter(city => !city.coming_soon);
+    
+    // Return default values if no available cities
+    if (!availableCities.length) return { transitScore: 0, economicScore: 0 };
+    
+    const transitTotal = availableCities.reduce((sum, city) => sum + (city.transitScore || 0), 0);
+    const economicTotal = availableCities.reduce((sum, city) => sum + (city.economicScore || 0), 0);
     
     return {
-      transitScore: Math.round(transitTotal / cities.length),
-      economicScore: Math.round(economicTotal / cities.length)
+      transitScore: Math.round(transitTotal / availableCities.length),
+      economicScore: Math.round(economicTotal / availableCities.length)
     };
   }, [cities]);
 
