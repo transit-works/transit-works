@@ -337,7 +337,7 @@ pub struct Shape {
     pub shape_pt_lat: f64,
     pub shape_pt_lon: f64,
     pub shape_pt_sequence: i32,
-    #[serde(deserialize_with = "deserialize_opt")]
+    #[serde(default, deserialize_with = "deserialize_opt")]
     pub shape_dist_traveled: Option<f64>,
 }
 
