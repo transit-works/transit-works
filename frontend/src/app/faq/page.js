@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { Parallax, ParallaxLayer } from '@react-spring/parallax';
 import Spline from '@splinetool/react-spline';
+import { FaArrowLeft } from 'react-icons/fa';
+import Link from 'next/link';
 
 export default function FAQ() {
-  // State to manage expanded questions
   const [expanded, setExpanded] = useState(null);
 
   const toggleExpand = (index) => {
@@ -44,7 +45,7 @@ export default function FAQ() {
   ];
 
   return (
-    <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'auto' }}>
       <Parallax pages={1}>
         
         {/* Background Layer */}
@@ -90,12 +91,21 @@ export default function FAQ() {
           }}
         >
           <div className="flex h-screen flex-col items-center justify-center space-y-8">
+            {/* Back Button */}
+            <Link href="/" passHref>
+              <button
+                className="absolute top-5 left-5 p-2 bg-primary text-white rounded-full hover:bg-accent transition duration-300"
+              >
+                <FaArrowLeft size={24} />
+              </button>
+            </Link>
+
             <h1 className="font-heading text-5xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
               Frequently Asked Questions
             </h1>
 
             {/* FAQ Section */}
-            <div className="flex flex-col items-center space-y-6 w-full max-w-4xl px-4">
+            <div className="flex flex-col items-center space-y-6 w-full max-w-4xl px-4 overflow-y-auto custom-scrollbar-container custom-scrollbar" style={{ maxHeight: '80vh' }}>
               {faqs.map((faq, index) => (
                 <div key={index} className="w-full">
                   {/* Question Section */}
