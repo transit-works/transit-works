@@ -815,11 +815,11 @@ pub async fn start_server(
     });
 
     // Start the background evaluation thread
-    let app_state_clone = app_state.clone();
-    let update_interval = Duration::from_secs(180); // 3 minutes
-    thread::spawn(move || {
-        background_evaluation_worker(app_state_clone, update_interval);
-    });
+    // let app_state_clone = app_state.clone();
+    // let update_interval = Duration::from_secs(180); // 3 minutes
+    // thread::spawn(move || {
+    //     background_evaluation_worker(app_state_clone, update_interval);
+    // });
 
     println!("Starting server on {}:{}", host, port);
     let server = HttpServer::new(move || {
@@ -846,14 +846,14 @@ pub async fn start_server(
     .run();
 
     // Set up graceful shutdown handling
-    let srv = server.handle();
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.unwrap();
-        println!("Shutting down background threads...");
-        shutdown_signal.store(true, Ordering::SeqCst);
-        thread::sleep(Duration::from_millis(500));
-        srv.stop(true).await;
-    });
+    // let srv = server.handle();
+    // tokio::spawn(async move {
+    //     tokio::signal::ctrl_c().await.unwrap();
+    //     println!("Shutting down background threads...");
+    //     shutdown_signal.store(true, Ordering::SeqCst);
+    //     thread::sleep(Duration::from_millis(500));
+    //     srv.stop(true).await;
+    // });
 
     println!("Server started at {} on port {}.", host, port);
     server.await?;
