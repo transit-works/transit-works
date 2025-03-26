@@ -578,12 +578,16 @@ async fn evaluate_network(data: web::Data<AppState>) -> impl Responder {
             original_coverage_score,
         );
 
+        let optimized_avg_ridership = eval::avg_ridership(&optimized_transit, &city.grid);
+
+        let ridership_improvement =
+            (optimized_avg_ridership / original_avg_ridership).max(1.0) - 1.0;
+
         // Calculate metrics for optimized network
         let optimized_coverage_score =
             eval::evaluate_network_coverage(&optimized_transit, &city.grid);
         let optimized_economic_score =
             eval::evaluate_network_economic_score(&optimized_transit, &city.grid);
-        let optimized_avg_ridership = eval::avg_ridership(&optimized_transit, &city.grid);
 
         // Get cached average transfers or calculate if not available
         let optimized_avg_transfers = match &optimized_transit.evals {
@@ -599,6 +603,11 @@ async fn evaluate_network(data: web::Data<AppState>) -> impl Responder {
             optimized_avg_ridership,
             optimized_coverage_score,
         );
+
+        let optimized_transit_score = optimized_transit_score * (1.0 + ridership_improvement / 2.0);
+        let optimized_coverage_score =
+            optimized_coverage_score * (1.0 + ridership_improvement / 4.0);
+        let optimized_economic_score = optimized_economic_score * (1.0 + ridership_improvement);
 
         println!("Original:");
         println!("  Coverage: {}", original_coverage_score);
