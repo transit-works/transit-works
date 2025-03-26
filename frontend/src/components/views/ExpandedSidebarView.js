@@ -206,7 +206,7 @@ function ExpandedSection({ onClose, cityName, isVisible = true }) {
           
           <div>
             <div className="flex justify-between items-center mb-1">
-              <span className="text-zinc-300 text-sm">Economic Score</span>
+              <span className="text-zinc-300 text-sm">Utilization Score</span>
               {networkData && (
                 <span className="text-green-500 text-sm">
                   +{((networkData.optimized.economic_score - networkData.original.economic_score) / networkData.original.economic_score * 100).toFixed(1)}%

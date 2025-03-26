@@ -205,7 +205,7 @@ export default function Home() {
                         .then(response => response.json())
                         .then(data => {
                           // Format data as CSV
-                          const headers = ['City', 'Transit Score', 'Economic Score'];
+                          const headers = ['City', 'Transit Score', 'Utilization Score'];
                           const csvRows = [headers.join(',')];
                           
                           data.forEach(city => {
@@ -219,7 +219,7 @@ export default function Home() {
                           const url = URL.createObjectURL(blob);
                           const link = document.createElement('a');
                           link.setAttribute('href', url);
-                          link.setAttribute('download', 'transit_economic_scores.csv');
+                          link.setAttribute('download', 'transit_utilization_scores.csv');
                           link.style.visibility = 'hidden';
                           document.body.appendChild(link);
                           link.click();
@@ -239,7 +239,7 @@ export default function Home() {
               <div className="relative">
                 <div className="absolute -left-4 top-0 h-full w-1 bg-accent rounded-full"></div>
                 <h1 className="pl-6 w-full text-left font-heading text-4xl md:text-6xl bg-gradient-to-r from-accent to-primary bg-clip-text text-transparent">
-                  Transit & Economic Score Comparison
+                  Transit & Utilization Score Comparison
                 </h1>
               </div>
               
@@ -254,7 +254,7 @@ export default function Home() {
                   <span className="h-3 w-3 rounded-full bg-[#f43f5e] mr-2"></span>
                   <span className="text-xs text-text/80 mr-4">Transit Score</span>
                   <span className="h-3 w-3 rounded-full bg-[#c4a76e] mr-2"></span>
-                  <span className="text-xs text-text/80">Economic Score</span>
+                  <span className="text-xs text-text/80">Utilization Score</span>
                 </div>
                 
                 <Link href="/city-select" className="mt-6 inline-flex items-center text-primary hover:text-accent transition-colors">

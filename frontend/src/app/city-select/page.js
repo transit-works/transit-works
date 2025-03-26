@@ -385,7 +385,7 @@ export default function CountrySelectPage() {
                   </div>
                   <h4 className="text-yellow-200 font-semibold text-lg mb-1">Coming Soon</h4>
                   <p className="text-white/90 text-center text-sm">
-                    Transit and economic data for {selectedCity.name} will be available in a future update.
+                    Transit and utilization data for {selectedCity.name} will be available in a future update.
                   </p>
                 </div>
               ) : (
@@ -409,12 +409,12 @@ export default function CountrySelectPage() {
                       <div className="mb-2">
                         <ProgressBar
                           percentage={selectedCity.economicScore}
-                          name="Economic Score"
+                          name="Utilization Score"
                           startColor="#7fff2aff"
                           endColor="#00d400ff"
                         />
                         {selectedCity.economicScore >= 70 && (
-                          <p className="text-[#7fff2a] text-xs mt-1">Strong economic performance</p>
+                          <p className="text-[#7fff2a] text-xs mt-1">Strong utilization performance</p>
                         )}
                       </div>
                     )}
@@ -455,7 +455,7 @@ export default function CountrySelectPage() {
                       </div>
                       <div className="absolute top-0 left-0 w-full text-xs flex text-white/70">
                         <span className="w-1/2 text-center">Transit</span>
-                        <span className="w-1/2 text-center">Economic</span>
+                        <span className="w-1/2 text-center">Utilization</span>
                       </div>
                     </div>
                   </div>
@@ -468,7 +468,7 @@ export default function CountrySelectPage() {
                     )}
                     {selectedCity.economicScore > 60 && (
                       <span className="bg-green-500/20 text-green-300 text-xs py-1 px-2 rounded-full">
-                        Economic Transit
+                        High Utilization Transit
                       </span>
                     )}
                     {selectedCity.population > 5000000 && (
@@ -554,7 +554,7 @@ export default function CountrySelectPage() {
             <div>
               <h3 className="text-2xl font-logo text-white tracking-wide mb-4">Explore Transit Cities</h3>
               
-              <p className="text-white/80 mb-4">Click on any highlighted city to explore its transit and economic performance metrics.</p>
+              <p className="text-white/80 mb-4">Click on any highlighted city to explore its transit and utilization performance metrics.</p>
               
               <div className="bg-white/10 rounded-lg p-3 mb-4">
                 <p className="text-accent font-body text-xs uppercase mb-1 opacity-80">Global Statistics</p>
@@ -581,7 +581,7 @@ export default function CountrySelectPage() {
                 <div className="mt-3">
                   <ProgressBar
                     percentage={cityAverages.economicScore}
-                    name="Economic Score"
+                    name="Utilization Score"
                     startColor="#7fff2aff"
                     endColor="#00d400ff"
                   />

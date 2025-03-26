@@ -363,7 +363,7 @@ export default function FlatMap({ events = false }) {
                   </div>
                   <h4 className="text-yellow-200 font-semibold text-base mb-1">Coming Soon</h4>
                   <p className="text-white/90 text-xs">
-                    Transit and economic data for {selectedCity.name} will be available in a future update.
+                    Transit and utilization data for {selectedCity.name} will be available in a future update.
                   </p>
                 </div>
               </div>
@@ -392,7 +392,7 @@ export default function FlatMap({ events = false }) {
                 {/* Economic Score - Compact Layout */}
                 <div className="space-y-1">
                   <div className="flex justify-between items-center mb-0.5">
-                    <span className="text-zinc-400 text-xs font-body">Economic Score</span>
+                    <span className="text-zinc-400 text-xs font-body">Utilization Score</span>
                     <span className="text-white text-xs font-semibold">{selectedCity.economicScore}%</span>
                   </div>
                   <div className="h-1.5 w-full bg-zinc-800/80 rounded-sm overflow-hidden">
