@@ -221,7 +221,6 @@ export default function CountrySelectPage() {
     }
   }, [autoRotate]);
 
-  // Updated useMemo to exclude cities with coming_soon=true when calculating averages
   const cityAverages = useMemo(() => {
     if (!cities.length) return { transitScore: 0, economicScore: 0 };
     
