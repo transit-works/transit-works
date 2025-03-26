@@ -262,7 +262,11 @@ pub fn evaluate_economic_score(
         ridership.iter().map(|&x| x.min(div as f64)).sum::<f64>() / ridership.len() as f64;
 
     let res = (avg_ridership / div) * 100.0 * ADJUSTMENT_FACTOR;
-    res
+    if res.is_nan() {
+        0.0
+    } else {
+        res
+    }
 }
 
 pub fn evaluate_network_economic_score(transit: &TransitNetwork, od: &GridNetwork) -> f64 {
