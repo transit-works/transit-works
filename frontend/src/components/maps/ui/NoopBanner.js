@@ -52,7 +52,7 @@ function NoopBanner({ isVisible, selectedRoute, collapsedBanner, setCollapsedBan
             </svg>
           </div>
           <div>
-            <span className="text-white text-sm font-medium">Route cannot be optimized</span>
+            <span className="text-white text-sm font-medium">No Optimizations Found</span>
             <span className="text-white/70 text-xs ml-2">Route {selectedRoute}</span>
           </div>
         </div>

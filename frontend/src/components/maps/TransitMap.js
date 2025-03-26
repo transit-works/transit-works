@@ -66,6 +66,7 @@ function TransitMap({
   noopRoutes,
   optimizationResults,
   setOptimizationResults,
+  fetchAndDisplayResults, // Add this prop to receive it from parent
 }) {
   const mapRef = useRef(null);
   
@@ -537,6 +538,7 @@ function TransitMap({
           setShowParametersPopup={setShowParametersPopup}
           isBusRoute={isBusRoute}
           areSelectedRoutesBusRoutes={areSelectedRoutesBusRoutes()}
+          fetchAndDisplayResults={fetchAndDisplayResults} // Add this line to pass the prop
         />
       </Map>
       
