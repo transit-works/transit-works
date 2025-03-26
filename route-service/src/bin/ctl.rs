@@ -121,7 +121,7 @@ fn main() {
                 let start = Instant::now();
                 // Create a mutable copy of the transit network
                 let mut new_transit = city.transit.clone();
-                let optimized_route_ids = 
+                let optimized_route_ids =
                     run_aco_batch(aco.clone(), &target_routes, &city, &mut new_transit);
                 println!("  ACO finished in {:?}", start.elapsed());
 
@@ -144,7 +144,12 @@ fn main() {
                 if args.output_geojson {
                     let solution_path =
                         format!("{}/routes_solution{}.geojson", args.output_dir, suffix);
-                    output_routes_geojson(&optimized_network.network, &city.gtfs, &city.road, &solution_path);
+                    output_routes_geojson(
+                        &optimized_network.network,
+                        &city.gtfs,
+                        &city.road,
+                        &solution_path,
+                    );
                     println!("Optimized routes saved to {}", solution_path);
                 }
 
