@@ -42,7 +42,7 @@ export default function Home() {
               <Link href="#overview" className="p-5 font-body text-text hover:text-primary">
                 Overview
               </Link>
-              <Link href="/support" className="p-5 font-body text-text hover:text-primary">
+              <Link href="https://github.com/transit-works" className="p-5 font-body text-text hover:text-primary">
                 Documentation
               </Link>
               <Link href="/faq" className="p-5 font-body text-text hover:text-primary">
@@ -127,12 +127,15 @@ export default function Home() {
             </div>
             <div className="col-span-2 row-span-6 flex flex-col items-center justify-center rounded-xl bg-accent">
               <img src="/assets/imgs/map.png" alt="Map Visualization" />
-              <p className="mb-4 mt-auto p-4">
-                Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium
-                doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore
-                veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam
-                voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur
-                magni dolores eos qui ratione voluptatem sequi nesciunt.
+              <p className="mt-auto px-4 pb-4 font-body text-sm">
+              TransitWorks provides an intuitive, interactive interface for selecting and optimizing routes.
+              We offer several dynamic features, including 3D building views, layered route displays,
+              and a population heatmap for enhanced analysis. Users can also toggle various map controls, such as
+              random route colors, route type colors, and coverage heatmaps. For deeper customization, the app
+              allows adjustments to ACO (Ant Colony Optimization) parameters to fine-tune route optimization.
+              Additionally, users can explore valuable transit data, including performance metrics, coverage,
+              average ridership, and transfers. The app also highlights top routes based on optimization improvements,
+              making it a powerful tool for transportation planning and analysis.
               </p>
             </div>
             <div className="globe relative col-span-1 row-span-4 flex flex-col items-center justify-between rounded-xl bg-secondary p-4">
@@ -310,7 +313,7 @@ export default function Home() {
                 Privacy Policy
               </Link>
               <Link
-                href="/docs"
+                href="https://github.com/transit-works"
                 className="text-sm text-gray-300 transition duration-200 hover:text-primary"
               >
                 Documentation
@@ -324,7 +327,7 @@ export default function Home() {
             </div>
             <div className="flex space-x-4">
               <a
-                href="https://github.com/yourgithubprofile"
+                href="https://github.com/transit-works"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center space-x-2 transition duration-200 hover:opacity-75"
