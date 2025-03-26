@@ -107,7 +107,7 @@ function Sidebar({
           <div className="rounded-2xl border border-zinc-800 bg-background-dk py-2">
             <ProgressDial 
               percentage={networkData ? Math.round(networkData.optimized.economic_score) : 77}
-              name="Economic Score" 
+              name="Utilization Score" 
             />
           </div>
         </div>
