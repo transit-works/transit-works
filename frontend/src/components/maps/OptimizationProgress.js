@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function OptimizationProgress({
   isOptimizing,
@@ -8,11 +8,81 @@ export default function OptimizationProgress({
   convergedRoutes,
   onCancel
 }) {
-  // If not optimizing, don't show anything
-  if (!isOptimizing) return null;
+  // Track displayed progress for smooth animation
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const progressTimer = useRef(null);
+  const hideTimer = useRef(null); // Separate timer for hiding the component
+  const wasOptimizing = useRef(isOptimizing);
+  const [shouldShow, setShouldShow] = useState(false);
+
+  // Handle smooth progress animation
+  useEffect(() => {
+    // Clear any existing animation timer
+    if (progressTimer.current) {
+      clearInterval(progressTimer.current);
+      progressTimer.current = null;
+    }
+
+    if (isOptimizing) {
+      // Show component immediately when optimization starts
+      setShouldShow(true);
+      
+      // Animate progress smoothly between updates
+      const targetProgress = optimizationProgress || 0;
+      
+      if (displayProgress < targetProgress) {
+        progressTimer.current = setInterval(() => {
+          setDisplayProgress(current => {
+            // Increase by small increments, but don't exceed target
+            const next = Math.min(current + 0.2, targetProgress);
+            if (next >= targetProgress) {
+              clearInterval(progressTimer.current);
+              progressTimer.current = null;
+            }
+            return next;
+          });
+        }, 16); // ~60fps for smooth animation
+      }
+    } else if (wasOptimizing.current) {
+      // Optimization just finished - complete the progress bar
+      setDisplayProgress(100);
+      
+      // Clear any existing hide timer
+      if (hideTimer.current) {
+        clearTimeout(hideTimer.current);
+      }
+      
+      // Wait for completion animation before hiding
+      hideTimer.current = setTimeout(() => {
+        setShouldShow(false);
+        setDisplayProgress(0); // Reset progress when hidden
+      }, 600);
+    }
+
+    // Update wasOptimizing ref for next render
+    wasOptimizing.current = isOptimizing;
+
+    // Cleanup function
+    return () => {
+      if (progressTimer.current) {
+        clearInterval(progressTimer.current);
+      }
+    };
+  }, [isOptimizing, optimizationProgress]);
+
+  // Additional effect to handle cleanup of hide timer
+  useEffect(() => {
+    return () => {
+      if (hideTimer.current) {
+        clearTimeout(hideTimer.current);
+      }
+    };
+  }, []);
+
+  // If not showing, don't render anything
+  if (!shouldShow && !isOptimizing) return null;
   
   // Calculate what to display based on available data
-  const progress = optimizationProgress ? optimizationProgress.toFixed(1) : '0.0';
   const routeCount = selectedRoutes?.size || 0;
   
   // If we have detailed WebSocket data for multi-route optimization
@@ -99,7 +169,7 @@ export default function OptimizationProgress({
           <div className="flex justify-between items-center mb-4">
             <div className="text-sm font-semibold text-text flex items-center">
               <div className="w-2 h-2 bg-accent rounded-full mr-2 animate-pulse"></div>
-              Optimizing {routes_count} routes: {progress}%
+              Optimizing {routes_count} routes
             </div>
             <button
               onClick={onCancel}
@@ -120,8 +190,8 @@ export default function OptimizationProgress({
           
           <div className="w-full bg-zinc-800 rounded-full h-2.5 overflow-hidden shadow-inner">
             <div 
-              className="bg-accent h-2.5 rounded-full transition-all duration-300 relative"
-              style={{ width: `${progress}%` }}
+              className="bg-accent h-2.5 rounded-full transition-transform duration-300 relative"
+              style={{ width: `${displayProgress}%` }}
             >
               <div className="absolute top-0 left-0 w-full h-full bg-white/20 animate-pulse"></div>
             </div>
@@ -137,7 +207,7 @@ export default function OptimizationProgress({
       <div className="flex justify-between items-center mb-4">
         <div className="text-sm font-semibold text-text flex items-center">
           <div className="w-2 h-2 bg-accent rounded-full mr-2 animate-pulse"></div>
-          Optimizing {routeCount > 1 ? `${routeCount} routes` : '1 route'}: {progress}%
+          Optimizing {routeCount > 1 ? `${routeCount} routes` : '1 route'}
         </div>
         <button
           onClick={onCancel}
@@ -148,8 +218,8 @@ export default function OptimizationProgress({
       </div>
       <div className="w-full bg-zinc-800 rounded-full h-2.5 overflow-hidden shadow-inner">
         <div 
-          className="bg-accent h-2.5 rounded-full transition-all duration-300 relative"
-          style={{ width: `${progress}%` }}
+          className="bg-accent h-2.5 rounded-full transition-all duration-300 ease-out relative"
+          style={{ width: `${displayProgress}%` }}
         >
           <div className="absolute top-0 left-0 w-full h-full bg-white/20 animate-pulse"></div>
         </div>
