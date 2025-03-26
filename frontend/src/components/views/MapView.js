@@ -84,19 +84,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     setShowCoverageHeatmap(!showCoverageHeatmap);
   };
 
-  // Add function to fetch noop routes
-  const fetchNoopRoutes = async () => {
-    try {
-      const data = await fetchFromAPI('/get-noop-routes');
-      if (data && data.routes) {
-        setNoopRoutes(new Set(data.routes));
-      }
-    } catch (error) {
-      console.error('Error fetching noop routes:', error);
-    }
-  };
+  // Add this to MapView.js to fix the handleOptimize function
 
-  // Modified handleOptimize function to work with multiple routes
   const handleOptimize = async () => {
     // Check if any routes are selected
     if (selectedRoutes.size === 0) {
@@ -121,10 +110,11 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             routes: routesToOptimize,
           })
         });
-        
+
         if (result && result.geojson) {
           // Store the optimized route data
           setOptimizedRoutesData(result.geojson);
+          
           // Add the optimized routes to our cache
           setOptimizedRoutes(prev => {
             const newSet = new Set(prev);
@@ -132,72 +122,32 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             return newSet;
           });
           
-          // Fetch noop routes to update the set
-          await fetchNoopRoutes();
+          // IMPORTANT: Fetch noop routes to update the set
+          const noopData = await fetchFromAPI('/get-noop-routes');
+          if (noopData && noopData.routes) {
+            setNoopRoutes(new Set(noopData.routes));
+          }
           
           // Create results summary for multi-select mode
           if (multiSelectMode && routesToOptimize.length > 1) {
             // Fetch both optimized and noop routes to show complete results
-            const optimizedRoutesData = await fetchFromAPI('/get-optimizations');
-            const noopRoutesData = await fetchFromAPI('/get-noop-routes');
+            const [optimizedRoutesData, noopRoutesData] = await Promise.all([
+              fetchFromAPI('/get-optimizations'),
+              fetchFromAPI('/get-noop-routes')
+            ]);
             
             const optimizedIds = optimizedRoutesData.routes || [];
             const noopIds = noopRoutesData.routes || [];
             
-            // Convert arrays to Sets for better performance
-            const optimizedIdsSet = new Set(optimizedIds);
-            const routesToOptimizeSet = new Set(routesToOptimize);
-            
-            // Find intersection between optimizedIds and routesToOptimize
-            const successfulRouteIds = [...optimizedIdsSet].filter(id => routesToOptimizeSet.has(id));
-            const successfulRouteIdsSet = new Set(successfulRouteIds);
-            
-            // Find noop routes that we attempted to optimize but weren't successful
-            const failedRouteIds = [...new Set(noopIds)].filter(id => 
-              routesToOptimizeSet.has(id) && !successfulRouteIdsSet.has(id)
-            );
-
-            // Enrich with route details from your data source
-            const successfulRoutes = successfulRouteIds.map(id => {
-              const routeFeature = data.features.find(f => 
-                f.properties.route_id === id && f.geometry.type === 'LineString'
-              );
-              return routeFeature ? {
-                id: id,
-                short_name: routeFeature.properties.route_short_name,
-                name: routeFeature.properties.route_long_name
-              } : id;
-            });
-
-            const failedRoutes = failedRouteIds.map(id => {
-              const routeFeature = data.features.find(f => 
-                f.properties.route_id === id && f.geometry.type === 'LineString'
-              );
-              return routeFeature ? {
-                id: id,
-                short_name: routeFeature.properties.route_short_name,
-                name: routeFeature.properties.route_long_name
-              } : id;
-            });
-
-            setOptimizationResults({
-              successful: successfulRoutes,
-              failed: failedRoutes
-            });
+            // Process results and create summary
+            processOptimizationResults(optimizedIds, noopIds, routesToOptimize);
           }
         } else {
           throw new Error('Invalid response format from optimization service');
         }
       } catch (fetchError) {
         // Handle network errors
-        if (fetchError.message.includes('NetworkError') || 
-            fetchError.message.includes('Failed to fetch')) {
-          throw new Error(
-            'Cannot connect to optimization service. Please ensure the backend is running at http://localhost:8080'
-          );
-        } else {
-          throw fetchError;
-        }
+        handleOptimizationError(fetchError);
       }
     } catch (error) {
       console.error('Error optimizing routes:', error);
@@ -250,7 +200,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         console.log('WebSocket connection established');
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = async (event) => {
         try {
           console.log('Raw WebSocket message received:', event.data);
           
@@ -298,6 +248,12 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             setOptimizationProgress(100); // Set to 100% since we're done
           }
 
+          // Handle noop routes specifically - if provided directly in the message
+          if (data.noop_route_ids && Array.isArray(data.noop_route_ids)) {
+            console.log("Live update received noop routes:", data.noop_route_ids);
+            setNoopRoutes(new Set(data.noop_route_ids));
+          }
+
           // Update optimization progress with enhanced information
           if (data.iteration && data.total_iterations) {
             const progress = (data.iteration / data.total_iterations) * 100;
@@ -316,43 +272,8 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
             
             // If this is the last iteration, mark optimization as complete
             if (data.iteration === data.total_iterations || data.early_completion) {
-              // Convert arrays to Sets for better performance
-              const optimizedIdsSet = new Set(optimizedIds);
-              const routesToOptimizeSet = new Set(routesToOptimize);
-              
-              // Find intersection between optimizedIds and routesToOptimize
-              const successfulRoutes = [...optimizedIdsSet].filter(id => routesToOptimizeSet.has(id));
-              const successfulRoutesSet = new Set(successfulRoutes);
-              
-              // Find noop routes that we attempted to optimize but weren't successful
-              const failedRoutes = [...new Set(noopIds)].filter(id => 
-                routesToOptimizeSet.has(id) && !successfulRoutesSet.has(id)
-              );
-              
-              // Get route names from your data source
-              const routesWithNames = filteredData.features.reduce((acc, feature) => {
-                if (feature.geometry.type === 'LineString' && feature.properties.route_id) {
-                  acc[feature.properties.route_id] = {
-                    id: feature.properties.route_id,
-                    name: feature.properties.route_long_name || feature.properties.route_name,
-                    short_name: feature.properties.route_short_name
-                  };
-                }
-                return acc;
-              }, {});
-              
-              // Create enriched route objects with names
-              const enrichedSuccessful = successfulRoutes.map(id => routesWithNames[id] || { id });
-              const enrichedFailed = failedRoutes.map(id => routesWithNames[id] || { id });
-              
-              // Set optimization results first
-              setOptimizationResults({
-                successful: enrichedSuccessful,
-                failed: enrichedFailed
-              });
-              
-              // Then set isOptimizing to false
-              setIsOptimizing(false);
+              // We'll handle the completion in onclose event
+              console.log("Optimization is complete, waiting for connection to close");
             }
           }
 
@@ -401,7 +322,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
         clearInterval(pingInterval);
       };
 
-      ws.onclose = (event) => {
+      ws.onclose = async (event) => {
         console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
         
         // Always set isOptimizing to false when WebSocket closes
@@ -416,50 +337,76 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           setOptimizationError(null);
           
           // Fetch noop routes to update our state
-          fetchNoopRoutes().then(() => {
-            // If this was a multi-route optimization, prepare results summary
-            if (multiSelectMode && routesToOptimize.length > 1) {
-              Promise.all([
+          try {
+            console.log("Fetching final noop routes after optimization");
+            const noopData = await fetchFromAPI('/get-noop-routes');
+            if (noopData && noopData.routes) {
+              console.log("Final noop routes after optimization:", noopData.routes);
+              setNoopRoutes(new Set(noopData.routes));
+            } else {
+              console.log("No noop routes received from API after optimization");
+              setNoopRoutes(new Set());
+            }
+          } catch (error) {
+            console.error('Error fetching noop routes after optimization:', error);
+          }
+          
+          // If this was a multi-route optimization, prepare results summary
+          if (multiSelectMode && routesToOptimize.length > 1) {
+            try {
+              const [optimizedData, noopData] = await Promise.all([
                 fetchFromAPI('/get-optimizations'),
                 fetchFromAPI('/get-noop-routes')
-              ]).then(([optimizedData, noopData]) => {
-                const optimizedIds = optimizedData.routes || [];
-                const noopIds = noopData.routes || [];
-                
-                // Filter to just the routes we attempted to optimize
-                const successfulRouteIds = optimizedIds.filter(id => routesToOptimize.includes(id));
-                const failedRouteIds = noopIds.filter(id => routesToOptimize.includes(id) && !successfulRouteIds.includes(id));
+              ]);
+              
+              const optimizedIds = optimizedData.routes || [];
+              const noopIds = noopData.routes || [];
+              
+              console.log("Final result check - optimizedIds:", optimizedIds);
+              console.log("Final result check - noopIds:", noopIds);
+              
+              // Filter to just the routes we attempted to optimize
+              const successfulRouteIds = optimizedIds.filter(id => routesToOptimize.includes(id));
+              const failedRouteIds = noopIds.filter(id => 
+                routesToOptimize.includes(id) && !successfulRouteIds.includes(id)
+              );
 
-                // Enrich with route details from your data source
-                const successfulRoutes = successfulRouteIds.map(id => {
-                  const routeFeature = data.features.find(f => 
-                    f.properties.route_id === id && f.geometry.type === 'LineString'
-                  );
-                  return routeFeature ? {
-                    id: id,
-                    short_name: routeFeature.properties.route_short_name,
-                    name: routeFeature.properties.route_long_name
-                  } : id;
-                });
-
-                const failedRoutes = failedRouteIds.map(id => {
-                  const routeFeature = data.features.find(f => 
-                    f.properties.route_id === id && f.geometry.type === 'LineString'
-                  );
-                  return routeFeature ? {
-                    id: id,
-                    short_name: routeFeature.properties.route_short_name,
-                    name: routeFeature.properties.route_long_name
-                  } : id;
-                });
-
-                setOptimizationResults({
-                  successful: successfulRoutes,
-                  failed: failedRoutes
-                });
+              // Enrich with route details from your data source
+              const successfulRoutes = successfulRouteIds.map(id => {
+                const routeFeature = data.features.find(f => 
+                  f.properties && f.properties.route_id === id && f.geometry.type === 'LineString'
+                );
+                return routeFeature ? {
+                  id: id,
+                  short_name: routeFeature.properties.route_short_name,
+                  name: routeFeature.properties.route_long_name || routeFeature.properties.route_name
+                } : { id };
               });
+
+              const failedRoutes = failedRouteIds.map(id => {
+                const routeFeature = data.features.find(f => 
+                  f.properties && f.properties.route_id === id && f.geometry.type === 'LineString'
+                );
+                return routeFeature ? {
+                  id: id,
+                  short_name: routeFeature.properties.route_short_name,
+                  name: routeFeature.properties.route_long_name || routeFeature.properties.route_name
+                } : { id };
+              });
+
+              console.log("Setting optimization results:", {
+                successful: successfulRoutes,
+                failed: failedRoutes
+              });
+
+              setOptimizationResults({
+                successful: successfulRoutes,
+                failed: failedRoutes
+              });
+            } catch (error) {
+              console.error("Error preparing optimization results:", error);
             }
-          });
+          }
         }
         
         wsRef.current = null;
@@ -476,12 +423,30 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     }
   };
 
-  // Choose appropriate optimization method
-  const handleOptimizeRoute = () => {
-    if (useLiveOptimization) {
-      handleLiveOptimize();
-    } else {
-      handleOptimize();
+  // Replace or modify this function in MapView.js
+  const handleOptimizeRoute = async () => {
+    if (selectedRoutes.size === 0) {
+      setOptimizationError('Please select at least one route to optimize');
+      return;
+    }
+    
+    try {
+      if (useLiveOptimization) {
+        await handleLiveOptimize();
+        // For WebSocket optimization, we'll show results when the WS connection closes
+      } else {
+        // For non-live optimization, explicitly call optimize and then show results
+        await handleOptimize();
+        
+        // For multi-select mode, we need to explicitly display results
+        if (multiSelectMode && selectedRoutes.size > 1) {
+          console.log("Multi-select optimization complete, showing results modal");
+          await fetchAndDisplayResults();
+        }
+      }
+    } catch (error) {
+      console.error("Optimization error:", error);
+      setOptimizationError("An error occurred during optimization");
     }
   };
 
@@ -550,6 +515,21 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
   };
 
   // Add this function to MapView.js
+  const fetchNoopRoutes = async () => {
+    try {
+      const data = await fetchFromAPI('/get-noop-routes');
+      if (data && data.routes) {
+        console.log("Fetched noop routes:", data.routes);
+        setNoopRoutes(new Set(data.routes));
+      } else {
+        console.log("No noop routes received from API");
+        setNoopRoutes(new Set());
+      }
+    } catch (error) {
+      console.error('Error fetching noop routes:', error);
+    }
+  };
+
   const fetchOptimizedRoutes = async () => {
     try {
       // Use the fetchFromAPI utility
@@ -592,6 +572,70 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     // Carousel shows when a single route is selected and not in multi-select mode
     setIsRouteCarouselVisible(!!selectedRoute && !multiSelectMode);
   }, [selectedRoute, multiSelectMode]);
+
+  // Add this function to MapView.js
+
+  const fetchAndDisplayResults = async () => {
+    if (!multiSelectMode || selectedRoutes.size <= 1) return;
+    
+    try {
+      console.log("Fetching optimization results for display");
+      const routesToOptimize = Array.from(selectedRoutes);
+      
+      // Fetch both optimized and noop routes to show complete results
+      const [optimizedData, noopData] = await Promise.all([
+        fetchFromAPI('/get-optimizations'),
+        fetchFromAPI('/get-noop-routes')
+      ]);
+      
+      // Update optimizedRoutes and noopRoutes
+      const optimizedIds = optimizedData.routes || [];
+      setOptimizedRoutes(new Set(optimizedIds));
+      
+      const noopIds = noopData.routes || [];
+      setNoopRoutes(new Set(noopIds));
+      
+      // Filter to just the routes we attempted to optimize
+      const successfulRouteIds = optimizedIds.filter(id => routesToOptimize.includes(id));
+      const failedRouteIds = noopIds.filter(id => routesToOptimize.includes(id));
+      
+      // Enrich with route details
+      const successfulRoutes = successfulRouteIds.map(id => {
+        const routeFeature = data.features.find(f => 
+          f.properties && f.properties.route_id === id
+        );
+        return routeFeature ? {
+          id: id,
+          short_name: routeFeature.properties.route_short_name,
+          name: routeFeature.properties.route_long_name || routeFeature.properties.route_name
+        } : { id };
+      });
+      
+      const failedRoutes = failedRouteIds.map(id => {
+        const routeFeature = data.features.find(f => 
+          f.properties && f.properties.route_id === id
+        );
+        return routeFeature ? {
+          id: id,
+          short_name: routeFeature.properties.route_short_name,
+          name: routeFeature.properties.route_long_name || routeFeature.properties.route_name
+        } : { id };
+      });
+      
+      console.log("Setting optimization results:", {
+        successful: successfulRoutes,
+        failed: failedRoutes
+      });
+      
+      // This is what triggers the modal to appear
+      setOptimizationResults({
+        successful: successfulRoutes,
+        failed: failedRoutes
+      });
+    } catch (error) {
+      console.error("Error fetching optimization results:", error);
+    }
+  };
 
   return (
     <div className="flex h-screen">
@@ -664,6 +708,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           noopRoutes={noopRoutes}
           optimizationResults={optimizationResults}
           setOptimizationResults={setOptimizationResults}
+          fetchAndDisplayResults={fetchAndDisplayResults}
         />
 
         {/* Update the floating OptimizationProgress component position to bottom left with higher z-index */}

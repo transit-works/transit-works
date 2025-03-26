@@ -629,6 +629,65 @@ async fn evaluate_network(data: web::Data<AppState>) -> impl Responder {
     }
 }
 
+#[get("/route-improvements")]
+async fn get_route_improvements(
+    query: web::Query<RouteIdParams>,
+    data: web::Data<AppState>,
+) -> impl Responder {
+    // Parse comma-separated route IDs
+    let route_ids: Vec<String> = query
+        .route_ids
+        .split(',')
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect();
+
+    println!("Getting route improvements for specific routes: {:?}", route_ids);
+
+    if route_ids.is_empty() {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "No valid route IDs provided"
+        }));
+    }
+
+    // Get the necessary data
+    let city_guard = data.city.lock().unwrap();
+    let optimized_transit_guard = data.optimized_transit.lock().unwrap();
+    let optimized_route_ids = data.optimized_route_ids.lock().unwrap();
+
+    if let (Some(city), Some(optimized_transit)) = (&*city_guard, &*optimized_transit_guard) {
+        // Get only the routes that are both in the request and have been optimized
+        let requested_route_ids: Vec<String> = route_ids.iter()
+            .filter(|id| optimized_route_ids.contains(id))
+            .cloned()
+            .collect();
+
+        if requested_route_ids.is_empty() {
+            return HttpResponse::Ok().json(serde_json::json!({
+                "message": "None of the requested routes have been optimized",
+                "routes": []
+            }));
+        }
+
+        // Call the rank_routes_by_improvement function with only the requested routes
+        let ranked_routes = eval::rank_routes_by_improvement(
+            &city.gtfs,
+            &city.transit,
+            optimized_transit,
+            &requested_route_ids,
+        );
+
+        HttpResponse::Ok().json(serde_json::json!({
+            "message": format!("Found improvements for {} routes", ranked_routes.len()),
+            "routes": ranked_routes
+        }))
+    } else {
+        HttpResponse::InternalServerError().json(serde_json::json!({
+            "error": "City data not loaded"
+        }))
+    }
+}
+
 pub async fn start_server(
     city_name: &str,
     gtfs_path: &str,
@@ -679,6 +738,7 @@ pub async fn start_server(
             .service(update_aco_params)
             .service(rank_route_improvements)
             .service(evaluate_network)
+            .service(get_route_improvements)
     })
     .bind(addr)?
     .run()

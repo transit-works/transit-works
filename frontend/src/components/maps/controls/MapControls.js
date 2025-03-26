@@ -20,16 +20,24 @@ function MapControls({
   fetchRidershipData,
   setShowParametersPopup,
   isBusRoute,
-  areSelectedRoutesBusRoutes
+  areSelectedRoutesBusRoutes,
+  fetchAndDisplayResults // This prop is important
 }) {
   if (!open) return null;
   
-  const handleOptimize = () => {
+  const handleOptimize = async () => {
     if (multiSelectMode && effectiveSelectedRoutes.size > 0) {
       try {
+        // Call onOptimize and wait for it to finish
         const result = onOptimize(Array.from(effectiveSelectedRoutes));
         if (result && typeof result.then === 'function') {
-          result.then(() => { if (selectedRoute) fetchRidershipData(selectedRoute); });
+          await result;
+          // After optimization completes, fetch and display results
+          // Only if NOT using live optimization (for live, this is handled in the WebSocket onclose)
+          if (!useLiveOptimization && fetchAndDisplayResults && typeof fetchAndDisplayResults === 'function') {
+            await fetchAndDisplayResults();
+          }
+          if (selectedRoute) fetchRidershipData(selectedRoute);
         } else if (selectedRoute) {
           fetchRidershipData(selectedRoute);
         }
@@ -40,7 +48,13 @@ function MapControls({
       try {
         const result = onOptimize(selectedRoute);
         if (result && typeof result.then === 'function') {
-          result.then(() => fetchRidershipData(selectedRoute));
+          await result;
+          // After optimization completes, fetch and display results
+          // Only if NOT using live optimization (for live, this is handled in the WebSocket onclose)
+          if (!useLiveOptimization && fetchAndDisplayResults && typeof fetchAndDisplayResults === 'function') {
+            await fetchAndDisplayResults();
+          }
+          fetchRidershipData(selectedRoute);
         } else {
           fetchRidershipData(selectedRoute);
         }
