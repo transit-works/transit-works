@@ -259,6 +259,9 @@ pub fn run_aco(
     if route.route_type != TransitRouteType::Bus {
         return None;
     }
+    if route.outbound_stops.len() < 2 {
+        return None;
+    }
 
     // Calculate route-specific stop distance metrics
     let route_params = calculate_route_specific_params(route, city, &params);
@@ -415,6 +418,9 @@ fn evaluate_route(
 ) -> (f64, f64) {
     // 1 - Compute nonlinearity Z_r
     let stops = &route.outbound_stops;
+    if stops.len() < 2 {
+        return (0.0, 1.0);
+    }
     let mut road_dist = 0.0;
     let mut bad_turn_count = 0;
     let mut path_pi = vec![];
@@ -566,8 +572,13 @@ fn compute_heuristic(
     let demand_ji =
         city.grid
             .demand_between_coords(to.geom.x(), to.geom.y(), from.geom.x(), from.geom.y());
-    let zone_i = from.zone(&city.grid).unwrap();
-    let zone_j = to.zone(&city.grid).unwrap();
+    let zone_i = from.zone(&city.grid);
+    let zone_j = to.zone(&city.grid);
+    if zone_i.is_none() || zone_j.is_none() {
+        return 0.0;
+    }
+    let zone_i = zone_i.unwrap();
+    let zone_j = zone_j.unwrap();
     let coverage_ij = *zone_to_zone_coverage
         .get(&(zone_i.zoneid, zone_j.zoneid))
         .unwrap_or(&1) as f64;
