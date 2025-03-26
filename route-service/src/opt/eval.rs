@@ -1,7 +1,7 @@
 use core::f64;
 use std::{collections::HashMap, collections::HashSet, sync::Arc};
 
-use geo::{Contains};
+use geo::Contains;
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -253,12 +253,13 @@ pub fn evaluate_economic_score(
 
     let stop_frequencies = &route.stop_times;
 
-    let f = stop_frequencies.get(&period).unwrap_or(&(DEFAULT_FREQUENCY as usize));
+    let f = stop_frequencies
+        .get(&period)
+        .unwrap_or(&(DEFAULT_FREQUENCY as usize));
     let div = consts::BUS_CAPACITY as f64 * (*f as f64) / route.outbound_stops.len() as f64;
 
-    let avg_ridership = ridership.iter()
-    .map(|&x| x.min(div as f64)) 
-    .sum::<f64>() / ridership.len() as f64;
+    let avg_ridership =
+        ridership.iter().map(|&x| x.min(div as f64)).sum::<f64>() / ridership.len() as f64;
 
     let res = (avg_ridership / div) * 100.0 * ADJUSTMENT_FACTOR;
     res
@@ -271,14 +272,12 @@ pub fn evaluate_network_economic_score(transit: &TransitNetwork, od: &GridNetwor
             || evaluate_economic_score(route, od, transit),
             |e: &TransitRouteEvals| e.economic_score,
         );
-        
+
         total_score += score;
         println!("score : {}", score);
     }
 
-    println!("avg : {}",
-        total_score / (transit.routes.len() as f64)
-    );
+    println!("avg : {}", total_score / (transit.routes.len() as f64));
     total_score / (transit.routes.len() as f64)
 }
 

@@ -649,7 +649,10 @@ async fn get_route_improvements(
         .filter(|id| !id.is_empty())
         .collect();
 
-    println!("Getting route improvements for specific routes: {:?}", route_ids);
+    println!(
+        "Getting route improvements for specific routes: {:?}",
+        route_ids
+    );
 
     if route_ids.is_empty() {
         return HttpResponse::BadRequest().json(serde_json::json!({
@@ -664,7 +667,8 @@ async fn get_route_improvements(
 
     if let (Some(city), Some(optimized_transit)) = (&*city_guard, &*optimized_transit_guard) {
         // Get only the routes that are both in the request and have been optimized
-        let requested_route_ids: Vec<String> = route_ids.iter()
+        let requested_route_ids: Vec<String> = route_ids
+            .iter()
             .filter(|id| optimized_route_ids.contains(id))
             .cloned()
             .collect();

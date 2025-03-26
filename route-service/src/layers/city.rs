@@ -260,4 +260,13 @@ impl City {
             .unwrap();
         Ok(())
     }
+
+    pub fn save_transit_to_cache(city_name: &str, transit: &TransitNetwork) -> Result<(), Error> {
+        let transit_cache_file = format!("{}/{}_transit.cached", CITY_CACHE_DIR, city_name);
+        log::debug!("Caching transit network to {}", transit_cache_file);
+        std::fs::create_dir_all(CITY_CACHE_DIR).unwrap();
+        bincode::serialize_into(std::fs::File::create(transit_cache_file).unwrap(), transit)
+            .unwrap();
+        Ok(())
+    }
 }

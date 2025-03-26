@@ -52,6 +52,97 @@ struct Args {
     /// Whether to save optimized network to cache
     #[arg(long, default_value_t = true)]
     save_cache: bool,
+
+    /// Fix evaluations in cached transit networks
+    #[arg(long)]
+    fix_evals: bool,
+}
+
+// Fix evaluations for transit networks in the cache
+fn fix_evals(city: &City) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Fixing evaluations for cached transit networks");
+
+    // Fix evaluations for regular transit network
+    let start = Instant::now();
+    println!("Fixing evaluations for transit network");
+    let mut transit = city.transit.clone();
+
+    // Calculate all route evals first
+    let route_evals: Vec<_> = transit
+        .routes
+        .iter()
+        .map(|route| {
+            route_service::opt::eval::TransitRouteEvals::for_route(&transit, route, &city.grid)
+        })
+        .collect();
+
+    // Then update the routes with their evaluations
+    for (route, eval) in transit.routes.iter_mut().zip(route_evals) {
+        route.evals = Some(eval);
+    }
+
+    transit.evals = Some(route_service::opt::eval::TransitNetworkEvals::for_network(
+        &transit, &city.grid,
+    ));
+    println!(
+        "  Finished fixing transit network evaluations in {:?}",
+        start.elapsed()
+    );
+
+    // Save updated transit network
+    City::save_transit_to_cache(&city.name, &transit)?;
+    println!("  Saved updated transit network to cache");
+
+    // Check for optimized transit network and fix if it exists
+    if let Ok(mut opt_transit) = City::load_opt_transit_from_cache(&city.name) {
+        let start = Instant::now();
+        println!("Fixing evaluations for optimized transit network");
+
+        // Calculate all route evals first
+        let route_evals: Vec<_> = opt_transit
+            .network
+            .routes
+            .iter()
+            .map(|route| {
+                if opt_transit.optimized_routes.contains(&route.route_id) {
+                    route_service::opt::eval::TransitRouteEvals::for_route(
+                        &opt_transit.network,
+                        route,
+                        &city.grid,
+                    )
+                } else {
+                    route_service::opt::eval::TransitRouteEvals::for_route(
+                        &transit, route, &city.grid,
+                    )
+                }
+            })
+            .collect();
+
+        // Then update the routes with their evaluations
+        for (route, eval) in opt_transit.network.routes.iter_mut().zip(route_evals) {
+            route.evals = Some(eval);
+        }
+
+        // update the original routes too
+
+        opt_transit.network.evals =
+            Some(route_service::opt::eval::TransitNetworkEvals::for_network(
+                &opt_transit.network,
+                &city.grid,
+            ));
+        println!(
+            "  Finished fixing optimized transit network evaluations in {:?}",
+            start.elapsed()
+        );
+
+        // Save updated optimized transit network
+        City::save_opt_transit_to_cache(&city.name, &opt_transit)?;
+        println!("  Saved updated optimized transit network to cache");
+    } else {
+        println!("  No optimized transit network found in cache");
+    }
+
+    Ok(())
 }
 
 fn main() {
@@ -76,6 +167,15 @@ fn main() {
             eprintln!("Failed to load city: {}", e);
             std::process::exit(1);
         });
+
+    // Handle fixing evaluations if requested
+    if args.fix_evals {
+        if let Err(e) = fix_evals(&city) {
+            eprintln!("Failed to fix evaluations: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
 
     // Initialize ACO parameters
     println!("Initializing ACO");
