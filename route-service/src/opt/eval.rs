@@ -1,7 +1,7 @@
 use core::f64;
 use std::{collections::HashMap, collections::HashSet, sync::Arc};
 
-use geo::{Contains};
+use geo::Contains;
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -170,8 +170,7 @@ pub fn ridership_over_route(
         ridership[i] += ridership[i - 1];
     }
 
-    let avg_ridership = ridership.iter()
-    .sum::<f64>() / ridership.len() as f64;
+    let avg_ridership = ridership.iter().sum::<f64>() / ridership.len().max(1) as f64;
 
     (ridership, avg_ridership)
 }
@@ -224,7 +223,14 @@ pub fn evaluate_economic_score(
     od: &GridNetwork,
     transit: &TransitNetwork,
 ) -> f64 {
-    let route_stops = &route.outbound_stops;
+    let route_stops = if route.outbound_stops.len() >= 2 {
+        &route.outbound_stops
+    } else {
+        &route.inbound_stops
+    };
+    if route_stops.len() < 2 {
+        return 0.0;
+    }
     let (ridership, _) = ridership_over_route(transit, route, od);
 
     let from_stop = &route_stops[0];
@@ -247,12 +253,13 @@ pub fn evaluate_economic_score(
 
     let stop_frequencies = &route.stop_times;
 
-    let f = stop_frequencies.get(&period).unwrap_or(&(DEFAULT_FREQUENCY as usize));
+    let f = stop_frequencies
+        .get(&period)
+        .unwrap_or(&(DEFAULT_FREQUENCY as usize));
     let div = consts::BUS_CAPACITY as f64 * (*f as f64) / route.outbound_stops.len() as f64;
 
-    let avg_ridership = ridership.iter()
-    .map(|&x| x.min(div as f64)) 
-    .sum::<f64>() / ridership.len() as f64;
+    let avg_ridership =
+        ridership.iter().map(|&x| x.min(div as f64)).sum::<f64>() / ridership.len() as f64;
 
     let res = (avg_ridership / div) * 100.0 * ADJUSTMENT_FACTOR;
     res
@@ -265,14 +272,12 @@ pub fn evaluate_network_economic_score(transit: &TransitNetwork, od: &GridNetwor
             || evaluate_economic_score(route, od, transit),
             |e: &TransitRouteEvals| e.economic_score,
         );
-        
+
         total_score += score;
         println!("score : {}", score);
     }
 
-    println!("avg : {}",
-        total_score / (transit.routes.len() as f64)
-    );
+    println!("avg : {}", total_score / (transit.routes.len() as f64));
     total_score / (transit.routes.len() as f64)
 }
 

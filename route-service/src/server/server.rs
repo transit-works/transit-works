@@ -10,7 +10,10 @@ use geo::Centroid;
 use serde::Deserialize;
 use serde_json::Value;
 use std::net::SocketAddr;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 pub(crate) struct AppState {
     pub city: Mutex<Option<City>>,
@@ -18,6 +21,7 @@ pub(crate) struct AppState {
     pub optimized_route_ids: Mutex<Vec<String>>,          // Tracks which routes have been optimized
     pub noop_route_ids: Mutex<Vec<String>>, // Tracks which routes which cannot be optimized
     pub aco_params: Mutex<aco2::ACO>,       // ACO parameters
+    pub shutdown_signal: Arc<AtomicBool>,   // Signal to stop background threads
 }
 
 #[derive(Deserialize)]
@@ -192,25 +196,16 @@ async fn optimize_routes(
         .collect::<Vec<&TransitRoute>>();
 
     let params = data.aco_params.lock().unwrap().clone();
-    let results = aco2::run_aco_batch(params, &routes, city, &optimized_transit);
+    let results = aco2::run_aco_batch(params, &routes, city, optimized_transit);
 
     // Track successful optimizations and evaluations
     let success_count = results.len();
-    let mut all_evaluations = Vec::new();
 
-    for (opt_route, eval) in results {
+    for opt_route_id in results {
         // Track the optimized route ID
-        if !optimized_route_ids.contains(&opt_route.route_id) {
-            optimized_route_ids.push(opt_route.route_id.clone());
+        if !optimized_route_ids.contains(&opt_route_id) {
+            optimized_route_ids.push(opt_route_id.clone());
         }
-
-        // Update the optimized transit with the new route
-        optimized_transit
-            .routes
-            .retain(|r| r.route_id != opt_route.route_id);
-        optimized_transit.routes.push(opt_route);
-
-        all_evaluations.push(eval);
     }
 
     // determine failed routes
@@ -224,7 +219,6 @@ async fn optimize_routes(
         HttpResponse::Ok().json(serde_json::json!({
             "message": format!("Optimized {} routes", success_count),
             "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids),
-            "evaluation": all_evaluations
         }))
     } else {
         HttpResponse::NotFound().json(serde_json::json!({
@@ -606,6 +600,19 @@ async fn evaluate_network(data: web::Data<AppState>) -> impl Responder {
             optimized_coverage_score,
         );
 
+        println!("Original:");
+        println!("  Coverage: {}", original_coverage_score);
+        println!("  Economic Score: {}", original_economic_score);
+        println!("  Avg Transfers: {}", original_avg_transfers);
+        println!("  Avg Ridership: {}", original_avg_ridership);
+        println!("  Transit Score: {}", original_transit_score);
+        println!("Optimized:");
+        println!("  Coverage: {}", optimized_coverage_score);
+        println!("  Economic Score: {}", optimized_economic_score);
+        println!("  Avg Transfers: {}", optimized_avg_transfers);
+        println!("  Avg Ridership: {}", optimized_avg_ridership);
+        println!("  Transit Score: {}", optimized_transit_score);
+
         HttpResponse::Ok().json(serde_json::json!({
             "original": {
                 "coverage": original_coverage_score.min(99.0),
@@ -642,7 +649,10 @@ async fn get_route_improvements(
         .filter(|id| !id.is_empty())
         .collect();
 
-    println!("Getting route improvements for specific routes: {:?}", route_ids);
+    println!(
+        "Getting route improvements for specific routes: {:?}",
+        route_ids
+    );
 
     if route_ids.is_empty() {
         return HttpResponse::BadRequest().json(serde_json::json!({
@@ -657,7 +667,8 @@ async fn get_route_improvements(
 
     if let (Some(city), Some(optimized_transit)) = (&*city_guard, &*optimized_transit_guard) {
         // Get only the routes that are both in the request and have been optimized
-        let requested_route_ids: Vec<String> = route_ids.iter()
+        let requested_route_ids: Vec<String> = route_ids
+            .iter()
             .filter(|id| optimized_route_ids.contains(id))
             .cloned()
             .collect();
@@ -688,6 +699,86 @@ async fn get_route_improvements(
     }
 }
 
+#[post("/optimize-network")]
+async fn optimize_network(data: web::Data<AppState>) -> impl Responder {
+    println!("Optimizing entire network");
+
+    let city_guard = data.city.lock().unwrap();
+    match &*city_guard {
+        Some(city) => {
+            let mut optimized_transit_guard = data.optimized_transit.lock().unwrap();
+            let optimized_transit = optimized_transit_guard.as_mut().unwrap();
+            let mut optimized_route_ids = data.optimized_route_ids.lock().unwrap();
+            if let Ok(opt_transit) = City::load_opt_transit_from_cache(&city.name) {
+                println!("Loaded network from cache");
+                *optimized_transit = opt_transit.network;
+                *optimized_route_ids = opt_transit.optimized_routes;
+            } else {
+                println!("Failed to load network from cache");
+                return HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "Failed to load network from cache"
+                }));
+            }
+
+            return HttpResponse::Ok().json(serde_json::json!({
+                "message": format!("Found {} optimized routes", optimized_route_ids.len()),
+                "routes": optimized_route_ids.clone(),
+                "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids)
+            }));
+        }
+        None => {
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "City data not loaded"
+            }));
+        }
+    };
+}
+
+/// Background worker function that periodically updates the TransitNetworkEvals
+fn background_evaluation_worker(app_state: web::Data<AppState>, update_interval: Duration) {
+    println!(
+        "Starting background evaluation thread with interval of {:?}",
+        update_interval
+    );
+
+    while !app_state.shutdown_signal.load(Ordering::Relaxed) {
+        // Sleep first to allow initial setup to complete
+        for _ in 0..30 {
+            if app_state.shutdown_signal.load(Ordering::Relaxed) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        println!("Background thread: Updating transit network evaluations");
+
+        // Get locks on required data
+        {
+            let city_guard = app_state.city.lock().unwrap();
+            if let Some(city) = &*city_guard {
+                let mut optimized_transit_guard = app_state.optimized_transit.lock().unwrap();
+                if let Some(optimized_transit) = optimized_transit_guard.as_mut() {
+                    // Update the network evaluations
+                    let network_evals =
+                        eval::TransitNetworkEvals::for_network(optimized_transit, &city.grid);
+                    optimized_transit.evals = Some(network_evals);
+                    println!("Background thread: Evaluations updated successfully");
+                }
+            }
+        }
+
+        // Sleep for the remaining time of the update interval
+        for _ in 0..(update_interval.as_secs() * 10) {
+            if app_state.shutdown_signal.load(Ordering::Relaxed) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    println!("Background evaluation thread shutting down");
+}
+
 pub async fn start_server(
     city_name: &str,
     gtfs_path: &str,
@@ -712,16 +803,26 @@ pub async fn start_server(
     }
 
     // Initialize application state with the city and a copy of transit for optimizations
+    let shutdown_signal = Arc::new(AtomicBool::new(false));
+
     let app_state = web::Data::new(AppState {
         optimized_transit: Mutex::new(city_result.as_ref().ok().map(|c| c.transit.clone())),
         optimized_route_ids: Mutex::new(Vec::new()),
         noop_route_ids: Mutex::new(Vec::new()),
         city: Mutex::new(city_result.ok()),
         aco_params: Mutex::new(aco2::ACO::init()),
+        shutdown_signal: shutdown_signal.clone(),
     });
 
+    // Start the background evaluation thread
+    // let app_state_clone = app_state.clone();
+    // let update_interval = Duration::from_secs(180); // 3 minutes
+    // thread::spawn(move || {
+    //     background_evaluation_worker(app_state_clone, update_interval);
+    // });
+
     println!("Starting server on {}:{}", host, port);
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone()) // Pass the state to all routes
             .service(get_data)
@@ -739,11 +840,22 @@ pub async fn start_server(
             .service(rank_route_improvements)
             .service(evaluate_network)
             .service(get_route_improvements)
+            .service(optimize_network)
     })
     .bind(addr)?
-    .run()
-    .await?;
+    .run();
+
+    // Set up graceful shutdown handling
+    // let srv = server.handle();
+    // tokio::spawn(async move {
+    //     tokio::signal::ctrl_c().await.unwrap();
+    //     println!("Shutting down background threads...");
+    //     shutdown_signal.store(true, Ordering::SeqCst);
+    //     thread::sleep(Duration::from_millis(500));
+    //     srv.stop(true).await;
+    // });
 
     println!("Server started at {} on port {}.", host, port);
+    server.await?;
     Ok(())
 }

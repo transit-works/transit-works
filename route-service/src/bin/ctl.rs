@@ -4,184 +4,294 @@ use clap::Parser;
 
 use route_service::gtfs::geojson;
 use route_service::gtfs::gtfs::Gtfs;
-use route_service::gtfs::structs::RouteType;
 use route_service::layers::city::City;
-use route_service::layers::{
-    grid::GridNetwork, road_network::RoadNetwork, transit_network::TransitNetwork,
-};
-use route_service::opt::aco2::{run_aco, ACO};
-use route_service::opt::eval::{
-    evaluate_coverage, evaluate_economic_score, evaluate_network_coverage,
-    evaluate_network_economic_score,
-};
+use route_service::layers::{road_network::RoadNetwork, transit_network::TransitNetwork};
+use route_service::opt::aco2::{run_aco_batch, run_aco_network, ACO};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// City name to load (e.g., toronto, sanfrancisco)
     #[arg(long)]
-    gtfs_path: String,
+    city: String,
 
-    #[arg(long)]
-    db_path: String,
+    /// Path to GTFS data base directory
+    #[clap(
+        long,
+        default_value = "/Users/jeevanopel/workspace/transit-works/scripts/city_data"
+    )]
+    gtfs_base_path: String,
 
-    #[arg(long)]
+    /// Path to database base directory
+    #[clap(
+        long,
+        default_value = "/Users/jeevanopel/workspace/transit-works/scripts/city_db"
+    )]
+    db_base_path: String,
+
+    /// Output directory for results
+    #[arg(long, default_value = "./ctl_output")]
     output_dir: String,
 
+    /// Optional suffix for output files
     #[arg(long)]
     suffix: Option<String>,
+
+    /// Whether to optimize the entire network
+    #[arg(long)]
+    optimize_network: bool,
+
+    /// Specific route IDs to optimize (comma separated)
+    #[arg(long)]
+    routes: Option<String>,
+
+    /// Whether to output geojson files
+    #[arg(long, default_value_t = true)]
+    output_geojson: bool,
+
+    /// Whether to save optimized network to cache
+    #[arg(long, default_value_t = true)]
+    save_cache: bool,
+
+    /// Fix evaluations in cached transit networks
+    #[arg(long)]
+    fix_evals: bool,
+}
+
+// Fix evaluations for transit networks in the cache
+fn fix_evals(city: &City) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Fixing evaluations for cached transit networks");
+
+    // Fix evaluations for regular transit network
+    let start = Instant::now();
+    println!("Fixing evaluations for transit network");
+    let mut transit = city.transit.clone();
+
+    // Calculate all route evals first
+    let route_evals: Vec<_> = transit
+        .routes
+        .iter()
+        .map(|route| {
+            route_service::opt::eval::TransitRouteEvals::for_route(&transit, route, &city.grid)
+        })
+        .collect();
+
+    // Then update the routes with their evaluations
+    for (route, eval) in transit.routes.iter_mut().zip(route_evals) {
+        route.evals = Some(eval);
+    }
+
+    transit.evals = Some(route_service::opt::eval::TransitNetworkEvals::for_network(
+        &transit, &city.grid,
+    ));
+    println!(
+        "  Finished fixing transit network evaluations in {:?}",
+        start.elapsed()
+    );
+
+    // Save updated transit network
+    City::save_transit_to_cache(&city.name, &transit)?;
+    println!("  Saved updated transit network to cache");
+
+    // Check for optimized transit network and fix if it exists
+    if let Ok(mut opt_transit) = City::load_opt_transit_from_cache(&city.name) {
+        let start = Instant::now();
+        println!("Fixing evaluations for optimized transit network");
+
+        // Calculate all route evals first
+        let route_evals: Vec<_> = opt_transit
+            .network
+            .routes
+            .iter()
+            .map(|route| {
+                if opt_transit.optimized_routes.contains(&route.route_id) {
+                    route_service::opt::eval::TransitRouteEvals::for_route(
+                        &opt_transit.network,
+                        route,
+                        &city.grid,
+                    )
+                } else {
+                    route_service::opt::eval::TransitRouteEvals::for_route(
+                        &transit, route, &city.grid,
+                    )
+                }
+            })
+            .collect();
+
+        // Then update the routes with their evaluations
+        for (route, eval) in opt_transit.network.routes.iter_mut().zip(route_evals) {
+            route.evals = Some(eval);
+        }
+
+        // update the original routes too
+
+        opt_transit.network.evals =
+            Some(route_service::opt::eval::TransitNetworkEvals::for_network(
+                &opt_transit.network,
+                &city.grid,
+            ));
+        println!(
+            "  Finished fixing optimized transit network evaluations in {:?}",
+            start.elapsed()
+        );
+
+        // Save updated optimized transit network
+        City::save_opt_transit_to_cache(&city.name, &opt_transit)?;
+        println!("  Saved updated optimized transit network to cache");
+    } else {
+        println!("  No optimized transit network found in cache");
+    }
+
+    Ok(())
 }
 
 fn main() {
     env_logger::init();
     let args = Args::parse();
 
-    // let city = City::load("toronto", &args.gtfs_path, &args.db_path, true, false).unwrap();
-    let city =
-        City::load_with_cached_transit("toronto", &args.gtfs_path, &args.db_path, true, false)
-            .unwrap();
+    // Construct the paths for GTFS and DB
+    let gtfs_path = format!("{}/{}/gtfs", args.gtfs_base_path, args.city);
+    let db_path = format!("{}/{}.db", args.db_base_path, args.city);
 
-    let grid = &city.grid;
-    let road = &city.road;
-    let gtfs = &city.gtfs;
-    let transit = &city.transit;
+    // Create output directory if it doesn't exist
+    std::fs::create_dir_all(&args.output_dir).unwrap_or_else(|e| {
+        eprintln!("Error creating output directory: {}", e);
+    });
 
-    output_geojson(&gtfs, &format!("{}/gtfs.geojson", args.output_dir));
-
-    output_routes_geojson(
-        &transit,
-        &gtfs,
-        &road,
-        &format!("{}/before.geojson", args.output_dir),
+    println!(
+        "Loading city: {} from {} and {}",
+        args.city, gtfs_path, db_path
     );
+    let city = City::load_with_cached_transit(&args.city, &gtfs_path, &db_path, true, false)
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to load city: {}", e);
+            std::process::exit(1);
+        });
 
-    let target_routes = transit
-        .routes
-        .iter()
-        .filter(|r| {
-            r.route_id == "73771"
-            // || r.route_id == "73705"
-            // || r.route_id == "73688"
-            // || r.route_id == "73682"
-            // || r.route_id == "73770"
-        })
-        .collect::<Vec<_>>();
+    // Handle fixing evaluations if requested
+    if args.fix_evals {
+        if let Err(e) = fix_evals(&city) {
+            eprintln!("Failed to fix evaluations: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
 
-    // let res = evaluate_economic_score(target_routes[0], &target_routes[0].outbound_stops, grid);
-
-    // let aco = ACO::init();
-    // let optimized_route = run_aco(aco, target_routes[0], &city);
-    // let test = optimized_route.unwrap().0;
-    // let new_res = evaluate_economic_score(&test, &test.outbound_stops, grid);
-
-    // println!("old : {}", res);
-    // println!("new : {}", new_res);
-
-    let res = evaluate_network_economic_score(&transit, grid);
-    return ();
-
-    // Only consider non-bus routes
-    // 73480 73530
-    // transit.routes = transit
-    //     .routes
-    //     .into_iter()
-    //     .filter(|r| r.route_type == RouteType::Bus)
-    //     .filter(|r| {
-    //         r.route_id == "73592"
-    //             || r.route_id == "73588"
-    //             || r.route_id == "73506"
-    //             || r.route_id == "73594"
-    //             || r.route_id == "73480"
-    //             || r.route_id == "73530"
-    //     })
-    //     .take(10)
-    //     .collect();
-
-    // weird tracing routes
-    // 73485 73527 73502 73421 73464 73451 73530 73483
-    // remaining
-    // 73489 73430 73589 73493 73521 73473 73536
-    // transit.routes = transit
-    //     .routes
-    //     .into_iter()
-    //     .filter(|r| {
-    //         r.route_id == "73485"
-    //             || r.route_id == "73527"
-    //             || r.route_id == "73502"
-    //             || r.route_id == "73421"
-    //             || r.route_id == "73464"
-    //             || r.route_id == "73451"
-    //             || r.route_id == "73530"
-    //             || r.route_id == "73483"
-    //             || r.route_id == "73489"
-    //             || r.route_id == "73430"
-    //             || r.route_id == "73589"
-    //             || r.route_id == "73493"
-    //             || r.route_id == "73521"
-    //             || r.route_id == "73473"
-    //             || r.route_id == "73536"
-    //     })
-    //     .collect();
-
-    let suffix = args.suffix.unwrap_or("".to_string());
-    let before_path = format!("{}/before{}.geojson", args.output_dir, suffix);
-    output_routes_geojson(&transit, &gtfs, &road, &before_path);
-
+    // Initialize ACO parameters
     println!("Initializing ACO");
-    let mut aco = ACO::init();
+    let aco = ACO::init();
     aco.print_stats();
 
-    // Optimize one route
-    // let target_route = transit
-    //     .routes
-    //     .iter()
-    //     .filter(|r| r.route_id == "73657")
-    //     .next()
-    //     .unwrap();
+    // Define file name suffix
+    let suffix = args.suffix.unwrap_or_else(|| "".to_string());
 
-    // let start = Instant::now();
-    // let optimized_route = aco.optimize_route(&grid, &road, &transit, target_route);
-    // let optimized_route = optimized_route.unwrap().0;
-    // println!("  ACO finished in {:?}", start.elapsed());
+    // Output GTFS as geojson if requested
+    if args.output_geojson {
+        output_geojson(
+            &city.gtfs,
+            &format!("{}/gtfs{}.geojson", args.output_dir, suffix),
+        );
+        output_routes_geojson(
+            &city.transit,
+            &city.gtfs,
+            &city.road,
+            &format!("{}/before{}.geojson", args.output_dir, suffix),
+        );
+    }
 
-    // transit.routes = vec![optimized_route];
-    // transit.print_stats();
+    // Optimize specific routes if requested
+    if let Some(route_ids) = args.routes {
+        let route_ids: Vec<String> = route_ids.split(',').map(|s| s.trim().to_string()).collect();
+        if !route_ids.is_empty() {
+            println!("Optimizing specific routes: {:?}", route_ids);
 
-    // let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
-    // output_routes_geojson(&transit, &gtfs, &road, &solution_path);
+            let target_routes = city
+                .transit
+                .routes
+                .iter()
+                .filter(|r| route_ids.contains(&r.route_id))
+                .collect::<Vec<_>>();
 
-    // return ();
+            if target_routes.is_empty() {
+                println!("No matching routes found for the provided IDs");
+            } else {
+                println!("Found {} matching routes", target_routes.len());
+                println!("Running ACO on selected routes");
 
-    // Only consider target routes
-    let target_routes = transit
-        .routes
-        .iter()
-        .filter(|r| {
-            r.route_id == "73643"
-            // || r.route_id == "73705"
-            // || r.route_id == "73688"
-            // || r.route_id == "73682"
-            // || r.route_id == "73770"
-        })
-        .collect::<Vec<_>>();
+                let start = Instant::now();
+                // Create a mutable copy of the transit network
+                let mut new_transit = city.transit.clone();
+                let optimized_route_ids =
+                    run_aco_batch(aco.clone(), &target_routes, &city, &mut new_transit);
+                println!("  ACO finished in {:?}", start.elapsed());
 
-    println!("Running ACO!");
-    let start = Instant::now();
-    //let optimized_routes = aco.optimize_routes(&grid, &road, &mut transit.clone(), &target_routes);
-    println!("  ACO finished in {:?}", start.elapsed());
+                // Create the OptimizedTransitNetwork structure
+                let optimized_network = route_service::opt::aco2::OptimizedTransitNetwork {
+                    network: new_transit,
+                    optimized_routes: optimized_route_ids.clone(),
+                };
 
-    // merge optimized routes to transit network routes
-    // transit.routes.iter_mut().for_each(|r| {
-    //     *r = optimized_routes
-    //         .iter()
-    //         .find(|or| or.route_id == r.route_id)
-    //         .unwrap_or(r)
-    //         .clone()
-    // });
-    // transit.print_stats();
-    //transit.routes = optimized_routes;
+                // Save to cache if requested
+                if args.save_cache {
+                    println!("Saving optimized network to cache");
+                    if let Err(e) = City::save_opt_transit_to_cache(&args.city, &optimized_network)
+                    {
+                        eprintln!("Failed to save optimized network to cache: {}", e);
+                    }
+                }
 
-    let solution_path = format!("{}/solution{}.geojson", args.output_dir, suffix);
-    output_routes_geojson(&transit, &gtfs, &road, &solution_path);
+                // Output geojson if requested
+                if args.output_geojson {
+                    let solution_path =
+                        format!("{}/routes_solution{}.geojson", args.output_dir, suffix);
+                    output_routes_geojson(
+                        &optimized_network.network,
+                        &city.gtfs,
+                        &city.road,
+                        &solution_path,
+                    );
+                    println!("Optimized routes saved to {}", solution_path);
+                }
+
+                println!("Optimized routes: {:?}", optimized_route_ids);
+            }
+        }
+    } else if args.optimize_network {
+        println!("Optimizing entire network");
+
+        let start = Instant::now();
+        let optimized_network = run_aco_network(aco.clone(), &city, &city.transit);
+        // for i in 2..6 {
+        //     println!("Iteration {}/{}", i, 5);
+        //     run_aco_network(aco.clone(), &city, &optimized_network.network);
+        // }
+        println!("  Network optimization finished in {:?}", start.elapsed());
+
+        // Save to cache if requested
+        if args.save_cache {
+            println!("Saving optimized network to cache");
+            if let Err(e) = City::save_opt_transit_to_cache(&args.city, &optimized_network) {
+                eprintln!("Failed to save optimized network to cache: {}", e);
+            }
+        }
+
+        // Output geojson if requested
+        if args.output_geojson {
+            let solution_path = format!("{}/network_solution{}.geojson", args.output_dir, suffix);
+            output_routes_geojson(
+                &optimized_network.network,
+                &city.gtfs,
+                &city.road,
+                &solution_path,
+            );
+            println!("Optimized network saved to {}", solution_path);
+        }
+
+        println!(
+            "Optimized {} routes in the network",
+            optimized_network.optimized_routes.len()
+        );
+    }
 }
 
 // Convert TransitNetwork to GeoJSON

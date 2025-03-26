@@ -216,9 +216,11 @@ pub struct StopTime {
     pub stop_headsign: Option<String>,
     pub pickup_type: Option<PickupDropoffType>,
     pub drop_off_type: Option<PickupDropoffType>,
+    #[serde(default)]
     pub continuous_pickup: Option<ContinuousPickupDropoff>,
+    #[serde(default)]
     pub continuous_drop_off: Option<ContinuousPickupDropoff>,
-    #[serde(deserialize_with = "deserialize_opt")]
+    #[serde(default, deserialize_with = "deserialize_opt")]
     pub shape_dist_traveled: Option<f64>,
     pub timepoint: Option<Timepoint>,
     #[serde(skip)]
@@ -335,7 +337,7 @@ pub struct Shape {
     pub shape_pt_lat: f64,
     pub shape_pt_lon: f64,
     pub shape_pt_sequence: i32,
-    #[serde(deserialize_with = "deserialize_opt")]
+    #[serde(default, deserialize_with = "deserialize_opt")]
     pub shape_dist_traveled: Option<f64>,
 }
 

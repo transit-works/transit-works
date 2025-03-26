@@ -6,7 +6,7 @@ use std::{
 use geo::Contains;
 use petgraph::graph::NodeIndex;
 use rand::{distributions::WeightedIndex, prelude::Distribution, rngs::StdRng, Rng, SeedableRng};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::layers::{
     city::City,
@@ -14,13 +14,19 @@ use crate::layers::{
     transit_network::{TransitNetwork, TransitRoute, TransitRouteType, TransitStop},
 };
 
-use super::eval::TransitRouteEvals;
+use super::eval::{TransitNetworkEvals, TransitRouteEvals};
 
 // should be less than 1.0
 const PUNISHMENT_NONLINEARITY: f64 = 0.3;
 // const PUNISHMENT_ROUTE_LEN: f64 = 0.2;
 const PUNISHMENT_BAD_TURN: f64 = 0.4;
 const PUNISHMENT_STOP_DIST: f64 = 0.1;
+
+#[derive(Serialize, Deserialize)]
+pub struct OptimizedTransitNetwork {
+    pub network: TransitNetwork,
+    pub optimized_routes: Vec<String>,
+}
 
 // struct to store all the tunable parameters for the ACO algorithm
 #[derive(Clone, Deserialize)]
@@ -213,6 +219,37 @@ impl PheromoneMap {
     }
 }
 
+// Helper function to calculate route-specific parameters
+fn calculate_route_specific_params(route: &TransitRoute, city: &City, base_params: &ACO) -> ACO {
+    let mut route_params = base_params.clone();
+
+    if route.outbound_stops.len() > 1 {
+        let mut total_dist = 0.0;
+        for w in route.outbound_stops.windows(2) {
+            let (from, to) = (&w[0], &w[1]);
+            let (dist, _) = from.road_distance(to, &city.road);
+            total_dist += dist;
+        }
+
+        // Calculate average stop distance for this specific route
+        let route_avg_stop_dist = total_dist / (route.outbound_stops.len() as f64 - 1.0);
+
+        // Set min/max as percentage variations of the average
+        route_params.avg_stop_dist = route_avg_stop_dist;
+        route_params.min_stop_dist = route_avg_stop_dist * 0.2; // 20% of average
+        route_params.max_stop_dist = route_avg_stop_dist * 2.0; // 200% of average
+
+        log::debug!(
+            "Route-specific params: avg_dist={:.1}m, min_dist={:.1}m, max_dist={:.1}m",
+            route_params.avg_stop_dist,
+            route_params.min_stop_dist,
+            route_params.max_stop_dist
+        );
+    }
+
+    route_params
+}
+
 pub fn run_aco(
     params: ACO,
     route: &TransitRoute,
@@ -222,9 +259,15 @@ pub fn run_aco(
     if route.route_type != TransitRouteType::Bus {
         return None;
     }
+    if route.outbound_stops.len() < 2 {
+        return None;
+    }
+
+    // Calculate route-specific stop distance metrics
+    let route_params = calculate_route_specific_params(route, city, &params);
 
     // Initialize the pheromone map
-    let aco = Arc::new(params);
+    let aco = Arc::new(route_params);
     let mut pheromone_map = PheromoneMap::new(aco.clone());
     let mut heuristic_map = HashMap::new();
 
@@ -300,30 +343,68 @@ pub fn run_aco_batch(
     params: ACO,
     routes: &Vec<&TransitRoute>,
     city: &City,
-    opt_transit: &TransitNetwork,
-) -> Vec<(TransitRoute, f64)> {
-    // sort the routes by evaluation ascending (worst first)
-    let mut routes = routes
+    opt_transit: &mut TransitNetwork,
+) -> Vec<String> {
+    // Calculate route-specific parameters and sort routes by evaluation ascending (worst first)
+    let mut routes_with_params = routes
         .iter()
         .map(|route| {
+            // Calculate route-specific parameters for evaluation
+            let route_params = calculate_route_specific_params(route, city, &params);
+
             // get the stop choices
             let stops = filter_stops_by_route_bbox(route, city, 250.0);
             // can speed up by precomputing stops to zone mapping in city struct?
             let zone_to_zone_coverage = filter_zones_by_stops(&stops, city, opt_transit);
-            let eval = evaluate_route(&params, route, city, &zone_to_zone_coverage);
-            (route, eval.0)
+            let eval = evaluate_route(&route_params, route, city, &zone_to_zone_coverage);
+            (route, eval.0, route_params)
         })
         .collect::<Vec<_>>();
-    routes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    routes_with_params.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-    // run aco on the routes and construct output list
-    let mut optimized_routes = vec![];
-    for (route, _) in routes {
-        if let Some((optimized_route, eval)) = run_aco(params.clone(), route, city, opt_transit) {
-            optimized_routes.push((optimized_route, eval));
+    // run aco on the routes and update the transit network
+    let mut optimized_route_ids = vec![];
+    let (mut count, tot) = (1, routes_with_params.len());
+    for (route, _, route_params) in routes_with_params {
+        println!("Optimizing route: {}, {}/{}", route.route_id, count, tot);
+        count += 1;
+        if let Some((optimized_route, eval)) = run_aco(route_params, route, city, opt_transit) {
+            println!("  Route optimized with score: {}", eval);
+            // Update the network by replacing the route
+            let route_id = optimized_route.route_id.clone();
+            if let Some(idx) = opt_transit
+                .routes
+                .iter()
+                .position(|r| r.route_id == route_id)
+            {
+                opt_transit.routes[idx] = optimized_route;
+                optimized_route_ids.push(route_id);
+            }
         }
     }
-    optimized_routes
+    optimized_route_ids
+}
+
+pub fn run_aco_network(
+    params: ACO,
+    city: &City,
+    transit: &TransitNetwork,
+) -> OptimizedTransitNetwork {
+    let routes = transit.routes.iter().collect::<Vec<_>>();
+
+    // Create a mutable copy of the transit network
+    let mut opt_transit = transit.clone();
+
+    // Optimize routes and update the network in-place
+    let optimized_route_ids = run_aco_batch(params, &routes, city, &mut opt_transit);
+
+    // Update the network evals
+    opt_transit.evals = Some(TransitNetworkEvals::for_network(&opt_transit, &city.grid));
+
+    OptimizedTransitNetwork {
+        network: opt_transit,
+        optimized_routes: optimized_route_ids,
+    }
 }
 
 // Helpers for ACO
@@ -337,6 +418,9 @@ fn evaluate_route(
 ) -> (f64, f64) {
     // 1 - Compute nonlinearity Z_r
     let stops = &route.outbound_stops;
+    if stops.len() < 2 {
+        return (0.0, 1.0);
+    }
     let mut road_dist = 0.0;
     let mut bad_turn_count = 0;
     let mut path_pi = vec![];
@@ -420,9 +504,27 @@ fn evaluate_route(
         punishment_factor += PUNISHMENT_BAD_TURN
             * (bad_turn_count as f64 / (expected_stops as f64 * 0.1).max(10.0)).min(1.0);
     }
-    if avg_stop_dist < params.min_stop_dist || avg_stop_dist > params.max_stop_dist {
-        // max punishment if avg stop distance is less than min_stop_dist or greater than max_stop_dist
-        punishment_factor += PUNISHMENT_STOP_DIST;
+    if avg_stop_dist > 0.0 {
+        // Calculate deviation from average stop distance
+        if avg_stop_dist <= params.min_stop_dist || avg_stop_dist >= params.max_stop_dist {
+            // Outside allowed range - maximum punishment
+            punishment_factor += PUNISHMENT_STOP_DIST;
+        } else {
+            // Inside allowed range - scale based on distance from ideal average
+            let normalized_deviation = if avg_stop_dist < params.avg_stop_dist {
+                // Below average: normalize between min and avg
+                (params.avg_stop_dist - avg_stop_dist)
+                    / (params.avg_stop_dist - params.min_stop_dist)
+            } else {
+                // Above average: normalize between avg and max
+                (avg_stop_dist - params.avg_stop_dist)
+                    / (params.max_stop_dist - params.avg_stop_dist)
+            };
+
+            // Apply non-linear scaling (quadratic growth)
+            punishment_factor +=
+                PUNISHMENT_STOP_DIST * (normalized_deviation * normalized_deviation);
+        }
     }
 
     log::debug!(
@@ -470,8 +572,13 @@ fn compute_heuristic(
     let demand_ji =
         city.grid
             .demand_between_coords(to.geom.x(), to.geom.y(), from.geom.x(), from.geom.y());
-    let zone_i = from.zone(&city.grid).unwrap();
-    let zone_j = to.zone(&city.grid).unwrap();
+    let zone_i = from.zone(&city.grid);
+    let zone_j = to.zone(&city.grid);
+    if zone_i.is_none() || zone_j.is_none() {
+        return 0.0;
+    }
+    let zone_i = zone_i.unwrap();
+    let zone_j = zone_j.unwrap();
     let coverage_ij = *zone_to_zone_coverage
         .get(&(zone_i.zoneid, zone_j.zoneid))
         .unwrap_or(&1) as f64;
@@ -500,7 +607,8 @@ fn adjust_route(
     let mut new_stops = vec![first.clone()];
     let mut visited = HashSet::new(); // Use this visited list
     visited.insert(first.stop_id.clone());
-    let mut radius = 1500.0;
+    let mut radius = params.max_stop_dist;
+    let max_radius = params.max_stop_dist * 3.0;
     loop {
         if geo_util::haversine(
             new_stops.last().unwrap().geom.x(),
@@ -528,7 +636,7 @@ fn adjust_route(
         );
         // let choices = filter_stops_by_dir(params, new_stops.last().unwrap(), last, city, radius);
         if choices.is_empty() {
-            if radius >= 3000.0 {
+            if radius >= max_radius {
                 log::debug!(
                     "    No choices found after {} stops, location: {:?}, distance to end {}",
                     new_stops.len(),
@@ -542,7 +650,7 @@ fn adjust_route(
                 );
                 break;
             } else {
-                radius += 1500.0;
+                radius *= 2.0;
                 continue;
             }
         }
@@ -564,10 +672,10 @@ fn adjust_route(
             radius = params.max_stop_dist;
         } else {
             log::debug!("    No stops found");
-            if radius >= 3000.0 {
+            if radius >= max_radius {
                 break;
             }
-            radius += 1500.0;
+            radius *= 2.0;
             continue;
         }
     }
@@ -748,13 +856,16 @@ fn valid_next_stops(
     stops_so_far: usize,
 ) -> Vec<Arc<TransitStop>> {
     let dist_fl = geo_util::haversine(first.geom.x(), first.geom.y(), last.geom.x(), last.geom.y());
+    // Use the route-specific avg_stop_dist parameter for expected stops calculation
     let expected_stops =
         ((dist_fl / params.avg_stop_dist) * params.max_nonlinearity).ceil() as usize;
+
     stops
         .iter()
         .filter(|stop| {
             let dist =
                 geo_util::haversine(curr.geom.x(), curr.geom.y(), stop.geom.x(), stop.geom.y());
+            // Use the route-specific min_stop_dist
             if dist < params.min_stop_dist || dist > radius {
                 return false;
             }

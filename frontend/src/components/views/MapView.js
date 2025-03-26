@@ -532,7 +532,6 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
 
   const fetchOptimizedRoutes = async () => {
     try {
-      // Use the fetchFromAPI utility
       const data = await fetchFromAPI('/get-optimizations');
       
       // Check if there are any optimized routes
@@ -635,6 +634,41 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
     } catch (error) {
       console.error("Error fetching optimization results:", error);
     }
+  }
+  
+  const handleOptimizeNetwork = async () => {
+    try {
+      setIsOptimizing(true);
+      setOptimizationError(null);
+      setOptimizationProgress(0); // Reset progress
+      
+      const result = await fetchFromAPI('/optimize-network', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }, city);
+      
+      if (result && result.geojson) {
+        console.log('Network optimization successful:', result);
+        
+        // Update the optimized routes data
+        setOptimizedRoutesData(result.geojson);
+        
+        // Update the set of optimized routes
+        setOptimizedRoutes(new Set(result.routes));
+        
+        // Fetch noop routes to update the set
+        await fetchNoopRoutes();
+      } else {
+        throw new Error('Invalid response format from network optimization service');
+      }
+    } catch (error) {
+      console.error('Error optimizing network:', error);
+      setOptimizationError(error.message);
+    } finally {
+      setIsOptimizing(false);
+    }
   };
 
   return (
@@ -648,6 +682,7 @@ export default function MapView({ data, initialOptimizedRoutesData, initialOptim
           setSelectedRoute={setSelectedRoute}
           multiSelectMode={multiSelectMode}
           onOptimize={handleOptimizeRoute}
+          onOptimizeNetwork={handleOptimizeNetwork}
           isOptimizing={isOptimizing}
           optimizationError={optimizationError}
           optimizationProgress={optimizationProgress}

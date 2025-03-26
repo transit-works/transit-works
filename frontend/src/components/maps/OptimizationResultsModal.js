@@ -228,11 +228,11 @@ function OptimizationResultsModal({ results, onClose }) {
                   initial={{ rotate: -90 }}
                   animate={{ rotate: 0 }}
                   transition={{ delay: 0.2, type: 'spring' }}
-                  className="bg-blue-500/10 rounded-full p-2"
+                  className="bg-accent/10 rounded-full p-2"
                 >
-                  <FaRoute className="text-blue-400 h-6 w-6" /> 
+                  <FaRoute className="text-accent h-6 w-6" /> 
                 </motion.div>
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-300">
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-accent to-amber-300">
                   Optimization Results
                 </span>
               </motion.h2>
@@ -554,7 +554,7 @@ function OptimizationResultsModal({ results, onClose }) {
                 exit={{ opacity: 0, y: 10 }}
               >
                 <h4 className="text-white text-sm font-medium mb-3 flex items-center gap-2">
-                  <FaFileExport className="text-blue-400" />
+                  <FaFileExport className="text-accent" />
                   Export Format
                 </h4>
                 
@@ -566,7 +566,7 @@ function OptimizationResultsModal({ results, onClose }) {
                       value="csv" 
                       checked={exportFormat === 'csv'}
                       onChange={() => setExportFormat('csv')}
-                      className="accent-blue-500"
+                      className="accent-accent"
                     />
                     CSV (Excel, Google Sheets)
                   </label>
@@ -578,7 +578,7 @@ function OptimizationResultsModal({ results, onClose }) {
                       value="json" 
                       checked={exportFormat === 'json'}
                       onChange={() => setExportFormat('json')}
-                      className="accent-blue-500"
+                      className="accent-accent"
                     />
                     JSON (Developers)
                   </label>
@@ -593,7 +593,7 @@ function OptimizationResultsModal({ results, onClose }) {
                   </button>
                   <button 
                     onClick={exportResults}
-                    className="flex-1 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center gap-1"
+                    className="flex-1 py-2 text-sm bg-accent hover:bg-amber-500 text-white rounded-lg flex items-center justify-center gap-1"
                   >
                     <FaDownload size={12} /> Download
                   </button>
@@ -615,7 +615,7 @@ function OptimizationResultsModal({ results, onClose }) {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg transition-all shadow-lg font-medium border border-blue-500/20 text-sm flex items-center gap-1.5"
+                className="bg-gradient-to-r from-accent to-amber-600 hover:from-accent hover:to-amber-500 text-white px-4 py-2 rounded-lg transition-all shadow-lg font-medium border border-accent/20 text-sm flex items-center gap-1.5"
                 onClick={() => setShowExportOptions(!showExportOptions)}
               >
                 <FaDownload className="text-xs" /> Export Results
@@ -647,7 +647,7 @@ function TabButton({ active, onClick, icon, count, label, className = "" }) {
         <span className={`
           ml-1 text-xs px-1.5 py-0.5 rounded-full
           ${active 
-            ? 'bg-blue-500/20 text-blue-400' 
+            ? 'bg-accent/20 text-accent' 
             : 'bg-zinc-800 text-zinc-400'}
         `}>
           {count}
@@ -656,7 +656,7 @@ function TabButton({ active, onClick, icon, count, label, className = "" }) {
       
       {active && (
         <motion.div 
-          className="absolute bottom-0 inset-x-0 h-0.5 bg-blue-500"
+          className="absolute bottom-0 inset-x-0 h-0.5 bg-accent"
           layoutId="activeTab"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
