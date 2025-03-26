@@ -196,25 +196,16 @@ async fn optimize_routes(
         .collect::<Vec<&TransitRoute>>();
 
     let params = data.aco_params.lock().unwrap().clone();
-    let results = aco2::run_aco_batch(params, &routes, city, &optimized_transit);
+    let results = aco2::run_aco_batch(params, &routes, city, optimized_transit);
 
     // Track successful optimizations and evaluations
     let success_count = results.len();
-    let mut all_evaluations = Vec::new();
 
-    for (opt_route, eval) in results {
+    for opt_route_id in results {
         // Track the optimized route ID
-        if !optimized_route_ids.contains(&opt_route.route_id) {
-            optimized_route_ids.push(opt_route.route_id.clone());
+        if !optimized_route_ids.contains(&opt_route_id) {
+            optimized_route_ids.push(opt_route_id.clone());
         }
-
-        // Update the optimized transit with the new route
-        optimized_transit
-            .routes
-            .retain(|r| r.route_id != opt_route.route_id);
-        optimized_transit.routes.push(opt_route);
-
-        all_evaluations.push(eval);
     }
 
     // determine failed routes
@@ -228,7 +219,6 @@ async fn optimize_routes(
         HttpResponse::Ok().json(serde_json::json!({
             "message": format!("Optimized {} routes", success_count),
             "geojson": get_optimized_geojson(city, optimized_transit, &optimized_route_ids),
-            "evaluation": all_evaluations
         }))
     } else {
         HttpResponse::NotFound().json(serde_json::json!({

@@ -119,32 +119,15 @@ fn main() {
                 println!("Running ACO on selected routes");
 
                 let start = Instant::now();
-                let optimized_routes =
-                    run_aco_batch(aco.clone(), &target_routes, &city, &city.transit);
-                println!("  ACO finished in {:?}", start.elapsed());
-
-                // Create a new transit network with the optimized routes
+                // Create a mutable copy of the transit network
                 let mut new_transit = city.transit.clone();
-
-                // Replace the original routes with optimized ones
-                for (optimized_route, _) in &optimized_routes {
-                    if let Some(idx) = new_transit
-                        .routes
-                        .iter()
-                        .position(|r| r.route_id == optimized_route.route_id)
-                    {
-                        new_transit.routes[idx] = optimized_route.clone();
-                    }
-                }
-
-                let optimized_route_ids = optimized_routes
-                    .iter()
-                    .map(|(r, _)| r.route_id.clone())
-                    .collect::<Vec<_>>();
+                let optimized_route_ids = 
+                    run_aco_batch(aco.clone(), &target_routes, &city, &mut new_transit);
+                println!("  ACO finished in {:?}", start.elapsed());
 
                 // Create the OptimizedTransitNetwork structure
                 let optimized_network = route_service::opt::aco2::OptimizedTransitNetwork {
-                    network: new_transit.clone(),
+                    network: new_transit,
                     optimized_routes: optimized_route_ids.clone(),
                 };
 
@@ -161,7 +144,7 @@ fn main() {
                 if args.output_geojson {
                     let solution_path =
                         format!("{}/routes_solution{}.geojson", args.output_dir, suffix);
-                    output_routes_geojson(&new_transit, &city.gtfs, &city.road, &solution_path);
+                    output_routes_geojson(&optimized_network.network, &city.gtfs, &city.road, &solution_path);
                     println!("Optimized routes saved to {}", solution_path);
                 }
 
@@ -172,7 +155,11 @@ fn main() {
         println!("Optimizing entire network");
 
         let start = Instant::now();
-        let optimized_network = run_aco_network(aco, &city);
+        let optimized_network = run_aco_network(aco.clone(), &city, &city.transit);
+        // for i in 2..6 {
+        //     println!("Iteration {}/{}", i, 5);
+        //     run_aco_network(aco.clone(), &city, &optimized_network.network);
+        // }
         println!("  Network optimization finished in {:?}", start.elapsed());
 
         // Save to cache if requested

@@ -306,8 +306,8 @@ pub fn run_aco_batch(
     params: ACO,
     routes: &Vec<&TransitRoute>,
     city: &City,
-    opt_transit: &TransitNetwork,
-) -> Vec<(TransitRoute, f64)> {
+    opt_transit: &mut TransitNetwork,
+) -> Vec<String> {
     // sort the routes by evaluation ascending (worst first)
     let mut routes = routes
         .iter()
@@ -322,50 +322,44 @@ pub fn run_aco_batch(
         .collect::<Vec<_>>();
     routes.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-    // run aco on the routes and construct output list
-    let mut optimized_routes = vec![];
+    // run aco on the routes and update the transit network
+    let mut optimized_route_ids = vec![];
     let (mut count, tot) = (1, routes.len());
     for (route, _) in routes {
         println!("Optimizing route: {}, {}/{}", route.route_id, count, tot,);
         count += 1;
         if let Some((optimized_route, eval)) = run_aco(params.clone(), route, city, opt_transit) {
             println!("  Route optimized with score: {}", eval);
-            optimized_routes.push((optimized_route, eval));
+            // Update the network by replacing the route
+            let route_id = optimized_route.route_id.clone();
+            if let Some(idx) = opt_transit
+                .routes
+                .iter()
+                .position(|r| r.route_id == route_id)
+            {
+                opt_transit.routes[idx] = optimized_route;
+                optimized_route_ids.push(route_id);
+            }
         }
     }
-    optimized_routes
+    optimized_route_ids
 }
 
-pub fn run_aco_network(params: ACO, city: &City) -> OptimizedTransitNetwork {
-    let routes = city.transit.routes.iter().collect::<Vec<_>>();
+pub fn run_aco_network(params: ACO, city: &City, transit: &TransitNetwork) -> OptimizedTransitNetwork {
+    let routes = transit.routes.iter().collect::<Vec<_>>();
 
-    let new_routes = run_aco_batch(params, &routes, city, &city.transit);
-    let mut new_routes = new_routes.into_iter().map(|(r, _)| r).collect::<Vec<_>>();
+    // Create a mutable copy of the transit network
+    let mut opt_transit = transit.clone();
 
-    // merge the unoptimized routes with the optimized routes
-    let opt_route_ids = new_routes
-        .iter()
-        .map(|r| r.route_id.clone())
-        .collect::<Vec<_>>();
-    let noop_routes = city
-        .transit
-        .routes
-        .iter()
-        .filter(|r| !opt_route_ids.contains(&r.route_id));
-    new_routes.extend(noop_routes.map(|r| (*r).clone()));
+    // Optimize routes and update the network in-place
+    let optimized_route_ids = run_aco_batch(params, &routes, city, &mut opt_transit);
 
-    let mut new_transit = TransitNetwork {
-        routes: new_routes,
-        inbound_stops: city.transit.inbound_stops.clone(),
-        outbound_stops: city.transit.outbound_stops.clone(),
-        evals: None,
-    };
-
-    new_transit.evals = Some(TransitNetworkEvals::for_network(&new_transit, &city.grid));
+    // Update the network evals
+    opt_transit.evals = Some(TransitNetworkEvals::for_network(&opt_transit, &city.grid));
 
     OptimizedTransitNetwork {
-        network: new_transit,
-        optimized_routes: opt_route_ids,
+        network: opt_transit,
+        optimized_routes: optimized_route_ids,
     }
 }
 
