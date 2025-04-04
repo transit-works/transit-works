@@ -54,7 +54,7 @@ transit-works/
 - Node.js (v16+)
 - Rust (latest stable)
 - Python 3.8+
-- PostgreSQL database
+- SQLite database
 
 ### Frontend Setup
 
