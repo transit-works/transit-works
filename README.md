@@ -10,6 +10,10 @@ Transit Works allows planners and transit authorities to:
 - Optimize existing routes based on demand and efficiency
 - Export results in various formats for further analysis
 
+## Demo
+![Transit Works Demo](demo/demo.gif)
+
+**Note:** Demo video quality significantly reduced. 
 
 ## Project Structure
 
